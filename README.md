@@ -167,6 +167,7 @@ export TOTAL_DURATION=172800  # ~10 days
 
 - **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
 - **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
+- **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
 - **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.

@@ -3,7 +3,8 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::{VestingDrips, VestingDripsClient},
+    contract::{calculate_total_deposit, VestingDrips, VestingDripsClient},
+    error::VestingError,
     tests::{advance_ledger, setup_env},
 };
 
@@ -114,4 +115,26 @@ fn test_incremental_claims_sum_to_total() {
     client.claim_vested(&recipient).unwrap();
 
     assert_eq!(token_client.balance(&recipient), 500);
+}
+
+/// Confirms the exact overflow boundary for `rate * total_duration`.
+#[test]
+fn test_total_deposit_boundary_allows_max_valid_rate() {
+    let total_duration = 2_u32;
+    let max_valid_rate = i128::MAX / total_duration as i128;
+
+    let total_deposit = calculate_total_deposit(max_valid_rate, total_duration).unwrap();
+
+    assert_eq!(total_deposit, i128::MAX - 1);
+}
+
+/// The first value above the safe boundary must return `DepositOverflow`.
+#[test]
+fn test_total_deposit_boundary_rejects_max_plus_one() {
+    let total_duration = 2_u32;
+    let max_valid_rate = i128::MAX / total_duration as i128;
+
+    let err = calculate_total_deposit(max_valid_rate + 1, total_duration).unwrap_err();
+
+    assert_eq!(err, VestingError::DepositOverflow);
 }
