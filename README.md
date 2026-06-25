@@ -188,3 +188,7 @@ export TOTAL_DURATION=172800  # ~10 days
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md).
