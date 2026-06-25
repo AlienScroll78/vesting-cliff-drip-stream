@@ -1,0 +1,68 @@
+name: Staging Deployment
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      contract_id: ${{ steps.deploy.outputs.contract_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Configure Stellar key
+        run: |
+          stellar keys add deployer --secret-key "${{ secrets.STELLAR_SECRET_KEY }}"
+
+      - name: Deploy to testnet
+        id: deploy
+        run: |
+          CONTRACT_ID=$(./scripts/deploy.sh deployer 2>&1 | tee deploy.log | grep -oE 'C[A-Z0-9]{55}' | tail -1)
+          echo "contract_id=$CONTRACT_ID" >> "$GITHUB_OUTPUT"
+          echo "VESTING_CONTRACT=$CONTRACT_ID" >> "$GITHUB_ENV"
+
+      - name: Save contract ID as Actions variable
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: gh variable set VESTING_CONTRACT --body "${{ steps.deploy.outputs.contract_id }}"
+
+      - name: Upload deploy logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-logs-${{ github.run_id }}
+          path: deploy.log
+          retention-days: 30
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Run smoke tests
+        env:
+          VESTING_CONTRACT: ${{ needs.deploy.outputs.contract_id }}
+        run: bash scripts/smoke_test.sh
