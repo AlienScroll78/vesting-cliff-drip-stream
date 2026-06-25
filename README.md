@@ -55,6 +55,12 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         └── test_edge_cases.rs     # Boundary & integration scenarios
 ```
 
+
+## Security
+
+For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
+
+
 ---
 
 ## Contract API
