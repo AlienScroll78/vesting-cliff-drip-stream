@@ -1,0 +1,24 @@
+name: Dependency Audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  cargo-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        # --deny=unsound --deny=yanked can be added; high severity is the baseline
+        run: cargo audit --deny warnings
+        # To suppress a false positive add an entry to audit.toml:
+        #   [[advisory]]
+        #   id = "RUSTSEC-YYYY-NNNN"
+        #   ignore = true
