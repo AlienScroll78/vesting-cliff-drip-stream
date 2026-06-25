@@ -4,7 +4,7 @@ use crate::{
     error::VestingError,
     events,
     storage,
-    types::VestingSchedule,
+    types::{StreamStatus, VestingSchedule},
 };
 
 #[contract]
@@ -248,5 +248,23 @@ impl VestingDrips {
             return false;
         };
         env.ledger().sequence() >= schedule.cliff_ledger
+    }
+
+    /// Returns the current [`StreamStatus`] for `recipient`.
+    ///
+    /// Returns `None` when no schedule exists (stream was never created
+    /// or has already been cancelled/completed and removed from storage).
+    /// Use the returned variant to drive badge colour in UI components.
+    pub fn get_status(env: Env, recipient: Address) -> Option<StreamStatus> {
+        let schedule = storage::get_schedule(&env, &recipient)?;
+        let current = env.ledger().sequence();
+        let status = if current < schedule.cliff_ledger {
+            StreamStatus::PreCliff
+        } else if current < schedule.end_ledger {
+            StreamStatus::Active
+        } else {
+            StreamStatus::Completed
+        };
+        Some(status)
     }
 }

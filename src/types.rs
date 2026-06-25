@@ -33,3 +33,27 @@ pub enum DataKey {
     /// Per-recipient vesting schedule.
     Schedule(Address),
 }
+
+/// Human-readable status of a vesting stream.
+///
+/// Returned by `get_status` and consumed by front-end badge components.
+///
+/// # Badge colour mapping
+/// | Variant      | Colour | Hex       | ARIA label     |
+/// |--------------|--------|-----------|----------------|
+/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"    |
+/// | Active       | Blue   | `#3B82F6` | "Active"       |
+/// | Completed    | Green  | `#22C55E` | "Completed"    |
+/// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StreamStatus {
+    /// Cliff has not yet been reached; no tokens can be claimed.
+    PreCliff,
+    /// Cliff passed; tokens are dripping linearly until `end_ledger`.
+    Active,
+    /// Stream fully drained (`end_ledger` reached or all tokens claimed).
+    Completed,
+    /// Sponsor cancelled the stream before it reached `end_ledger`.
+    Cancelled,
+}
