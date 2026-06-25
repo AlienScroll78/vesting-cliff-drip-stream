@@ -1,0 +1,91 @@
+/* WalletConnectButton styles */
+
+.wcb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+/* Disconnected — primary CTA */
+.wcb-btn--primary {
+  background: #7c3aed;
+  color: #fff;
+}
+.wcb-btn--primary:hover { background: #6d28d9; }
+.wcb-btn--primary:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+
+/* Connecting */
+.wcb-btn--connecting {
+  background: #a78bfa;
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* Connected */
+.wcb-btn--connected {
+  background: #f3f4f6;
+  color: #111827;
+  border: 1px solid #d1d5db;
+}
+.wcb-btn--connected:hover { background: #e5e7eb; }
+.wcb-btn--connected:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+
+/* Spinner */
+.wcb-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wcb-spin 0.7s linear infinite;
+}
+@keyframes wcb-spin { to { transform: rotate(360deg); } }
+
+/* Avatar */
+.wcb-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+}
+
+/* Dropdown */
+.wcb-dropdown {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  min-width: 12rem;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  z-index: 100;
+}
+
+.wcb-dropdown__item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: #374151;
+}
+.wcb-dropdown__item:hover { background: #f9fafb; }
+.wcb-dropdown__item:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: -2px;
+}

@@ -2,27 +2,43 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  native-tests:
+  ci:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Run native tests
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Tests
         run: cargo test --features testutils
 
-  wasm-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli
-      - name: Run Soroban WASM tests
-        run: stellar contract test
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release

@@ -36,6 +36,14 @@ lint:
 check:
 	cargo check --all-targets --all-features
 
+## Run mutation testing on contract.rs and storage.rs (requires cargo-mutants)
+## Install: cargo install cargo-mutants --locked
+## Results written to mutants.out/
+mutants:
+	cargo mutants --features testutils \
+		--file src/contract.rs --file src/storage.rs \
+		--output mutants.out
+
 ## Remove build artifacts
 clean:
 	cargo clean
