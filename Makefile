@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test optimize clean fmt lint check
+.PHONY: all build test spec-test optimize clean fmt lint check
 
 all: build
 
@@ -17,6 +17,11 @@ build:
 ## Run all unit tests (native target, with testutils)
 test:
 	cargo test --features testutils
+
+## Validate the on-chain contract spec (schema) against the expected API.
+## Requires the WASM to be built first; spec-test depends on `build`.
+spec-test: build
+	cargo test --test contract_spec
 
 ## Optimize the WASM binary with soroban CLI
 optimize: build
