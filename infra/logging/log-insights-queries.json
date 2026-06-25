@@ -1,0 +1,17 @@
+[
+  {
+    "name": "ErrorRate",
+    "description": "Count errors per 5-minute window",
+    "query": "fields @timestamp, @message | filter @message like /ERROR/ | stats count() as errors by bin(5m)"
+  },
+  {
+    "name": "SlowRequests",
+    "description": "Requests with duration > 1000ms",
+    "query": "fields @timestamp, @message | filter @message like /duration/ | parse @message /duration=(?<dur>[0-9.]+)/ | filter dur > 1000 | sort dur desc | limit 20"
+  },
+  {
+    "name": "ClaimEvents",
+    "description": "Vesting claim events per hour",
+    "query": "fields @timestamp, @message | filter @message like /claim_vested/ | stats count() by bin(1h)"
+  }
+]

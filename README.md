@@ -2,6 +2,8 @@
 
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
 
+> Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
+
 ---
 
 ## Concept
@@ -54,6 +56,12 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         ├── test_views.rs          # Read-only view function tests
         └── test_edge_cases.rs     # Boundary & integration scenarios
 ```
+
+
+## Security
+
+For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
+
 
 ---
 
@@ -140,6 +148,9 @@ make build
 make test
 ```
 
+CI also runs the contract test suite through Soroban's WASM runner so the
+contract is exercised in the same target it is deployed to.
+
 ### Deploy to Testnet
 
 ```bash
@@ -167,6 +178,7 @@ export TOTAL_DURATION=172800  # ~10 days
 
 - **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
 - **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
+- **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
 - **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
