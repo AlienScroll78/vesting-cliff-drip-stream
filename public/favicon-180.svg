@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <!-- Rounded background -->
+  <rect width="180" height="180" rx="40" fill="#0F0A1E"/>
+  <!-- Cliff plateau -->
+  <path d="M20 120 L20 55 L88 55 L88 120 Z" fill="#5B21B6"/>
+  <!-- Cliff face highlight -->
+  <path d="M88 55 L88 120 L115 120" stroke="#7C3AED" stroke-width="3" fill="none"/>
+  <!-- Stream -->
+  <path d="M88 78 Q108 78 108 100 L108 158" stroke="#06B6D4" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <!-- Droplet -->
+  <path d="M108 158 Q100 148 108 140 Q116 148 108 158 Z" fill="#06B6D4"/>
+  <!-- Milestone dots -->
+  <circle cx="38" cy="87" r="6" fill="#7C3AED"/>
+  <circle cx="63" cy="87" r="6" fill="#7C3AED"/>
+  <circle cx="88" cy="87" r="6" fill="#06B6D4"/>
+</svg>

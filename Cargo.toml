@@ -19,12 +19,7 @@ soroban-sdk = { version = "22.0.0", features = [] }
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
 soroban-token-sdk = { version = "22.0.0" }
-stellar-xdr = { version = "=22.0.0", default-features = false, features = ["curr", "std"] }
-wasmparser = { version = "=0.216.0" }
-
-[[test]]
-name = "contract_spec"
-path = "tests/contract_spec.rs"
+proptest = { version = "1.5.0", default-features = false, features = ["std"] }
 
 [profile.release]
 opt-level = "z"

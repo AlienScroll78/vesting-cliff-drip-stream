@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Vesting Stream</title>
+  <link rel="stylesheet" href="print.css" media="print" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid #2d3748;
+      background: #0f1117;
+    }
+    nav .logo { font-weight: 700; font-size: 1.1rem; color: #63b3ed; }
+    nav .connect-btn {
+      background: #3182ce;
+      color: #fff;
+      border: none;
+      padding: 0.5rem 1.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    nav .connect-btn:hover { background: #2b6cb0; }
+
+    main {
+      max-width: 600px;
+      margin: 2.5rem auto;
+      padding: 0 1rem;
+    }
+
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #718096; font-size: 0.9rem; margin-bottom: 2rem; }
+
+    .card {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 1.75rem;
+    }
+
+    .field { margin-bottom: 1.25rem; }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #a0aec0;
+      margin-bottom: 0.4rem;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="datetime-local"] {
+      width: 100%;
+      background: #2d3748;
+      border: 1px solid #4a5568;
+      border-radius: 8px;
+      color: #e2e8f0;
+      padding: 0.6rem 0.8rem;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #63b3ed; }
+
+    /* datetime-local color fix for dark mode */
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+
+    .ledger-hint {
+      margin-top: 0.4rem;
+      font-size: 0.8rem;
+      color: #68d391;
+      min-height: 1.1em;
+    }
+
+    .divider { border-color: #2d3748; margin: 1.25rem 0; }
+
+    .submit-btn {
+      width: 100%;
+      background: #3182ce;
+      color: #fff;
+      border: none;
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .submit-btn:hover { background: #2b6cb0; }
+
+    .cta-section {
+      text-align: center;
+      margin-top: 2rem;
+      color: #718096;
+      font-size: 0.9rem;
+    }
+    .cta-section a { color: #63b3ed; text-decoration: none; }
+
+    /* ── Schedule preview table (shown after submit) ── */
+    #schedule-preview { display: none; margin-top: 2rem; }
+    #schedule-preview h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid #2d3748;
+    }
+    th { color: #a0aec0; font-weight: 500; }
+    td { color: #e2e8f0; }
+    .addr { font-family: monospace; font-size: 0.8rem; word-break: break-all; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">⚡ VestingStream</span>
+  <button class="connect-btn" id="wallet-btn">Connect Wallet</button>
+</nav>
+
+<main>
+  <h1>Create Vesting Stream</h1>
+  <p class="subtitle">Set up a cliff + linear drip vesting schedule on Stellar.</p>
+
+  <div class="card">
+    <form id="vesting-form" novalidate>
+
+      <div class="field">
+        <label for="sponsor">Sponsor address</label>
+        <input type="text" id="sponsor" placeholder="G…" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label for="recipient">Recipient address</label>
+        <input type="text" id="recipient" placeholder="G…" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label for="token">Token contract (SAC)</label>
+        <input type="text" id="token" placeholder="C…" autocomplete="off" required />
+      </div>
+
+      <div class="field">
+        <label for="rate">Rate (tokens per ledger)</label>
+        <input type="number" id="rate" min="1" step="1" placeholder="e.g. 10" required />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="field">
+        <label for="cliff-date">Cliff date &amp; time</label>
+        <input type="datetime-local" id="cliff-date" required />
+        <div class="ledger-hint" id="cliff-hint" aria-live="polite"></div>
+      </div>
+
+      <div class="field">
+        <label for="end-date">End date &amp; time</label>
+        <input type="datetime-local" id="end-date" required />
+        <div class="ledger-hint" id="end-hint" aria-live="polite"></div>
+      </div>
+
+      <button type="submit" class="submit-btn">Create Stream</button>
+    </form>
+  </div>
+
+  <!-- Schedule preview — shown after submission for confirmation / print -->
+  <div id="schedule-preview" class="card">
+    <h2>Schedule Summary</h2>
+    <table id="schedule-table">
+      <thead>
+        <tr><th>Field</th><th>Value</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="cta-section">
+    <p>Already have a stream? <a href="#">View your schedule →</a></p>
+  </div>
+</main>
+
+<script>
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const SECONDS_PER_LEDGER = 5;          // Stellar average close time
+
+  // Set print date on body for @media print footer
+  document.body.setAttribute('data-print-date', new Date().toLocaleDateString(undefined, {
+    year: 'numeric', month: 'long', day: 'numeric',
+  }));
+
+  // ── Horizon fetch (best-effort; falls back to Date.now() if unavailable) ──
+  async function fetchCurrentLedger() {
+    try {
+      const res = await fetch('https://horizon-testnet.stellar.org/ledgers?order=desc&limit=1');
+      const json = await res.json();
+      const rec = json._embedded.records[0];
+      return {
+        sequence: parseInt(rec.sequence, 10),
+        closeTime: Math.floor(new Date(rec.closed_at).getTime() / 1000),
+      };
+    } catch {
+      return { sequence: 0, closeTime: Math.floor(Date.now() / 1000) };
+    }
+  }
+
+  // Resolved once the page loads
+  let ledgerRef = { sequence: 0, closeTime: Math.floor(Date.now() / 1000) };
+  fetchCurrentLedger().then(r => { ledgerRef = r; });
+
+  // ── Date → ledger delta conversion ────────────────────────────────────────
+  // All arithmetic is in UTC seconds to avoid DST pitfalls; the browser's
+  // datetime-local input always reflects wall-clock local time but .getTime()
+  // returns UTC ms regardless of DST, so we never touch UTC offsets manually.
+  function dateToLedgerDelta(dateIsoString) {
+    if (!dateIsoString) return null;
+    // datetime-local value has no timezone; treat as local time (browser does this)
+    const targetMs = new Date(dateIsoString).getTime();  // UTC ms — DST-safe
+    const nowMs = ledgerRef.closeTime * 1000;
+    const deltaSeconds = (targetMs - nowMs) / 1000;
+    if (deltaSeconds <= 0) return null;
+    return Math.round(deltaSeconds / SECONDS_PER_LEDGER);
+  }
+
+  function formatHint(delta, label) {
+    if (delta === null) return `⚠ ${label} date must be in the future`;
+    const ledgerAbs = ledgerRef.sequence + delta;
+    return `≈ ${delta.toLocaleString()} ledgers from now (ledger #${ledgerAbs.toLocaleString()})`;
+  }
+
+  // ── Live hints ─────────────────────────────────────────────────────────────
+  const cliffInput = document.getElementById('cliff-date');
+  const endInput   = document.getElementById('end-date');
+  const cliffHint  = document.getElementById('cliff-hint');
+  const endHint    = document.getElementById('end-hint');
+
+  function updateHint(input, hint, label) {
+    const delta = dateToLedgerDelta(input.value);
+    hint.textContent = input.value ? formatHint(delta, label) : '';
+  }
+
+  cliffInput.addEventListener('input', () => updateHint(cliffInput, cliffHint, 'Cliff'));
+  endInput.addEventListener('input',   () => updateHint(endInput,   endHint,   'End'));
+
+  // ── Form submission ────────────────────────────────────────────────────────
+  document.getElementById('vesting-form').addEventListener('submit', e => {
+    e.preventDefault();
+
+    const cliffDelta = dateToLedgerDelta(cliffInput.value);
+    const endDelta   = dateToLedgerDelta(endInput.value);
+
+    if (!cliffDelta || !endDelta) {
+      alert('Both cliff and end dates must be in the future.');
+      return;
+    }
+    if (endDelta <= cliffDelta) {
+      alert('End date must be after the cliff date.');
+      return;
+    }
+
+    const sponsor   = document.getElementById('sponsor').value.trim();
+    const recipient = document.getElementById('recipient').value.trim();
+    const token     = document.getElementById('token').value.trim();
+    const rate      = document.getElementById('rate').value;
+
+    // Show confirmation table
+    const rows = [
+      ['Sponsor',          `<span class="addr">${sponsor}</span>`],
+      ['Recipient',        `<span class="addr">${recipient}</span>`],
+      ['Token (SAC)',      `<span class="addr">${token}</span>`],
+      ['Rate',             `${rate} tokens / ledger`],
+      ['Cliff date',       cliffInput.value],
+      ['Cliff duration',   `${cliffDelta.toLocaleString()} ledgers`],
+      ['End date',         endInput.value],
+      ['Total duration',   `${endDelta.toLocaleString()} ledgers`],
+    ];
+
+    const tbody = document.querySelector('#schedule-table tbody');
+    tbody.innerHTML = rows.map(([f, v]) => `<tr><td>${f}</td><td>${v}</td></tr>`).join('');
+
+    const preview = document.getElementById('schedule-preview');
+    preview.style.display = 'block';
+    preview.scrollIntoView({ behavior: 'smooth' });
+  });
+</script>
+
+</body>
+</html>
