@@ -8,6 +8,7 @@ mod test_cancel;
 mod test_views;
 mod test_edge_cases;
 mod test_mutations;
+mod test_upgrade;   // issue #105
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
