@@ -4,6 +4,7 @@ import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { VestingStream } from "@/types";
+import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 
 // Stub data – replace with contract reads
 const MOCK_STREAMS: VestingStream[] = [
@@ -42,7 +43,10 @@ export default function Home() {
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontWeight: 700 }}>
-                {s.claimableAmount.toLocaleString()} {s.token}
+                <span title={formatAmount(s.claimableAmount)}>
+                  {abbreviateAmount(s.claimableAmount)}
+                </span>{" "}
+                {s.token}
               </div>
               {s.status === "active" && (
                 <button
