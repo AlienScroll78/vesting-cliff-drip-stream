@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 
 interface Props {
   claimableAmount: number;
@@ -59,7 +60,13 @@ export function ClaimBottomSheet({ claimableAmount, tokenSymbol, onClaim, onClos
         <div className="bottom-sheet-handle" aria-hidden="true" />
         <h2 className="bottom-sheet-title">Claim Tokens</h2>
         <div className="claimable-amount" data-testid="claimable-amount">
-          <span className="amount-value">{claimableAmount.toLocaleString()}</span>
+          <span
+            className="amount-value"
+            title={formatAmount(claimableAmount)}
+            aria-label={`${formatAmount(claimableAmount)} ${tokenSymbol}`}
+          >
+            {abbreviateAmount(claimableAmount)}
+          </span>
           <span className="amount-token">{tokenSymbol}</span>
         </div>
         <button

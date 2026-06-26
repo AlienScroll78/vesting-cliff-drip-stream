@@ -7,6 +7,7 @@ import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { VestingStream } from "@/types";
+import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 
 // Stub data – replace with contract reads. Use [] to see empty state.
 const MOCK_STREAMS: VestingStream[] = [
