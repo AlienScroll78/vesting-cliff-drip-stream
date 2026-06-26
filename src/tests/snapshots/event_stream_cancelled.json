@@ -1,0 +1,6 @@
+{
+  "topics": ["vc_cancel", "<recipient>"],
+  "data": {
+    "refunded_amount": 2000
+  }
+}
