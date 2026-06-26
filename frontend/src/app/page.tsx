@@ -3,9 +3,12 @@ import { useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
+import { TxProvider, useTx } from "@/components/TxDrawer";
+import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { VestingStream } from "@/types";
 
-// Stub data – replace with contract reads
+// Stub data – replace with contract reads. Use [] to see empty state.
 const MOCK_STREAMS: VestingStream[] = [
   { id: "1", recipient: "GABC…", sponsor: "GXYZ…", token: "USDC", rate: 10, claimableAmount: 1500, status: "active" },
   { id: "2", recipient: "GDEF…", sponsor: "GXYZ…", token: "USDC", rate: 5,  claimableAmount: 0,    status: "pre-cliff" },
@@ -13,48 +16,64 @@ const MOCK_STREAMS: VestingStream[] = [
   { id: "4", recipient: "GKLM…", sponsor: "GXYZ…", token: "USDC", rate: 8,  claimableAmount: 0,    status: "cancelled" },
 ];
 
-export default function Home() {
+function StreamList() {
+  const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
 
   async function handleClaim() {
-    // TODO: invoke claim_vested on-chain
-    await new Promise((r) => setTimeout(r, 1000));
     setClaimTarget(null);
+    setPending();
+    try {
+      // TODO: invoke claim_vested on-chain; replace stub below
+      await new Promise((r) => setTimeout(r, 1200));
+      // Simulated hash — replace with real tx hash from SDK
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
+    }
+  }
+
+  if (MOCK_STREAMS.length === 0) {
+    return <SponsorStreamListEmpty onCreateStream={() => alert("TODO: open create stream form")} />;
   }
 
   return (
-    <main className="page">
-      <header className="header">
-        <h1>Vesting Streams</h1>
-        <WalletButton />
-      </header>
-
-      <StatusLegend />
-
+    <>
       <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label="Your streams">
         {MOCK_STREAMS.map((s) => (
-          <li key={s.id} className="stream-card">
-            <div>
-              <div style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{s.recipient}</div>
-              <div style={{ marginTop: "0.25rem" }}>
-                <StatusBadge status={s.status} />
+          <li key={s.id} className="stream-card" style={{ flexDirection: "column", gap: "0.75rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+              <div>
+                <div style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{s.recipient}</div>
+                <div style={{ marginTop: "0.25rem" }}>
+                  <StatusBadge status={s.status} />
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontWeight: 700 }}>
+                  {s.claimableAmount.toLocaleString()} {s.token}
+                </div>
+                {s.status === "active" && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginTop: "0.4rem", padding: "0.35rem 1rem" }}
+                    onClick={() => setClaimTarget(s)}
+                    data-testid={`claim-btn-${s.id}`}
+                  >
+                    Claim
+                  </button>
+                )}
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontWeight: 700 }}>
-                {s.claimableAmount.toLocaleString()} {s.token}
-              </div>
-              {s.status === "active" && (
-                <button
-                  className="btn btn-primary"
-                  style={{ marginTop: "0.4rem", padding: "0.35rem 1rem" }}
-                  onClick={() => setClaimTarget(s)}
-                  data-testid={`claim-btn-${s.id}`}
-                >
-                  Claim
-                </button>
-              )}
-            </div>
+
+            {/* Segmented progress bar — amounts are illustrative stubs */}
+            <SegmentedProgressBar
+              total={3000}
+              dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? 3000 : 0}
+              cliffCatchUp={s.status === "active" ? 500 : 0}
+              locked={s.status === "pre-cliff" ? 3000 : s.status === "cancelled" ? 1500 : 0}
+              tokenSymbol={s.token}
+            />
           </li>
         ))}
       </ul>
@@ -67,6 +86,21 @@ export default function Home() {
           onClose={() => setClaimTarget(null)}
         />
       )}
-    </main>
+    </>
+  );
+}
+
+export default function Home() {
+  return (
+    <TxProvider>
+      <main className="page">
+        <header className="header">
+          <h1>Vesting Streams</h1>
+          <WalletButton />
+        </header>
+        <StatusLegend />
+        <StreamList />
+      </main>
+    </TxProvider>
   );
 }

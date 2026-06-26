@@ -77,6 +77,16 @@ body { font-family: system-ui, sans-serif; background: var(--color-bg); color: v
 .amount-value { font-size: 2.5rem; font-weight: 800; }
 .amount-token { font-size: 1.25rem; color: #6b7280; }
 
+/* ── Spinner ── */
+@keyframes tx-spin { to { transform: rotate(360deg); } }
+
+/* ── Accessibility ── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+
 /* ── Layout ── */
 .page { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem; }
 .header {
