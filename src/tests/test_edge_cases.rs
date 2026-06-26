@@ -3,7 +3,8 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::{VestingDrips, VestingDripsClient},
+    contract::{calculate_total_deposit, VestingDrips, VestingDripsClient},
+    error::VestingError,
     tests::{advance_ledger, setup_env},
 };
 

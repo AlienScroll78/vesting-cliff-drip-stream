@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test optimize clean fmt lint check
+.PHONY: all build test spec-test optimize clean fmt lint check
 
 all: build
 
@@ -17,6 +17,11 @@ build:
 ## Run all unit tests (native target, with testutils)
 test:
 	cargo test --features testutils
+
+## Validate the on-chain contract spec (schema) against the expected API.
+## Requires the WASM to be built first; spec-test depends on `build`.
+spec-test: build
+	cargo test --test contract_spec
 
 ## Optimize the WASM binary with soroban CLI
 optimize: build
@@ -36,6 +41,18 @@ lint:
 check:
 	cargo check --all-targets --all-features
 
+## Run mutation testing on contract.rs and storage.rs (requires cargo-mutants)
+## Install: cargo install cargo-mutants --locked
+## Results written to mutants.out/
+mutants:
+	cargo mutants --features testutils \
+		--file src/contract.rs --file src/storage.rs \
+		--output mutants.out
+
 ## Remove build artifacts
 clean:
 	cargo clean
+
+## Run Playwright E2E tests (requires Node.js + npm install in frontend/)
+test-e2e-ui:
+	cd frontend && npm install --prefer-offline && npx playwright install chromium --with-deps && npm run test:e2e

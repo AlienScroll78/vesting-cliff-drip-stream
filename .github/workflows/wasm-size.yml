@@ -1,0 +1,70 @@
+name: WASM Size Check
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_SIZE_LIMIT_KB: "100"
+
+jobs:
+  wasm-size:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-wasm-
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Optimize WASM
+        run: |
+          stellar contract optimize \
+            --wasm target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm \
+            --wasm-out target/vesting_cliff_drip_stream.optimized.wasm
+
+      - name: Check WASM size
+        run: |
+          WASM=target/vesting_cliff_drip_stream.optimized.wasm
+          SIZE_BYTES=$(wc -c < "$WASM")
+          SIZE_KB=$(( SIZE_BYTES / 1024 ))
+          echo "Optimized WASM size: ${SIZE_KB} KB (${SIZE_BYTES} bytes)"
+          LIMIT_KB="${WASM_SIZE_LIMIT_KB}"
+          if [ "$SIZE_KB" -gt "$LIMIT_KB" ]; then
+            echo "::error::WASM size ${SIZE_KB} KB exceeds limit of ${LIMIT_KB} KB"
+            exit 1
+          fi
+          echo "✅ Size check passed: ${SIZE_KB} KB ≤ ${LIMIT_KB} KB"
+
+      - name: Update wasm-size.md
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          WASM=target/vesting_cliff_drip_stream.optimized.wasm
+          SIZE_BYTES=$(wc -c < "$WASM")
+          SIZE_KB=$(( SIZE_BYTES / 1024 ))
+          DATE=$(date -u +"%Y-%m-%d")
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "| ${DATE} | ${COMMIT} | ${SIZE_KB} KB | ${SIZE_BYTES} B |" >> docs/wasm-size.md
+          echo "Updated docs/wasm-size.md with size ${SIZE_KB} KB"

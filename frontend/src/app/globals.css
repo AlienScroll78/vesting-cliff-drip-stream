@@ -1,0 +1,85 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-active:    #1d6ae5;  /* blue  */
+  --color-pre-cliff: #b45309;  /* amber */
+  --color-completed: #15803d;  /* green */
+  --color-cancelled: #b91c1c;  /* red   */
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --radius: 0.5rem;
+}
+
+body { font-family: system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.5rem 1.25rem; border-radius: var(--radius); font-weight: 600;
+  cursor: pointer; border: 2px solid transparent; transition: opacity 0.15s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary  { background: var(--color-active); color: #fff; }
+.btn-outline  { background: transparent; border-color: var(--color-active); color: var(--color-active); }
+.btn-ghost    { background: transparent; color: var(--color-text); }
+.btn-full     { width: 100%; margin-top: 0.75rem; }
+
+/* ── Wallet ── */
+.wallet-connected { display: flex; align-items: center; gap: 0.75rem; }
+.wallet-address   { font-family: monospace; font-size: 0.875rem; }
+
+/* ── Status badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
+  border: 1.5px solid currentColor;
+}
+.badge-active    { color: var(--color-active);    background: #eff6ff; }
+.badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
+.badge-completed { color: var(--color-completed); background: #f0fdf4; }
+.badge-cancelled { color: var(--color-cancelled); background: #fef2f2; }
+
+/* ── Legend ── */
+.legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+  padding: 0.75rem; background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius); font-size: 0.85rem;
+}
+.legend-title { font-weight: 700; margin-right: 0.25rem; }
+
+/* ── Stream list ── */
+.stream-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+.stream-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius); padding: 1rem; display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── Bottom sheet ── */
+.bottom-sheet-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100;
+  display: flex; align-items: flex-end;
+}
+.bottom-sheet {
+  width: 100%; background: var(--color-surface); border-radius: 1.25rem 1.25rem 0 0;
+  padding: 1rem 1.5rem 2rem; display: flex; flex-direction: column; align-items: center;
+  gap: 0.5rem;
+}
+.bottom-sheet-handle {
+  width: 3rem; height: 0.3rem; border-radius: 9999px; background: var(--color-border); margin-bottom: 0.5rem;
+}
+.bottom-sheet-title { font-size: 1.25rem; font-weight: 700; align-self: flex-start; }
+.claimable-amount {
+  display: flex; align-items: baseline; gap: 0.5rem; width: 100%;
+  padding: 1rem 0;
+}
+.amount-value { font-size: 2.5rem; font-weight: 800; }
+.amount-token { font-size: 1.25rem; color: #6b7280; }
+
+/* ── Layout ── */
+.page { max-width: 720px; margin: 0 auto; padding: 1.5rem 1rem; }
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 1rem; border-bottom: 1px solid var(--color-border); margin-bottom: 1.5rem;
+}

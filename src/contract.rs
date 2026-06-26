@@ -4,7 +4,7 @@ use crate::{
     error::VestingError,
     events,
     storage,
-    types::VestingSchedule,
+    types::{StreamStatus, VestingSchedule},
 };
 
 #[contract]
@@ -61,9 +61,7 @@ impl VestingDrips {
             .ok_or(VestingError::DepositOverflow)?;
 
         // ── Calculate and transfer total deposit ──────────────────────────────
-        let total_deposit: i128 = rate
-            .checked_mul(total_duration as i128)
-            .ok_or(VestingError::DepositOverflow)?;
+        let total_deposit: i128 = calculate_total_deposit(rate, total_duration)?;
 
         let token_client = token::Client::new(&env, &token);
         token_client.transfer(
@@ -249,4 +247,34 @@ impl VestingDrips {
         };
         env.ledger().sequence() >= schedule.cliff_ledger
     }
+
+    /// Returns the current [`StreamStatus`] for `recipient`.
+    ///
+    /// Returns `None` when no schedule exists (stream was never created
+    /// or has already been cancelled/completed and removed from storage).
+    /// Use the returned variant to drive badge colour in UI components.
+    pub fn get_status(env: Env, recipient: Address) -> Option<StreamStatus> {
+        let schedule = storage::get_schedule(&env, &recipient)?;
+        let current = env.ledger().sequence();
+        let status = if current < schedule.cliff_ledger {
+            StreamStatus::PreCliff
+        } else if current < schedule.end_ledger {
+            StreamStatus::Active
+        } else {
+            StreamStatus::Completed
+        };
+        Some(status)
+    }
+}
+
+/// Computes the full deposit for a stream.
+///
+/// The exact safe boundary is `rate <= i128::MAX / total_duration`; the
+/// multiplication overflows immediately above that threshold.
+pub(crate) fn calculate_total_deposit(
+    rate: i128,
+    total_duration: u32,
+) -> Result<i128, VestingError> {
+    rate.checked_mul(total_duration as i128)
+        .ok_or(VestingError::DepositOverflow)
 }
