@@ -3,6 +3,7 @@ import { useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
@@ -17,9 +18,21 @@ const MOCK_STREAMS: VestingStream[] = [
   { id: "4", recipient: "GKLM…", sponsor: "GXYZ…", token: "USDC", rate: 8,  claimableAmount: 0,    status: "cancelled" },
 ];
 
+/** Compute cancel split before the modal opens. */
+function computeCancelAmounts(s: VestingStream) {
+  const cliffReached = s.status === "active";
+  const recipientAmount = cliffReached ? s.claimableAmount : 0;
+  // Stub total = rate * 300 ledgers; replace with real schedule data.
+  const total = s.rate * 300;
+  const sponsorRefund = Math.max(0, total - recipientAmount);
+  return { recipientAmount, sponsorRefund, cliffReached };
+}
+
 function StreamList() {
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
+  const [streams, setStreams] = useState(MOCK_STREAMS);
 
   async function handleClaim() {
     setClaimTarget(null);
@@ -27,21 +40,38 @@ function StreamList() {
     try {
       // TODO: invoke claim_vested on-chain; replace stub below
       await new Promise((r) => setTimeout(r, 1200));
-      // Simulated hash — replace with real tx hash from SDK
       setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
     } catch (err) {
       setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
     }
   }
 
-  if (MOCK_STREAMS.length === 0) {
+  async function handleCancel() {
+    if (!cancelTarget) return;
+    const target = cancelTarget;
+    setCancelTarget(null);
+    setPending();
+    try {
+      // TODO: invoke cancel_stream via Freighter; replace stub below
+      await new Promise((r) => setTimeout(r, 1200));
+      setConfirmed("c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2e3f4a5b6c1d2");
+      // Refresh list: mark stream as cancelled
+      setStreams((prev) =>
+        prev.map((s) => s.id === target.id ? { ...s, status: "cancelled", claimableAmount: 0 } : s)
+      );
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
+    }
+  }
+
+  if (streams.length === 0) {
     return <SponsorStreamListEmpty onCreateStream={() => alert("TODO: open create stream form")} />;
   }
 
   return (
     <>
       <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label="Your streams">
-        {MOCK_STREAMS.map((s) => (
+        {streams.map((s) => (
           <li key={s.id} className="stream-card" style={{ flexDirection: "column", gap: "0.75rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
               <div>
@@ -50,20 +80,32 @@ function StreamList() {
                   <StatusBadge status={s.status} />
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
                   {s.claimableAmount.toLocaleString()} {s.token}
                 </div>
-                {s.status === "active" && (
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: "0.4rem", padding: "0.35rem 1rem" }}
-                    onClick={() => setClaimTarget(s)}
-                    data-testid={`claim-btn-${s.id}`}
-                  >
-                    Claim
-                  </button>
-                )}
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  {s.status === "active" && (
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: "0.35rem 1rem" }}
+                      onClick={() => setClaimTarget(s)}
+                      data-testid={`claim-btn-${s.id}`}
+                    >
+                      Claim
+                    </button>
+                  )}
+                  {(s.status === "active" || s.status === "pre-cliff") && (
+                    <button
+                      className="btn btn-outline"
+                      style={{ padding: "0.35rem 1rem", borderColor: "var(--color-cancelled)", color: "var(--color-cancelled)" }}
+                      onClick={() => setCancelTarget(s)}
+                      data-testid={`cancel-btn-${s.id}`}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -85,6 +127,15 @@ function StreamList() {
           tokenSymbol={claimTarget.token}
           onClaim={handleClaim}
           onClose={() => setClaimTarget(null)}
+        />
+      )}
+
+      {cancelTarget && (
+        <CancelConfirmModal
+          stream={cancelTarget}
+          amounts={computeCancelAmounts(cancelTarget)}
+          onConfirm={handleCancel}
+          onClose={() => setCancelTarget(null)}
         />
       )}
     </>
