@@ -9,11 +9,13 @@ import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { StreamListSkeleton } from "@/components/Skeletons";
+import { CopyButton } from "@/components/CopyButton";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
-import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
+import { formatAmount } from "@/utils/formatAmount";
 
 // Stub data – replace with contract reads. Use [] to see empty state.
 const MOCK_STREAMS: VestingStream[] = [
@@ -37,6 +39,7 @@ function StreamList() {
   const { t } = useTranslation();
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Simulate async data fetch; replace with real contract reads
@@ -48,6 +51,17 @@ function StreamList() {
   async function handleClaim() {
     if (claimTarget) analytics.claimSubmitted(claimTarget.token, claimTarget.claimableAmount);
     setClaimTarget(null);
+    setPending();
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
+    }
+  }
+
+  async function handleCancel() {
+    setCancelTarget(null);
     setPending();
     try {
       await new Promise((r) => setTimeout(r, 1200));
@@ -74,8 +88,8 @@ function StreamList() {
     <>
       <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label={t("streams")}>
         {MOCK_STREAMS.map((s) => (
-          <li key={s.id} className="stream-card" style={{ flexDirection: "column", gap: "0.75rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+          <li key={s.id} className="stream-card">
+            <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
                   {s.recipient}
@@ -92,7 +106,7 @@ function StreamList() {
                 {s.status === "active" && (
                   <button
                     className="btn btn-primary"
-                    style={{ marginTop: "0.4rem", padding: "0.35rem 1rem" }}
+                    style={{ marginTop: "0.4rem" }}
                     onClick={() => setClaimTarget(s)}
                     data-testid={`claim-btn-${s.id}`}
                   >

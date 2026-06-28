@@ -6,46 +6,30 @@ import {
   requestAccess,
   setAllowed,
 } from "@stellar/freighter-api";
+import { useWalletBalances } from "@/hooks/useWalletBalances";
+import { WalletBalance } from "@/types";
 
 const STORAGE_KEY = "vesting_wallet_address";
 
 interface WalletCtx {
   address: string | null;
-  freighterInstalled: boolean | null; // null = not yet checked
+  balances: WalletBalance[];
+  balancesLoading: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
 }
 
 export const WalletContext = createContext<WalletCtx>({
   address: null,
-  freighterInstalled: null,
+  balances: [],
+  balancesLoading: false,
   connect: async () => {},
   disconnect: () => {},
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [address, setAddress] = useState<string | null>(() => {
-    try { return localStorage.getItem(STORAGE_KEY); } catch { return null; }
-  });
-  const [freighterInstalled, setFreighterInstalled] = useState<boolean | null>(null);
-
-  // Check Freighter presence on mount
-  useEffect(() => {
-    isConnected().then((res) => setFreighterInstalled(res.isConnected));
-  }, []);
-
-  // Re-fetch address when the user switches accounts in Freighter
-  useEffect(() => {
-    if (!address) return;
-    const interval = setInterval(async () => {
-      const res = await getAddress();
-      if (!res.error && res.address && res.address !== address) {
-        setAddress(res.address);
-        localStorage.setItem(STORAGE_KEY, res.address);
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [address]);
+  const [address, setAddress] = useState<string | null>(null);
+  const { balances, loading: balancesLoading } = useWalletBalances(address);
 
   const connect = useCallback(async () => {
     const connected = await isConnected();
@@ -71,7 +55,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <WalletContext.Provider value={{ address, freighterInstalled, connect, disconnect }}>
+    <WalletContext.Provider value={{ address, balances, balancesLoading, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   );

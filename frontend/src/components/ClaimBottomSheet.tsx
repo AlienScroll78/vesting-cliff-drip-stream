@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
+import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 
 interface Props {
   claimableAmount: number;
