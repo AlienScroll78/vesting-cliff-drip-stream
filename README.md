@@ -10,7 +10,7 @@ A production-ready Soroban smart contract that combines a **time-locked cliff** 
 
 ## Concept
 
-Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **cliff period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
+Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
 
 ```
 Token Flow
@@ -21,10 +21,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
                │                 │                              │
 ```
 
-1. Sponsor deposits the **full allocation** upfront into the contract vault.
+1. [Sponsor](docs/glossary.md#sponsor) deposits the **full allocation** upfront into the contract vault.
 2. Recipient cannot claim anything until `cliff_ledger` is reached.
 3. At the cliff, all tokens accrued since `start_ledger` are **released instantly**.
-4. Remaining tokens continue to **drip linearly per ledger** until `end_ledger`.
+4. Remaining tokens continue to **drip linearly per [ledger](docs/glossary.md#ledger)** until `end_ledger`.
 
 ---
 
@@ -182,11 +182,11 @@ export TOTAL_DURATION=172800  # ~10 days
 
 ## Security Considerations
 
-- **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
-- **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
+- **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
 - **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
-- **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
+- **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
 ---

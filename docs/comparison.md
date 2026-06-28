@@ -1,5 +1,7 @@
 # Vesting Cliff Drip Stream vs Standard Drips
 
+> Unfamiliar with terms like ledger, cliff, SAC, or XDR? See the [glossary](glossary.md).
+
 This document compares **vesting-cliff-drip-stream** with a standard Drips stream to help users understand what is different and why.
 
 ---
@@ -9,17 +11,17 @@ This document compares **vesting-cliff-drip-stream** with a standard Drips strea
 | Feature | Standard Drips | Vesting Cliff Drip Stream |
 |---|---|---|
 | **Token release start** | Immediately from stream creation | Only after `cliff_ledger` is reached |
-| **Cliff period** | None | Mandatory; configured via `cliff_duration` |
-| **First claim** | Any amount accrued since start | All tokens accrued since `start_ledger`, released in one catch-up transfer |
-| **Accrual model** | Linear per block/ledger from start | Linear per ledger, but locked until cliff |
-| **Cancel — before cliff** | Proportional split at cancel time | Full deposit refunded to sponsor; recipient receives nothing |
+| **[Cliff](glossary.md#cliff) period** | None | Mandatory; configured via `cliff_duration` |
+| **First claim** | Any amount accrued since start | All tokens accrued since `start_ledger`, released in one [catch-up transfer](glossary.md#catch-up-claim) |
+| **Accrual model** | Linear per block/[ledger](glossary.md#ledger) from start | Linear per ledger, but locked until cliff |
+| **Cancel — before cliff** | Proportional split at cancel time | Full [deposit](glossary.md#deposit) refunded to sponsor; recipient receives nothing |
 | **Cancel — after cliff** | Proportional split at cancel time | Recipient keeps all earned tokens; sponsor gets the remainder |
 | **Duplicate stream prevention** | Varies by implementation | Hard error (`ScheduleAlreadyExists`) — one stream per recipient |
-| **Storage model** | Off-chain or on-chain mapping | Soroban persistent storage keyed by recipient address with auto-TTL bumping (~60-day window) |
-| **Admin/owner key** | Often present | None — only the original sponsor can cancel |
-| **Overflow protection** | Varies | All arithmetic uses `checked_*`; returns `DepositOverflow` on failure |
+| **Storage model** | Off-chain or on-chain mapping | Soroban [persistent storage](glossary.md#persistent-storage) keyed by recipient address with auto-[TTL](glossary.md#ttl-time-to-live) bumping (~60-day window) |
+| **Admin/owner key** | Often present | None — only the original [sponsor](glossary.md#sponsor) can cancel |
+| **Overflow protection** | Varies | All arithmetic uses [checked_*](glossary.md#checked-arithmetic); returns `DepositOverflow` on failure |
 | **Transaction costs** | One transfer per claim | One upfront deposit + one transfer per claim; cancel splits in one tx |
-| **Auth model** | Varies | `require_auth()` on sponsor (create/cancel) and recipient (claim) |
+| **Auth model** | Varies | [`require_auth()`](glossary.md#auth--require_auth) on sponsor (create/cancel) and recipient (claim) |
 
 ---
 
