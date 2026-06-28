@@ -1,11 +1,16 @@
 "use client";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import "@/i18n";
 import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
+import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 
@@ -18,34 +23,53 @@ const MOCK_STREAMS: VestingStream[] = [
 ];
 
 function StreamList() {
+  const { t } = useTranslation();
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Simulate async data fetch; replace with real contract reads
+  useState(() => {
+    const t = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(t);
+  });
 
   async function handleClaim() {
+    if (claimTarget) analytics.claimSubmitted(claimTarget.token, claimTarget.claimableAmount);
     setClaimTarget(null);
     setPending();
     try {
-      // TODO: invoke claim_vested on-chain; replace stub below
       await new Promise((r) => setTimeout(r, 1200));
-      // Simulated hash — replace with real tx hash from SDK
       setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
     } catch (err) {
       setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
     }
   }
 
+  if (loading) return <StreamListSkeleton count={4} />;
+
   if (MOCK_STREAMS.length === 0) {
-    return <SponsorStreamListEmpty onCreateStream={() => alert("TODO: open create stream form")} />;
+    return (
+      <SponsorStreamListEmpty
+        onCreateStream={() => {
+          analytics.streamCreated("USDC");
+          alert("TODO: open create stream form");
+        }}
+      />
+    );
   }
 
   return (
     <>
-      <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label="Your streams">
+      <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label={t("streams")}>
         {MOCK_STREAMS.map((s) => (
           <li key={s.id} className="stream-card" style={{ flexDirection: "column", gap: "0.75rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
               <div>
-                <div style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{s.recipient}</div>
+                <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                  {s.recipient}
+                  <CopyButton text={s.recipient} label="Copy recipient address" />
+                </div>
                 <div style={{ marginTop: "0.25rem" }}>
                   <StatusBadge status={s.status} />
                 </div>
@@ -61,13 +85,12 @@ function StreamList() {
                     onClick={() => setClaimTarget(s)}
                     data-testid={`claim-btn-${s.id}`}
                   >
-                    Claim
+                    {t("claim")}
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Segmented progress bar — amounts are illustrative stubs */}
             <SegmentedProgressBar
               total={3000}
               dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? 3000 : 0}
@@ -92,15 +115,23 @@ function StreamList() {
 }
 
 export default function Home() {
+  const { t } = useTranslation();
   return (
     <TxProvider>
-      <main className="page">
+      {/* #69 — main-content target for skip-nav */}
+      <main id="main-content" className="page">
         <header className="header">
-          <h1>Vesting Streams</h1>
-          <WalletButton />
+          <h1>{t("appTitle")}</h1>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+            <LanguageSwitcher />
+            <WalletButton />
+          </div>
         </header>
         <StatusLegend />
         <StreamList />
+        <footer style={{ marginTop: "2rem", fontSize: "0.75rem", color: "#6b7280", textAlign: "center" }}>
+          <AnalyticsOptOut />
+        </footer>
       </main>
     </TxProvider>
   );

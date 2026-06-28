@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vesting-backend.fullname" . }}
+  labels:
+    {{- include "vesting-backend.labels" . | nindent 4 }}
+data:
+  HORIZON_URL: {{ .Values.config.horizonUrl | quote }}
+  NETWORK_PASSPHRASE: {{ .Values.config.networkPassphrase | quote }}

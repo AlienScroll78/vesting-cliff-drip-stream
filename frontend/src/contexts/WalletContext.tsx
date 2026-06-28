@@ -4,7 +4,6 @@ import {
   isConnected,
   getAddress,
   requestAccess,
-  disconnect as freighterDisconnect,
 } from "@stellar/freighter-api";
 
 interface WalletCtx {
@@ -33,7 +32,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(async () => {
-    await freighterDisconnect();
     setAddress(null);
   }, []);
 

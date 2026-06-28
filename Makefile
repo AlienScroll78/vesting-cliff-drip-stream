@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check
+.PHONY: all build test spec-test optimize clean fmt lint check doc
 
 all: build
 
@@ -40,6 +40,10 @@ lint:
 ## Type-check without building
 check:
 	cargo check --all-targets --all-features
+
+## Build rustdoc; fails on any missing-doc warning (mirrors CI)
+doc:
+	RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 
 ## Run mutation testing on contract.rs and storage.rs (requires cargo-mutants)
 ## Install: cargo install cargo-mutants --locked

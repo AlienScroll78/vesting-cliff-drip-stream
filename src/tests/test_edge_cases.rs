@@ -265,3 +265,144 @@ fn test_regression_negative_rate_rejected() {
         .unwrap_err();
     assert_eq!(err, VestingError::InvalidRate.into());
 }
+
+// ── TTL bump & expiry tests ───────────────────────────────────────────────────
+
+/// TTL write path: `set_schedule` bumps TTL to PERSISTENT_BUMP_AMOUNT (518_400) ledgers.
+/// Verified via `env.as_contract` + `get_ttl`.
+///
+/// TTL = bump_amount - 1 because the current ledger is counted during creation.
+#[test]
+fn test_ttl_bumped_on_write() {
+    use soroban_sdk::testutils::storage::Persistent;
+    use crate::types::DataKey;
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .unwrap();
+
+    // PERSISTENT_BUMP_AMOUNT = 518_400; TTL doesn't include the current ledger,
+    // so initial TTL = 518_400 - 1 = 518_399.
+    env.as_contract(&contract_id, || {
+        assert_eq!(
+            env.storage()
+                .persistent()
+                .get_ttl(&DataKey::Schedule(recipient.clone())),
+            518_399
+        );
+    });
+}
+
+/// TTL read path: `get_schedule` re-extends TTL on every read.
+///
+/// Verify that after ledger advances (reducing TTL), a contract call that reads
+/// the schedule bumps TTL back to PERSISTENT_BUMP_AMOUNT - 1 from the new ledger.
+#[test]
+fn test_ttl_bumped_on_read() {
+    use soroban_sdk::testutils::storage::Persistent;
+    use crate::types::DataKey;
+
+    let env = setup_env(); // sequence_number = 100
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .unwrap();
+
+    // Advance 200_000 ledgers without any contract interaction.
+    // TTL decays from 518_399 to 318_399.
+    advance_ledger(&env, 200_000);
+
+    env.as_contract(&contract_id, || {
+        assert_eq!(
+            env.storage()
+                .persistent()
+                .get_ttl(&DataKey::Schedule(recipient.clone())),
+            318_399
+        );
+    });
+
+    // Any read-touching call (claimable_amount → get_schedule) re-bumps TTL.
+    client.claimable_amount(&recipient);
+
+    // TTL is restored to 518_399 relative to the new current ledger.
+    env.as_contract(&contract_id, || {
+        assert_eq!(
+            env.storage()
+                .persistent()
+                .get_ttl(&DataKey::Schedule(recipient.clone())),
+            518_399
+        );
+    });
+}
+
+/// Expiry path: without TTL bumps, advancing far enough makes the entry's TTL
+/// drop to 0 (archived). The SDK then auto-restores persistent entries on the
+/// next access, so `ScheduleNotFound` is not produced by natural expiry. This
+/// test instead verifies the TTL decay observable state and confirms that
+/// `ScheduleNotFound` is returned by `get_schedule` returning `None` after
+/// an explicit `cancel_stream` removes the entry — the concrete error path
+/// reachable by callers.
+///
+/// TTL decay behaviour (no bumps):
+///   - After creation: TTL = 518_399
+///   - After +518_399 ledgers: TTL = 0 (entry archived on-chain)
+///   - SDK auto-restores on next contract call (persistent archival semantics)
+///
+/// Therefore `ScheduleNotFound` is always raised via explicit removal, not expiry.
+#[test]
+fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found() {
+    use soroban_sdk::testutils::storage::Persistent;
+    use crate::types::DataKey;
+
+    let env = setup_env(); // sequence_number = 100
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .unwrap();
+
+    // Advance exactly 518_399 ledgers — TTL hits 0 (archived state).
+    // No reads/writes occur, so the bump is never triggered.
+    advance_ledger(&env, 518_399);
+
+    env.as_contract(&contract_id, || {
+        assert_eq!(
+            env.storage()
+                .persistent()
+                .get_ttl(&DataKey::Schedule(recipient.clone())),
+            0
+        );
+    });
+
+    // Cancel removes the entry from storage entirely.
+    client.cancel_stream(&sponsor, &recipient).unwrap();
+
+    // Subsequent calls now return ScheduleNotFound because the entry was removed.
+    let err = client.claim_vested(&recipient).unwrap_err();
+    assert_eq!(err, VestingError::ScheduleNotFound.into());
+
+    let err2 = client.cancel_stream(&sponsor, &recipient).unwrap_err();
+    assert_eq!(err2, VestingError::ScheduleNotFound.into());
+}

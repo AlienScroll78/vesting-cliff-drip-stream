@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
-import { estimateFee, type FeeEstimate } from "@/utils/feeEstimate";
+import { trapFocus } from "@/utils/focusTrap";
 
 interface Props {
   claimableAmount: number;
@@ -23,10 +23,11 @@ export function ClaimBottomSheet({ claimableAmount, tokenSymbol, onClaim, onClos
 
   // Swipe-down to dismiss
   function handleTouchStart(e: React.TouchEvent) {
-    startY.current = e.touches[0].clientY;
+    startY.current = e.touches[0]?.clientY ?? null;
   }
   function handleTouchEnd(e: React.TouchEvent) {
-    if (startY.current !== null && e.changedTouches[0].clientY - startY.current > 60) {
+    const endY = e.changedTouches[0]?.clientY;
+    if (startY.current !== null && endY !== undefined && endY - startY.current > 60) {
       onClose();
     }
     startY.current = null;
@@ -37,12 +38,23 @@ export function ClaimBottomSheet({ claimableAmount, tokenSymbol, onClaim, onClos
     if (e.target === e.currentTarget) onClose();
   }
 
-  // Close on Escape
+  // Close on Escape + focus trap
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
+
+  // Focus trap inside modal
+  useEffect(() => {
+    if (!sheetRef.current) return;
+    return trapFocus(sheetRef.current);
+  }, []);
+
+  // Auto-focus sheet on open
+  useEffect(() => {
+    sheetRef.current?.focus();
+  }, []);
 
   async function handleClaim() {
     setLoading(true);
@@ -63,6 +75,8 @@ export function ClaimBottomSheet({ claimableAmount, tokenSymbol, onClaim, onClos
         data-testid="claim-bottom-sheet"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        tabIndex={-1}
+        outline-style="none"
       >
         <div className="bottom-sheet-handle" aria-hidden="true" />
         <h2 className="bottom-sheet-title">Claim Tokens</h2>

@@ -1,0 +1,57 @@
+# Container image
+image:
+  repository: ghcr.io/your-org/vesting-backend
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Number of replicas (overridden by HPA when enabled)
+replicaCount: 1
+
+# Resource limits/requests
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  host: vesting.example.com
+  tls:
+    enabled: false
+    secretName: vesting-tls
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# Application config (ConfigMap)
+config:
+  horizonUrl: "https://horizon-testnet.stellar.org"
+  networkPassphrase: "Test SDF Network ; September 2015"
+
+# External secret (ExternalSecret CRD → AWS Secrets Manager)
+externalSecret:
+  enabled: true
+  # Name of the ClusterSecretStore / SecretStore to use
+  secretStoreName: aws-secretsmanager
+  # Path in AWS Secrets Manager
+  remoteSecretKey: vesting/production/app-secrets
+  # Keys to extract from the remote secret
+  keys:
+    - localKey: DATABASE_URL
+      remoteProperty: database_url
+    - localKey: CONTRACT_ID
+      remoteProperty: contract_id

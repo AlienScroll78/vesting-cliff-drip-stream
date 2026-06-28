@@ -42,3 +42,6 @@ jobs:
 
       - name: Build WASM
         run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
