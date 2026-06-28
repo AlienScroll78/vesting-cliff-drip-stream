@@ -191,6 +191,10 @@ export TOTAL_DURATION=172800  # ~10 days
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of notable changes.
+
 ## License
 
 MIT
