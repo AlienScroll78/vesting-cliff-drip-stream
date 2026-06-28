@@ -5,6 +5,7 @@ import "@/i18n";
 import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
@@ -21,6 +22,16 @@ const MOCK_STREAMS: VestingStream[] = [
   { id: "3", recipient: "GHIJ…", sponsor: "GXYZ…", token: "USDC", rate: 20, claimableAmount: 0,    status: "completed" },
   { id: "4", recipient: "GKLM…", sponsor: "GXYZ…", token: "USDC", rate: 8,  claimableAmount: 0,    status: "cancelled" },
 ];
+
+/** Compute cancel split before the modal opens. */
+function computeCancelAmounts(s: VestingStream) {
+  const cliffReached = s.status === "active";
+  const recipientAmount = cliffReached ? s.claimableAmount : 0;
+  // Stub total = rate * 300 ledgers; replace with real schedule data.
+  const total = s.rate * 300;
+  const sponsorRefund = Math.max(0, total - recipientAmount);
+  return { recipientAmount, sponsorRefund, cliffReached };
+}
 
 function StreamList() {
   const { t } = useTranslation();
@@ -74,7 +85,7 @@ function StreamList() {
                   <StatusBadge status={s.status} />
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
                   {s.claimableAmount.toLocaleString()} {s.token}
                 </div>
@@ -108,6 +119,15 @@ function StreamList() {
           tokenSymbol={claimTarget.token}
           onClaim={handleClaim}
           onClose={() => setClaimTarget(null)}
+        />
+      )}
+
+      {cancelTarget && (
+        <CancelConfirmModal
+          stream={cancelTarget}
+          amounts={computeCancelAmounts(cancelTarget)}
+          onConfirm={handleCancel}
+          onClose={() => setCancelTarget(null)}
         />
       )}
     </>
