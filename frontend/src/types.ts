@@ -9,3 +9,16 @@ export interface VestingStream {
   claimableAmount: number;
   status: StreamStatus;
 }
+
+export type TxType = "claim" | "create" | "cancel";
+
+export interface Transaction {
+  id: string;
+  type: TxType;
+  amount: number;
+  token: string;
+  hash: string;
+  /** ISO-8601 timestamp from the backend */
+  timestamp: string;
+  counterparty: string;
+}
