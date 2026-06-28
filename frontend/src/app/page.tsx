@@ -9,14 +9,15 @@ import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { StreamListSkeleton } from "@/components/Skeletons";
+import { CopyButton } from "@/components/CopyButton";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
-import { CopyButton } from "@/components/CopyButton";
-import { abbreviateAmount } from "@/utils/formatAmount";
+import { formatAmount } from "@/utils/formatAmount";
 
 // Ledger numbers assume stream started ~10 days ago, cliff at 30 days, ends at 365 days
 const BASE_LEDGER = 51_200_000;
@@ -88,7 +89,6 @@ function StreamList() {
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
-  const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
   const [loading, setLoading] = useState(true);
 
   useState(() => {
@@ -121,6 +121,17 @@ function StreamList() {
     }
   }
 
+  async function handleCancel() {
+    setCancelTarget(null);
+    setPending();
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+    } catch (err) {
+      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
+    }
+  }
+
   if (loading) return <StreamListSkeleton count={4} />;
 
   if (MOCK_STREAMS.length === 0) {
@@ -135,8 +146,8 @@ function StreamList() {
     <>
       <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label={t("streams")}>
         {MOCK_STREAMS.map((s) => (
-          <li key={s.id} className="stream-card" style={{ flexDirection: "column", gap: "0.75rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+          <li key={s.id} className="stream-card">
+            <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
                   {s.recipient}
@@ -175,6 +186,16 @@ function StreamList() {
                     </button>
                   )}
                 </div>
+                {s.status === "active" && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ marginTop: "0.4rem" }}
+                    onClick={() => setClaimTarget(s)}
+                    data-testid={`claim-btn-${s.id}`}
+                  >
+                    {t("claim")}
+                  </button>
+                )}
               </div>
             </div>
 

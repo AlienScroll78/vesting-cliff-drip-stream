@@ -2,23 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
-import { estimateFee, type FeeEstimate } from "@/utils/feeEstimate";
-import { VestingStream } from "@/types";
-
-// ~5 seconds per ledger
-const LEDGERS_PER_DAY = Math.round((24 * 60 * 60) / 5);
-
-function ledgersToHuman(ledgers: number): string {
-  if (ledgers <= 0) return "0 days";
-  const days = Math.floor(ledgers / LEDGERS_PER_DAY);
-  const remainingLedgers = ledgers % LEDGERS_PER_DAY;
-  const hours = Math.floor((remainingLedgers * 5) / 3600);
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (parts.length === 0) parts.push("< 1h");
-  return parts.join(" ");
-}
+import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 
 interface Props {
   stream: VestingStream;
