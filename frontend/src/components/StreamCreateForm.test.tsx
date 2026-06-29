@@ -2,129 +2,138 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
+import { WalletContext } from "@/contexts/WalletContext";
 
-const VALID_ADDRESS = "GAHJJJKMOKYE4RVPZEWZTKH5FVI4PA3VL7GK2LFNUBSGBV3BGMQSB3A";
+const VALID_ADDRESS = "GJLJ23WVK4UWYA4RGQTOUFXNZUBTTJMIRQPASCDZ4G4HM53NOT5W2OZX";
+const VALID_TOKEN   = "CFU5BPFMUWIF6LXAQFCQ2RDS75QZL5ER2XXKHSIM2FBHTB4MFTKA5ITF";
+
+function renderNoWallet(props = {}) {
+  return render(
+    <WalletContext.Provider value={{ address: null, freighterInstalled: false, connect: vi.fn(), disconnect: vi.fn() }}>
+      <StreamCreateForm {...props} />
+    </WalletContext.Provider>
+  );
+}
+
+function renderWithWallet(props = {}) {
+  return render(
+    <WalletContext.Provider value={{ address: VALID_ADDRESS, freighterInstalled: true, connect: vi.fn(), disconnect: vi.fn() }}>
+      <StreamCreateForm {...props} />
+    </WalletContext.Provider>
+  );
+}
+
+/** Fill a field via userEvent (triggers real React synthetic events) */
+async function fill(label: RegExp, value: string) {
+  const input = screen.getByLabelText(label);
+  await userEvent.clear(input);
+  await userEvent.type(input, value);
+  await userEvent.tab(); // blur to set touched
+}
 
 describe("StreamCreateForm", () => {
-  // ── Field validation on blur ──────────────────────────────────────────────
+  beforeEach(() => vi.restoreAllMocks());
 
   it("shows error for empty recipient on blur", async () => {
-    render(<StreamCreateForm />);
-    const input = screen.getByLabelText(/recipient address/i);
-    await userEvent.click(input);
+    renderNoWallet();
+    await userEvent.click(screen.getByLabelText(/recipient address/i));
     await userEvent.tab();
-    expect(await screen.findByTestId("recipient-error")).toHaveTextContent(/required/i);
+    expect(screen.getByTestId("recipient-error")).toHaveTextContent(/required/i);
   });
 
   it("shows error for invalid Stellar address", async () => {
-    render(<StreamCreateForm />);
-    const input = screen.getByLabelText(/recipient address/i);
-    await userEvent.type(input, "notanaddress");
-    await userEvent.tab();
-    expect(await screen.findByTestId("recipient-error")).toHaveTextContent(/valid stellar address/i);
+    renderNoWallet();
+    await fill(/recipient address/i, "bad");
+    expect(screen.getByTestId("recipient-error")).toHaveTextContent(/valid stellar address/i);
   });
 
-  it("clears recipient error when valid address entered", async () => {
-    render(<StreamCreateForm />);
+  it("shows error for invalid token address", async () => {
+    renderNoWallet();
+    await fill(/token contract/i, "bad");
+    expect(screen.getByTestId("token-error")).toHaveTextContent(/SAC contract address/i);
+  });
+
+  it("clears recipient error when valid address is entered", async () => {
+    renderNoWallet();
+    await fill(/recipient address/i, "bad");
+    expect(screen.getByTestId("recipient-error")).toBeInTheDocument();
+    // Replace with valid address
     const input = screen.getByLabelText(/recipient address/i);
-    await userEvent.type(input, "bad");
-    await userEvent.tab();
-    expect(await screen.findByTestId("recipient-error")).toBeInTheDocument();
-    // Simulate re-entering a valid address by clearing and typing valid one
     await userEvent.clear(input);
     await userEvent.type(input, VALID_ADDRESS);
-    await userEvent.tab(); // trigger blur to re-run validation
-    // Error should be gone because address is now valid
-    await waitFor(() => expect(screen.queryByTestId("recipient-error")).not.toBeInTheDocument());
+    await userEvent.tab();
+    expect(screen.queryByTestId("recipient-error")).not.toBeInTheDocument();
   });
 
   it("shows error when rate is 0", async () => {
-    render(<StreamCreateForm />);
-    const input = screen.getByLabelText(/rate/i);
-    await userEvent.type(input, "0");
-    await userEvent.tab();
-    expect(await screen.findByTestId("rate-error")).toHaveTextContent(/positive integer/i);
+    renderNoWallet();
+    await fill(/rate \(tokens per ledger\)/i, "0");
+    expect(screen.getByTestId("rate-error")).toHaveTextContent(/positive integer/i);
   });
 
-  it("shows error when rate is negative", async () => {
-    render(<StreamCreateForm />);
-    const input = screen.getByLabelText(/rate/i);
-    await userEvent.type(input, "-5");
-    await userEvent.tab();
-    expect(await screen.findByTestId("rate-error")).toHaveTextContent(/positive integer/i);
+  it("shows error when total duration <= cliff duration", async () => {
+    renderNoWallet();
+    await fill(/cliff duration \(days\)/i, "100");
+    await fill(/total duration \(days\)/i, "100");
+    expect(screen.getByTestId("totalDays-error")).toHaveTextContent(/greater than cliff/i);
   });
 
-  it("shows error when total duration <= cliff duration (contract error #3)", async () => {
-    render(<StreamCreateForm />);
-    await userEvent.type(screen.getByLabelText(/cliff duration/i), "100");
-    await userEvent.tab();
-    await userEvent.type(screen.getByLabelText(/total duration/i), "100");
-    await userEvent.tab();
-    expect(await screen.findByTestId("totalDuration-error")).toHaveTextContent(
-      /greater than cliff/i
-    );
+  it("shows ledger hint for cliff duration", async () => {
+    renderNoWallet();
+    await fill(/cliff duration \(days\)/i, "30");
+    expect(screen.getByText(/ledgers/i)).toBeInTheDocument();
   });
 
-  it("clears totalDuration error when total > cliff", async () => {
-    render(<StreamCreateForm />);
-    const cliffInput = screen.getByLabelText(/cliff duration/i);
-    const totalInput = screen.getByLabelText(/total duration/i);
-    await userEvent.type(cliffInput, "100");
-    await userEvent.tab();
-    await userEvent.type(totalInput, "50");
-    await userEvent.tab();
-    expect(await screen.findByTestId("totalDuration-error")).toBeInTheDocument();
-    await userEvent.clear(totalInput);
-    await userEvent.type(totalInput, "200");
-    await userEvent.tab();
-    await waitFor(() => expect(screen.queryByTestId("totalDuration-error")).not.toBeInTheDocument());
+  it("submit is disabled when no wallet even with valid inputs", async () => {
+    renderNoWallet();
+    await fill(/recipient address/i, VALID_ADDRESS);
+    await fill(/token contract/i, VALID_TOKEN);
+    await fill(/rate \(tokens per ledger\)/i, "10");
+    await fill(/cliff duration \(days\)/i, "30");
+    await fill(/total duration \(days\)/i, "365");
+    expect(screen.getByTestId("stream-create-submit")).toBeDisabled();
   });
 
-  // ── Submit button state ───────────────────────────────────────────────────
-
-  it("submit button is not disabled before any interaction", () => {
-    render(<StreamCreateForm />);
-    const btn = screen.getByTestId("stream-create-submit");
-    // Untouched form: button should not be HTML disabled (no fields touched yet)
-    expect(btn).not.toBeDisabled();
-  });
-
-  it("calls onSubmit with form values when form is valid", async () => {
-    const onSubmit = vi.fn();
-    render(<StreamCreateForm onSubmit={onSubmit} />);
-
-    await userEvent.type(screen.getByLabelText(/recipient address/i), VALID_ADDRESS);
-    await userEvent.tab();
-    await userEvent.type(screen.getByLabelText(/rate/i), "10");
-    await userEvent.tab();
-    await userEvent.type(screen.getByLabelText(/cliff duration/i), "17280");
-    await userEvent.tab();
-    await userEvent.type(screen.getByLabelText(/total duration/i), "172800");
-    await userEvent.tab(); // blur last field so it's touched and valid
+  it("surfaces all field errors when submitted with empty form", async () => {
+    renderWithWallet();
     await userEvent.click(screen.getByTestId("stream-create-submit"));
-
-    expect(onSubmit).toHaveBeenCalledOnce();
-    expect(onSubmit).toHaveBeenCalledWith({
-      recipient: VALID_ADDRESS,
-      rate: "10",
-      cliffDuration: "17280",
-      totalDuration: "172800",
+    await waitFor(() => {
+      expect(screen.getByTestId("recipient-error")).toBeInTheDocument();
+      expect(screen.getByTestId("token-error")).toBeInTheDocument();
+      expect(screen.getByTestId("rate-error")).toBeInTheDocument();
+      expect(screen.getByTestId("cliffDays-error")).toBeInTheDocument();
+      expect(screen.getByTestId("totalDays-error")).toBeInTheDocument();
     });
   });
 
-  it("does not call onSubmit when form is invalid", async () => {
-    const onSubmit = vi.fn();
-    render(<StreamCreateForm onSubmit={onSubmit} />);
-    await userEvent.click(screen.getByTestId("stream-create-submit"));
-    expect(onSubmit).not.toHaveBeenCalled();
+  it("shows wallet-required message when no wallet connected", () => {
+    renderNoWallet();
+    expect(screen.getByText(/connect your wallet/i)).toBeInTheDocument();
   });
 
-  it("surfaces all errors when submit is clicked with empty form", async () => {
-    render(<StreamCreateForm />);
+  it("shows deposit preview once all fields are valid", async () => {
+    renderWithWallet();
+    await fill(/recipient address/i, VALID_ADDRESS);
+    await fill(/token contract/i, VALID_TOKEN);
+    await fill(/rate \(tokens per ledger\)/i, "10");
+    await fill(/cliff duration \(days\)/i, "30");
+    await fill(/total duration \(days\)/i, "365");
+    expect(screen.getByTestId("deposit-preview")).toBeInTheDocument();
+  });
+
+  it("shows success after valid submission", async () => {
+    const onSuccess = vi.fn();
+    renderWithWallet({ onSuccess });
+    await fill(/recipient address/i, VALID_ADDRESS);
+    await fill(/token contract/i, VALID_TOKEN);
+    await fill(/rate \(tokens per ledger\)/i, "10");
+    await fill(/cliff duration \(days\)/i, "30");
+    await fill(/total duration \(days\)/i, "365");
     await userEvent.click(screen.getByTestId("stream-create-submit"));
-    expect(await screen.findByTestId("recipient-error")).toBeInTheDocument();
-    expect(await screen.findByTestId("rate-error")).toBeInTheDocument();
-    expect(await screen.findByTestId("cliffDuration-error")).toBeInTheDocument();
-    expect(await screen.findByTestId("totalDuration-error")).toBeInTheDocument();
+    await waitFor(
+      () => expect(screen.getByTestId("tx-success")).toBeInTheDocument(),
+      { timeout: 5000 }
+    );
+    expect(onSuccess).toHaveBeenCalledOnce();
   });
 });

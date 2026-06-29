@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
 
 all: build
 
@@ -66,5 +66,13 @@ test-e2e-ui:
 test-e2e: build
 	docker compose -f docker-compose.e2e.yml up -d
 	node tests/e2e/run_e2e.js; status=$$?; \
+	docker compose -f docker-compose.e2e.yml down; \
+	exit $$status
+
+## Run integration tests for the indexer event pipeline (issue #46)
+## Requires a running local Stellar quickstart node and a built WASM.
+test-integration: build
+	docker compose -f docker-compose.e2e.yml up -d
+	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
