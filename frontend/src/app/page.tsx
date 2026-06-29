@@ -17,7 +17,7 @@ import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
-import { formatAmount } from "@/utils/formatAmount";
+import { formatAmount, abbreviateAmount } from "@/utils/formatAmount";
 
 // Ledger numbers assume stream started ~10 days ago, cliff at 30 days, ends at 365 days
 const BASE_LEDGER = 51_200_000;
@@ -89,6 +89,7 @@ function StreamList() {
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
+  const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
   const [loading, setLoading] = useState(true);
 
   useState(() => {
@@ -118,17 +119,6 @@ function StreamList() {
       setConfirmed("b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3");
     } catch (err) {
       setFailed(err instanceof Error ? err.message : "Unknown error");
-    }
-  }
-
-  async function handleCancel() {
-    setCancelTarget(null);
-    setPending();
-    try {
-      await new Promise((r) => setTimeout(r, 1200));
-      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
-    } catch (err) {
-      setFailed(err instanceof Error ? err.message : "Unknown error — please retry.");
     }
   }
 
@@ -247,21 +237,6 @@ function StreamList() {
   );
 }
 
-function StreamListSkeleton({ count }: { count: number }) {
-  return (
-    <ul className="stream-list" style={{ marginTop: "1rem" }} aria-busy="true" aria-label="Loading streams">
-      {Array.from({ length: count }).map((_, i) => (
-        <li
-          key={i}
-          className="stream-card"
-          style={{ height: 80, background: "var(--color-border)", opacity: 0.4, borderRadius: "var(--radius)" }}
-          aria-hidden="true"
-        />
-      ))}
-    </ul>
-  );
-}
-
 export default function Home() {
   const { t } = useTranslation();
   const { showCreate, setShowCreate } = useSponsorDashboard();
@@ -272,6 +247,9 @@ export default function Home() {
         <header className="header">
           <h1>{t("appTitle")}</h1>
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+            <a href="/streams" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
+              My Streams
+            </a>
             <LanguageSwitcher />
             <WalletButton />
           </div>

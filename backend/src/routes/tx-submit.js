@@ -19,6 +19,9 @@
  */
 
 const { StellarSdk, loadConfig } = require("../lib");
+const { cacheInvalidate } = require("../cache");
+
+const INVALIDATING_OPS = new Set(["claim_vested", "cancel_stream"]);
 
 const ALLOWED_OPS = ["claim_vested", "create_vesting_stream", "cancel_stream"];
 
@@ -145,6 +148,11 @@ async function txSubmitHandler(req, res) {
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ hash: result.hash, status: result.status === "SUCCESS" ? "SUCCESS" : "PENDING" }));
+
+    // Invalidate cached view responses for the affected recipient.
+    if (INVALIDATING_OPS.has(operation) && params.recipient) {
+      cacheInvalidate(params.recipient).catch(() => {});
+    }
   } catch (err) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: String(err.message ?? err) }));

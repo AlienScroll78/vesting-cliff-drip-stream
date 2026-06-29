@@ -6,9 +6,12 @@
  * Returns the vesting schedule for a recipient, including a
  * contract_version field fetched from on-chain (cached 5 min).
  *
+ * View-function responses are cached per `recipient:ledger` with a TTL of
+ * ~5 s (one ledger close) via the Redis cache module (Issue #29).
+ *
  * Response 200:
  *   {
- *     "recipient": "G...", "sponsor": "G...", "token": "C...",
+ *     "recipient": "G...", "token": "C...",
  *     "rate": "100", "cliff_ledger": 1000, "end_ledger": 2000,
  *     "claimable_amount": "500", "is_cliff_passed": true,
  *     "contract_version": "ledger-12345"
@@ -19,6 +22,7 @@
 
 const { StellarSdk, loadConfig } = require("../lib");
 const { getContractVersion } = require("../contract-version");
+const { viewKey, cacheGet, cacheSet } = require("../cache");
 
 async function scheduleHandler(req, res) {
   // Extract recipient from URL: /schedule/:recipient
@@ -42,10 +46,24 @@ async function scheduleHandler(req, res) {
 
   try {
     const server = new StellarSdk.SorobanRpc.Server(config.SOROBAN_RPC_URL);
+
+    // Resolve current ledger first so we can use it as the cache key.
+    const { sequence: currentLedger } = await server.getLatestLedger();
+    const key = viewKey(recipient, currentLedger);
+
+    // ── Cache hit ──────────────────────────────────────────────────────────
+    const cached = await cacheGet(key);
+    if (cached) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(cached);
+      return;
+    }
+
+    // ── Cache miss — fetch from RPC ────────────────────────────────────────
     const contract = new StellarSdk.Contract(config.CONTRACT_ID);
+    const dummyAccount = { accountId: () => recipient, sequenceNumber: () => "0", incrementSequenceNumber: () => {} };
 
     // Simulate get_schedule call
-    const dummyAccount = { accountId: () => recipient, sequenceNumber: () => "0", incrementSequenceNumber: () => {} };
     const tx = new StellarSdk.TransactionBuilder(dummyAccount, {
       fee: StellarSdk.BASE_FEE,
       networkPassphrase: config.NETWORK_PASSPHRASE,
@@ -79,11 +97,9 @@ async function scheduleHandler(req, res) {
     const claimable = claimSim.result?.retval?.value()?.toString() ?? "0";
 
     const cliffLedger = Number(field("cliff_ledger")?.value() ?? 0);
-    const { sequence: currentLedger } = await server.getLatestLedger();
     const contract_version = await getContractVersion(config);
 
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({
+    const payload = JSON.stringify({
       recipient,
       sponsor: field("sponsor")?.value()?.toString() ?? "",
       token: field("token")?.value()?.toString() ?? "",
@@ -93,7 +109,13 @@ async function scheduleHandler(req, res) {
       claimable_amount: claimable,
       is_cliff_passed: currentLedger >= cliffLedger,
       contract_version,
-    }));
+    });
+
+    // Store in cache; fire-and-forget (do not block the response).
+    cacheSet(key, payload).catch(() => {});
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(payload);
   } catch (err) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: String(err.message ?? err) }));

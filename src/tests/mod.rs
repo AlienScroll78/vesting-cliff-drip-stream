@@ -9,6 +9,7 @@ mod test_views;
 mod test_edge_cases;
 mod test_mutations;
 mod test_snapshots; // issue #102
+mod test_fuzz;     // issue #23
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},

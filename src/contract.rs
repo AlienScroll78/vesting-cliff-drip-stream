@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
 
 use crate::{
     error::VestingError,
@@ -6,6 +6,25 @@ use crate::{
     storage,
     types::{StreamStatus, VestingSchedule},
 };
+
+/// ~1 year at ~5 s/ledger: 6 * 60 * 24 * 365 = 3_153_600 ledgers.
+const DRAIN_DELAY_LEDGERS: u32 = 3_153_600;
+
+/// Consolidated statistics for a vesting stream.
+///
+/// Returned by [`VestingDrips::get_stats`].
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamStats {
+    /// Total tokens deposited when the stream was created (`rate × total_duration`).
+    pub total_deposited: i128,
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    pub total_claimed: i128,
+    /// Tokens still held by the contract vault for this stream.
+    pub remaining: i128,
+    /// Tokens claimable right now (zero if cliff not yet reached).
+    pub claimable_now: i128,
+}
 
 #[contract]
 pub struct VestingDrips;
@@ -265,8 +284,100 @@ impl VestingDrips {
         };
         Some(status)
     }
-}
 
+    // ── Emergency Drain (Issue #22) ───────────────────────────────────────────
+
+    /// Recovers unclaimed tokens from an expired stream after a long safety delay.
+    ///
+    /// If a recipient's keys are permanently lost, tokens would otherwise be locked
+    /// forever once `end_ledger` is reached. This function lets the original sponsor
+    /// reclaim those tokens, but only after `end_ledger + DRAIN_DELAY_LEDGERS`
+    /// (~1 year) has elapsed to prevent abuse.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`    – No stream exists for `recipient`.
+    /// * `StreamNotExpired`    – `end_ledger` has not yet been reached.
+    /// * `DrainDelayNotExpired`– The 1-year delay after `end_ledger` has not passed.
+    pub fn emergency_drain(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        let current = env.ledger().sequence();
+
+        if current < schedule.end_ledger {
+            return Err(VestingError::StreamNotExpired);
+        }
+
+        let drain_available_at = schedule
+            .end_ledger
+            .saturating_add(DRAIN_DELAY_LEDGERS);
+        if current < drain_available_at {
+            return Err(VestingError::DrainDelayNotExpired);
+        }
+
+        // Any unclaimed remainder: full remaining balance from last_claimed_ledger.
+        let amount = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+            * schedule.rate_per_ledger;
+
+        storage::remove_schedule(&env, &recipient);
+
+        if amount > 0 {
+            let token_client = token::Client::new(&env, &schedule.token);
+            token_client.transfer(&env.current_contract_address(), &sponsor, &amount);
+        }
+
+        events::emit_emergency_drain(&env, &recipient, &sponsor, amount);
+
+        Ok(())
+    }
+
+    // ── Stream Stats (Issue #24) ──────────────────────────────────────────────
+
+    /// Returns consolidated statistics for `recipient`'s vesting stream.
+    ///
+    /// All four fields are mathematically consistent: `total_deposited ==
+    /// total_claimed + remaining`, and `claimable_now <= remaining`.
+    ///
+    /// Returns `None` when no schedule exists.
+    pub fn get_stats(env: Env, recipient: Address) -> Option<StreamStats> {
+        let schedule = storage::get_schedule(&env, &recipient)?;
+
+        let total_duration =
+            (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_deposited = schedule.rate_per_ledger * total_duration;
+
+        let claimed_ledgers =
+            (schedule.last_claimed_ledger - schedule.start_ledger) as i128;
+        let total_claimed = schedule.rate_per_ledger * claimed_ledgers;
+
+        let remaining = total_deposited - total_claimed;
+
+        let claimable_now = {
+            let current = env.ledger().sequence();
+            if current < schedule.cliff_ledger {
+                0
+            } else {
+                let active_end = current.min(schedule.end_ledger);
+                let ledgers = active_end - schedule.last_claimed_ledger;
+                ledgers as i128 * schedule.rate_per_ledger
+            }
+        };
+
+        Some(StreamStats {
+            total_deposited,
+            total_claimed,
+            remaining,
+            claimable_now,
+        })
+    }
+}
+}
 /// Computes the full deposit for a stream.
 ///
 /// The exact safe boundary is `rate <= i128::MAX / total_duration`; the

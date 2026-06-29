@@ -64,3 +64,14 @@ pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i1
         refunded_amount,
     );
 }
+
+/// Emitted when a sponsor recovers stuck tokens via the emergency drain.
+///
+/// Topics: `["vc_drain", recipient]`
+/// Data:   `(sponsor, amount)`
+pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("vc_drain"), recipient.clone()),
+        (sponsor.clone(), amount),
+    );
+}
