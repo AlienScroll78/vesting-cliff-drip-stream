@@ -1,0 +1,31 @@
+{
+  "name": "vesting-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "tsx src/server.js",
+    "start:admin": "tsx src/admin/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sendgrid/mail": "^8.1.0",
+    "@stellar/stellar-sdk": "^16.0.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.0",
+    "node-cron": "^4.5.0",
+    "pg": "^8.11.0",
+    "pg-query-stream": "^4.0.0",
+    "prom-client": "^15.1.3",
+    "redis": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.31",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.11.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.9"
+  }
+}
