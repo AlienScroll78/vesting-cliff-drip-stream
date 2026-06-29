@@ -3,6 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
 import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
+import { VestingStream } from "@/types";
+
+/** Convert a ledger count to a human-readable duration string (~5 s/ledger). */
+function ledgersToHuman(ledgers: number): string {
+  const seconds = ledgers * 5;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} hours`;
+  return `${Math.round(seconds / 86400)} days`;
+}
 
 interface Props {
   stream: VestingStream;
