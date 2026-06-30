@@ -56,9 +56,16 @@ pub enum VestingError {
     /// drain delay begins. Call this only after `end_ledger` has passed.
     StreamNotExpired = 8,
 
-    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    /// **Code 9** — A token transfer call failed.
+    ///
+    /// The underlying SAC `transfer` invocation was rejected by the token
+    /// contract (e.g. frozen account, insufficient balance, or other token-
+    /// level restriction). No state has been mutated when this error is returned.
+    TransferFailed = 9,
+
+    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
     ///
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
-    DrainDelayNotExpired = 9,
+    DrainDelayNotExpired = 10,
 }
