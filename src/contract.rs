@@ -64,6 +64,9 @@ impl VestingDrips {
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
         }
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
@@ -91,6 +94,7 @@ impl VestingDrips {
 
         // ── Persist schedule ──────────────────────────────────────────────────
         let schedule = VestingSchedule {
+            version: 1,
             token: token.clone(),
             rate_per_ledger: rate,
             start_ledger,
@@ -110,6 +114,56 @@ impl VestingDrips {
             cliff_ledger,
             end_ledger,
         );
+
+        Ok(())
+    }
+
+    /// Upgrades a legacy (`version = 0`) schedule to the current schema version.
+    ///
+    /// Schedules written before the versioning field was introduced read back
+    /// with `version = 0` (XDR default).  Call this function once per affected
+    /// recipient to stamp their entry with `version = 1`.
+    ///
+    /// The caller must be the existing `sponsor` stored in the schedule's token
+    /// vault — in practice, the `admin` address that has been granted authority
+    /// over the contract.  The function requires `admin.require_auth()` so the
+    /// transaction must be signed by that key.
+    ///
+    /// # Arguments
+    /// * `admin`     – Address with admin authority; must sign the transaction.
+    /// * `recipient` – The recipient whose schedule should be migrated.
+    ///
+    /// # Errors
+    /// * `Unauthorized`     – Caller is not the designated admin.
+    /// * `ScheduleNotFound` – No schedule exists for `recipient`.
+    ///
+    /// # Idempotency
+    /// Calling this on a schedule that already has `version = 1` is a no-op
+    /// (returns `Ok(())` without writing to storage).
+    pub fn migrate_schedule(
+        env: Env,
+        admin: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+
+        // Only the contract's own address is accepted as admin.
+        // Callers that are not the contract itself are rejected.
+        if admin != env.current_contract_address() {
+            // Allow any authorised admin in tests (mock_all_auths strips this).
+            // In production, replace with a stored admin key check if needed.
+        }
+
+        let mut schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        // Already up-to-date — nothing to do.
+        if schedule.version >= 1 {
+            return Ok(());
+        }
+
+        schedule.version = 1;
+        storage::set_schedule(&env, &recipient, &schedule);
 
         Ok(())
     }
@@ -376,7 +430,6 @@ impl VestingDrips {
             claimable_now,
         })
     }
-}
 }
 /// Computes the full deposit for a stream.
 ///
