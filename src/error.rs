@@ -61,4 +61,11 @@ pub enum VestingError {
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
     DrainDelayNotExpired = 9,
+
+    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    ///
+    /// A sponsor creating a stream to themselves is almost certainly a mistake
+    /// and would produce confusing behaviour in `cancel_stream` (the same
+    /// address would be both the refund target and the earned-tokens target).
+    InvalidRecipient = 10,
 }

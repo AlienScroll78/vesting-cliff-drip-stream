@@ -64,6 +64,9 @@ impl VestingDrips {
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
         }
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
@@ -376,7 +379,6 @@ impl VestingDrips {
             claimable_now,
         })
     }
-}
 }
 /// Computes the full deposit for a stream.
 ///

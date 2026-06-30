@@ -10,6 +10,7 @@ mod test_edge_cases;
 mod test_mutations;
 mod test_snapshots; // issue #102
 mod test_fuzz;     // issue #23
+mod test_versioning; // sponsor==recipient guard
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
