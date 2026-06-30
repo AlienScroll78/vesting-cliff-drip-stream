@@ -3,9 +3,25 @@ use soroban_sdk::{contracttype, Address};
 /// Represents a single vesting schedule stored per recipient.
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
+///
+/// ## Schema versioning
+///
+/// The `version` field guards against future deserialization mismatches.
+/// All schedules created by the current contract code carry `version = 1`.
+/// Schedules written before this field was introduced have an implicit
+/// `version = 0` (XDR default for a missing `u32`).  Use
+/// `migrate_schedule` to upgrade old entries in-place.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VestingSchedule {
+    /// Schema version for forward-compatibility.
+    ///
+    /// | Value | Meaning                          |
+    /// |-------|----------------------------------|
+    /// | `0`   | Legacy – written before versioning was added |
+    /// | `1`   | Current – all fields present     |
+    pub version: u32,
+
     /// The token being streamed.
     pub token: Address,
 
