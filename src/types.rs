@@ -24,6 +24,11 @@ pub struct VestingSchedule {
     /// Tracks the last ledger up to which tokens have been claimed.
     /// Initialised to `start_ledger` so accrual is calculated correctly on first claim.
     pub last_claimed_ledger: u32,
+
+    /// Running total of tokens transferred to the recipient via `claim_vested`.
+    /// Initialised to `0` on stream creation and incremented on every successful claim.
+    /// Useful for audits and UI displays without requiring off-chain event indexing.
+    pub total_claimed: i128,
 }
 
 /// Storage key variants used for keying contract data.

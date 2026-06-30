@@ -95,6 +95,7 @@ impl VestingDrips {
             cliff_ledger,
             end_ledger,
             last_claimed_ledger: start_ledger,
+            total_claimed: 0,
         };
         storage::set_schedule(&env, &recipient, &schedule);
 
@@ -215,6 +216,7 @@ impl VestingDrips {
 
         // Update or remove the schedule only after the transfer succeeds.
         schedule.last_claimed_ledger = active_end;
+        schedule.total_claimed += claimable_amount;
         let stream_finished = active_end == schedule.end_ledger;
 
         if stream_finished {
@@ -352,9 +354,8 @@ impl VestingDrips {
             (schedule.end_ledger - schedule.start_ledger) as i128;
         let total_deposited = schedule.rate_per_ledger * total_duration;
 
-        let claimed_ledgers =
-            (schedule.last_claimed_ledger - schedule.start_ledger) as i128;
-        let total_claimed = schedule.rate_per_ledger * claimed_ledgers;
+        // Read the authoritative on-chain counter directly.
+        let total_claimed = schedule.total_claimed;
 
         let remaining = total_deposited - total_claimed;
 
