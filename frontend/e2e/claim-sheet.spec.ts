@@ -51,10 +51,11 @@ test.describe("Claim bottom sheet", () => {
 
     await page.touchscreen.tap(cx, cy);
     // Simulate swipe down by dispatching touch events
-    await page.evaluate(([x, y]) => {
+    await page.evaluate(([x, y]: number[]) => {
       const el = document.querySelector("[data-testid='claim-bottom-sheet']")!;
-      el.dispatchEvent(new TouchEvent("touchstart", { touches: [new Touch({ identifier: 1, target: el, clientX: x, clientY: y })] }));
-      el.dispatchEvent(new TouchEvent("touchend", { changedTouches: [new Touch({ identifier: 1, target: el, clientX: x, clientY: y + 80 })] }));
+      // x and y are guaranteed non-undefined: passed as [cx, cy] above
+      el.dispatchEvent(new TouchEvent("touchstart", { touches: [new Touch({ identifier: 1, target: el, clientX: x!, clientY: y! })] }));
+      el.dispatchEvent(new TouchEvent("touchend", { changedTouches: [new Touch({ identifier: 1, target: el, clientX: x!, clientY: y! + 80 })] }));
     }, [cx, cy]);
 
     await expect(sheet).not.toBeVisible();

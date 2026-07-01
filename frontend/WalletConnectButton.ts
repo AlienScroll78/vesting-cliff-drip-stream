@@ -178,8 +178,9 @@ function buildDropdown(
     // Arrow-key navigation
     btn.addEventListener("keydown", (e) => {
       const btns = [...menu.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
-      if (e.key === "ArrowDown") { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
-      if (e.key === "ArrowUp")   { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length].focus(); }
+      // Non-null: modulo arithmetic guarantees indices are within bounds
+      if (e.key === "ArrowDown") { e.preventDefault(); btns[(i + 1) % btns.length]!.focus(); }
+      if (e.key === "ArrowUp")   { e.preventDefault(); btns[(i - 1 + btns.length) % btns.length]!.focus(); }
       if (e.key === "Escape")    { close(); }
     });
 

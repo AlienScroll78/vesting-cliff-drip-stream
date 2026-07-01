@@ -1,79 +1,43 @@
-name: Release Helm Chart
-
-# Publishes the vesting-backend Helm chart to GitHub Pages using the
-# helm/chart-releaser-action (cr).
-#
-# Trigger: any push to main that changes files under helm/.
-# The workflow:
-#   1. Packages changed charts
-#   2. Creates a GitHub Release with the chart archive as an asset
-#   3. Updates the Helm repo index on the gh-pages branch
-#
-# First-time setup:
-#   1. Enable GitHub Pages for the repo:
-#      Settings → Pages → Source: "Deploy from a branch" → Branch: gh-pages / root
-#   2. Ensure the default GITHUB_TOKEN has "Read and write" permissions:
-#      Settings → Actions → General → Workflow permissions
-#   3. Create the gh-pages branch (can be empty):
-#      git checkout --orphan gh-pages && git commit --allow-empty -m "init" && git push
-#
-# The chart will then be reachable at:
-#   https://<owner>.github.io/<repo>/
+name: Publish Helm Chart
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "helm/**"
-      - ".github/workflows/helm-release.yml"
 
-  # Allow manual runs for re-publishing
   workflow_dispatch:
 
 permissions:
-  contents: write   # create releases + push to gh-pages
+  contents: write
   pages: write
   id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      # ── 1. Checkout full history so chart-releaser can diff versions ──────
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ── 2. Configure Git identity used for the gh-pages commit ───────────
       - name: Configure Git
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # ── 3. Install Helm (required by chart-releaser-action internally) ────
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: "3.15.2"
+          version: "3.14.4"
 
-      # ── 4. Lint before publishing ─────────────────────────────────────────
       - name: Lint chart
-        run: |
-          helm lint helm/vesting-backend \
-            --set externalSecret.enabled=false
+        run: helm lint helm/vesting-backend
 
-      # ── 5. Package & release changed charts to GitHub Releases ───────────
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         with:
           charts_dir: helm
-          # Skip if the chart version has not been bumped (avoids duplicate releases)
-          skip_existing: true
-          # Mark GitHub Release as a pre-release when the chart version contains a
-          # pre-release identifier (e.g. 0.1.0-beta.1)
-          mark_as_latest: true
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
