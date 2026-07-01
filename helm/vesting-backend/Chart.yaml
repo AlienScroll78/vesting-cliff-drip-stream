@@ -1,0 +1,24 @@
+apiVersion: v2
+name: vesting-backend
+description: >
+  Helm chart for the Vesting Cliff Drip Stream backend service.
+  Deploys the nginx-based container that serves the compiled Soroban WASM
+  artefact, with optional HPA, Ingress, ConfigMap, and ExternalSecret support.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://github.com/your-org/vesting-cliff-drip-stream
+sources:
+  - https://github.com/your-org/vesting-cliff-drip-stream
+maintainers:
+  - name: your-org
+    url: https://github.com/your-org
+keywords:
+  - vesting
+  - soroban
+  - stellar
+  - blockchain
+annotations:
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial chart release

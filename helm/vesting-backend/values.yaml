@@ -1,0 +1,201 @@
+# Default values for vesting-backend.
+# Override these in your environment-specific values file or via --set flags.
+
+# -- Number of desired pod replicas (ignored when HPA is enabled)
+replicaCount: 2
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/your-org/vesting-cliff-drip-stream
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to the chart's appVersion when empty)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+# - name: regcred
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the fully-qualified app name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount
+  create: true
+  # -- Annotations to add to the ServiceAccount (e.g. IRSA role ARN)
+  annotations: {}
+  # -- Name of the ServiceAccount; auto-generated when empty
+  name: ""
+
+# -- Extra annotations to add to the Deployment pod template
+podAnnotations: {}
+
+# -- Extra labels to add to all resources
+podLabels: {}
+
+# -- Security context for the pod
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101   # nginx user
+  runAsGroup: 101
+  fsGroup: 101
+
+# -- Security context for the main container
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # nginx writes tmp files
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Kubernetes Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container port the application listens on
+  targetPort: 80
+  # -- Annotations for the Service (e.g. AWS NLB annotations)
+  annotations: {}
+
+ingress:
+  # -- Enable Ingress resource creation
+  enabled: false
+  # -- Ingress class name (e.g. "nginx", "traefik", "alb")
+  className: ""
+  # -- Annotations for the Ingress
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # cert-manager.io/cluster-issuer: letsencrypt-prod
+  # -- Ingress hosts configuration
+  hosts:
+    - host: vesting.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration for the Ingress
+  tls: []
+  # - secretName: vesting-tls
+  #   hosts:
+  #     - vesting.example.com
+
+resources:
+  # -- Resource limits for the container
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  # -- Resource requests for the container
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+autoscaling:
+  # -- Enable Horizontal Pod Autoscaler
+  enabled: false
+  # -- Minimum number of replicas
+  minReplicas: 2
+  # -- Maximum number of replicas
+  maxReplicas: 10
+  # -- Target CPU utilisation percentage
+  targetCPUUtilizationPercentage: 70
+  # -- Target memory utilisation percentage (requires metrics-server with memory support)
+  targetMemoryUtilizationPercentage: ""
+
+# -- Node selector constraints
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+tolerations: []
+
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+# -- Topology spread constraints
+topologySpreadConstraints: []
+# - maxSkew: 1
+#   topologyKey: topology.kubernetes.io/zone
+#   whenUnsatisfiable: DoNotSchedule
+#   labelSelector:
+#     matchLabels:
+#       app.kubernetes.io/name: vesting-backend
+
+# -- Additional environment variables injected directly into the container
+extraEnv: []
+# - name: STELLAR_NETWORK
+#   value: mainnet
+
+# -- Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+# -- Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# -- Startup probe configuration
+startupProbe:
+  httpGet:
+    path: /
+    port: http
+  failureThreshold: 12
+  periodSeconds: 5
+
+# -- Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# ─────────────────────────────────────────────────────────────
+# ConfigMap – non-sensitive application configuration
+# ─────────────────────────────────────────────────────────────
+configMap:
+  # -- Whether to create a ConfigMap
+  create: true
+  # -- Key-value pairs to populate the ConfigMap
+  data:
+    STELLAR_NETWORK: "mainnet"
+    HORIZON_URL: "https://horizon.stellar.org"
+    LOG_LEVEL: "info"
+
+# ─────────────────────────────────────────────────────────────
+# ExternalSecret – pulls secrets from AWS Secrets Manager via
+# the External Secrets Operator (https://external-secrets.io).
+# Requires ESO to be installed in the cluster.
+# ─────────────────────────────────────────────────────────────
+externalSecret:
+  # -- Whether to create an ExternalSecret resource
+  enabled: true
+  # -- How often ESO should reconcile (e.g. "1h")
+  refreshInterval: "1h"
+  # -- Name of the SecretStore or ClusterSecretStore to use
+  secretStoreName: "aws-secretsmanager"
+  # -- Kind of secret store: SecretStore | ClusterSecretStore
+  secretStoreKind: "ClusterSecretStore"
+  # -- Target Kubernetes Secret name (defaults to <release>-secrets)
+  targetSecretName: ""
+  # -- CreationPolicy for the target secret
+  creationPolicy: Owner
+  # -- Secrets to pull from the external provider
+  # Each entry maps a Kubernetes Secret key to a provider secret key.
+  data:
+    - secretKey: DB_PASSWORD
+      remoteRef:
+        key: vesting/db-password
+    - secretKey: RPC_KEY
+      remoteRef:
+        key: vesting/rpc-key
+    - secretKey: JWT_SECRET
+      remoteRef:
+        key: vesting/jwt-secret
