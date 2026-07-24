@@ -7,3 +7,9 @@ metadata:
 data:
   HORIZON_URL: {{ .Values.config.horizonUrl | quote }}
   NETWORK_PASSPHRASE: {{ .Values.config.networkPassphrase | quote }}
+  CONTRACT_ID: {{ .Values.config.contractId | quote }}
+  SOROBAN_RPC_URL: {{ .Values.config.sorobanRpcUrl | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  REQUEST_TIMEOUT_MS: {{ .Values.config.requestTimeoutMs | quote }}
+  GRAPHQL_MAX_DEPTH: {{ .Values.config.graphqlMaxDepth | quote }}
+  SERVICE_NAME: {{ include "vesting-backend.fullname" . | quote }}
