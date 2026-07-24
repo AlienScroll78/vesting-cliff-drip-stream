@@ -16,12 +16,32 @@ spec:
       labels:
         {{- include "vesting-backend.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "vesting-backend.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
-            - containerPort: 80
+            - name: http
+              containerPort: {{ .Values.appPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.appPort | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_VERSION
+              value: {{ .Chart.AppVersion | quote }}
           envFrom:
             - configMapRef:
                 name: {{ include "vesting-backend.fullname" . }}
@@ -33,13 +53,23 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
             httpGet:
-              path: /
-              port: 80
+              path: /health
+              port: http
             initialDelaySeconds: 10
             periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /
-              port: 80
+              path: /ready
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

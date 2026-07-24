@@ -1,3 +1,8 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# vesting-backend default values
+# Override with --set or a custom values file (-f my-values.yaml)
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Container image
 image:
   repository: ghcr.io/your-org/vesting-backend
@@ -6,6 +11,9 @@ image:
 
 # Number of replicas (overridden by HPA when enabled)
 replicaCount: 1
+
+# Port the Node.js backend listens on (process.env.PORT)
+appPort: 3001
 
 # Resource limits/requests
 resources:
@@ -19,6 +27,7 @@ resources:
 # Service configuration
 service:
   type: ClusterIP
+  # External port exposed by the Service
   port: 80
 
 # Ingress
@@ -26,6 +35,7 @@ ingress:
   enabled: true
   className: nginx
   host: vesting.example.com
+  annotations: {}
   tls:
     enabled: false
     secretName: vesting-tls
@@ -37,21 +47,58 @@ hpa:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
 
-# Application config (ConfigMap)
-config:
-  horizonUrl: "https://horizon-testnet.stellar.org"
-  networkPassphrase: "Test SDF Network ; September 2015"
+# ServiceAccount — set create: true to have the chart manage it,
+# or set name to an existing SA (e.g. one with an IRSA annotation).
+serviceAccount:
+  create: true
+  # Annotations to apply (e.g. IRSA role ARN)
+  annotations: {}
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/vesting-backend
+  # Override the generated name
+  name: ""
 
-# External secret (ExternalSecret CRD → AWS Secrets Manager)
+# ── Application configuration (rendered into ConfigMap) ──────────────────────
+config:
+  # Stellar Horizon REST API endpoint
+  horizonUrl: "https://horizon-testnet.stellar.org"
+  # Stellar network passphrase
+  networkPassphrase: "Test SDF Network ; September 2015"
+  # Soroban contract ID of the deployed vesting contract
+  contractId: ""
+  # Soroban RPC endpoint used for transaction submission and RPC health check
+  sorobanRpcUrl: "https://soroban-testnet.stellar.org"
+  # Log verbosity: debug | info | warn | error
+  logLevel: "info"
+  # Request timeout to Soroban RPC in milliseconds
+  requestTimeoutMs: "30000"
+  # GraphQL query depth limit
+  graphqlMaxDepth: "5"
+
+# ── External Secrets Operator (ExternalSecret CRD → AWS Secrets Manager) ─────
+#
+# All keys map to a single remote secret object.  Each entry becomes one env
+# var injected into the Pod via the generated K8s Secret.
+#
+# externalSecret.remoteSecrets.<ENV_VAR_KEY>:
+#   remoteKey:  path in the secret store (e.g. "vesting/prod/app")
+#   property:   JSON key inside the secret object (omit for plaintext secrets)
 externalSecret:
   enabled: true
-  # Name of the ClusterSecretStore / SecretStore to use
-  secretStoreName: aws-secretsmanager
-  # Path in AWS Secrets Manager
-  remoteSecretKey: vesting/production/app-secrets
-  # Keys to extract from the remote secret
-  keys:
-    - localKey: DATABASE_URL
-      remoteProperty: database_url
-    - localKey: CONTRACT_ID
-      remoteProperty: contract_id
+  # Interval at which ESO re-fetches from the store
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: aws-secretsmanager
+    kind: ClusterSecretStore
+  remoteSecrets:
+    DATABASE_URL:
+      remoteKey: vesting/production/app-secrets
+      property: database_url
+    REDIS_URL:
+      remoteKey: vesting/production/app-secrets
+      property: redis_url
+    ADMIN_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: admin_api_key
+    SPONSOR_SECRET_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: sponsor_secret_key

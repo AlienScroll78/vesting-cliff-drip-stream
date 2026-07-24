@@ -1,34 +1,96 @@
 # vesting-backend Helm Chart
 
-Deploys the Soroban vesting cliff-drip stream backend (WASM served via nginx) on Kubernetes.
+Deploys the **Soroban vesting cliff-drip stream backend** — a Node.js/Express
+API server that indexes on-chain vesting events and exposes REST + WebSocket
+endpoints for the frontend.
+
+---
 
 ## Prerequisites
 
-- Kubernetes 1.25+
-- [External Secrets Operator](https://external-secrets.io/) with a `ClusterSecretStore` named `aws-secretsmanager`
-- nginx ingress controller (for ingress)
-- KEDA or metrics-server (for HPA)
+| Requirement | Version | Notes |
+|---|---|---|
+| Kubernetes | ≥ 1.25 | Tested on kind 0.22, EKS 1.29 |
+| Helm | ≥ 3.12 | `helm version` |
+| [External Secrets Operator](https://external-secrets.io/) | ≥ 0.9 | Required when `externalSecret.enabled=true` |
+| nginx ingress controller | any | Required when `ingress.enabled=true` |
+| metrics-server | ≥ 0.6 | Required when `hpa.enabled=true` |
 
-## Install
+---
+
+## Install on a kind cluster (local dev)
+
+```bash
+# 1. Create a cluster with ingress support
+cat <<EOF | kind create cluster --name vesting --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+EOF
+
+# 2. Install the nginx ingress controller
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/kind/deploy.yaml
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=90s
+
+# 3. Install External Secrets Operator (skip or use externalSecret.enabled=false for local dev)
+helm repo add external-secrets https://charts.external-secrets.io
+helm install external-secrets external-secrets/external-secrets \
+  --namespace external-secrets --create-namespace
+
+# 4. Install the chart (disable ESO for local dev)
+helm install vesting-backend ./helm/vesting-backend \
+  --set externalSecret.enabled=false \
+  --set ingress.host=localhost
+
+# 5. Open the backend
+curl http://localhost:8080/health
+```
+
+---
+
+## Install (production)
 
 ```bash
 helm install vesting-backend ./helm/vesting-backend \
+  --namespace vesting --create-namespace \
   --set image.repository=ghcr.io/your-org/vesting-backend \
-  --set image.tag=1.0.0 \
-  --set ingress.host=vesting.example.com
+  --set image.tag=1.2.0 \
+  --set ingress.host=api.vesting.example.com \
+  --set ingress.tls.enabled=true \
+  --set externalSecret.secretStoreRef.name=aws-secretsmanager \
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/vesting-backend
 ```
 
 ## Upgrade
 
 ```bash
-helm upgrade vesting-backend ./helm/vesting-backend --reuse-values --set image.tag=1.1.0
+helm upgrade vesting-backend ./helm/vesting-backend --reuse-values --set image.tag=1.3.0
 ```
 
 ## Uninstall
 
 ```bash
-helm uninstall vesting-backend
+helm uninstall vesting-backend --namespace vesting
 ```
+
+---
 
 ## Values
 
@@ -38,46 +100,88 @@ helm uninstall vesting-backend
 | `image.tag` | `1.0.0` | Image tag |
 | `image.pullPolicy` | `IfNotPresent` | Pull policy |
 | `replicaCount` | `1` | Replicas (ignored when HPA enabled) |
+| `appPort` | `3001` | Port the Node.js process listens on (`PORT` env var) |
 | `resources.requests.cpu` | `100m` | CPU request |
 | `resources.requests.memory` | `128Mi` | Memory request |
 | `resources.limits.cpu` | `500m` | CPU limit |
 | `resources.limits.memory` | `256Mi` | Memory limit |
-| `service.type` | `ClusterIP` | Service type |
-| `service.port` | `80` | Service port |
-| `ingress.enabled` | `true` | Create Ingress |
+| `service.type` | `ClusterIP` | Kubernetes Service type |
+| `service.port` | `80` | Service port (external) |
+| `ingress.enabled` | `true` | Create Ingress resource |
 | `ingress.className` | `nginx` | Ingress class |
 | `ingress.host` | `vesting.example.com` | Hostname |
-| `ingress.tls.enabled` | `false` | Enable TLS |
+| `ingress.annotations` | `{}` | Extra Ingress annotations |
+| `ingress.tls.enabled` | `false` | Enable TLS on the Ingress |
 | `ingress.tls.secretName` | `vesting-tls` | TLS secret name |
-| `hpa.enabled` | `true` | Create HPA |
+| `hpa.enabled` | `true` | Create HorizontalPodAutoscaler |
 | `hpa.minReplicas` | `1` | Minimum replicas |
 | `hpa.maxReplicas` | `5` | Maximum replicas |
-| `hpa.targetCPUUtilizationPercentage` | `70` | CPU target % |
-| `config.horizonUrl` | `https://horizon-testnet.stellar.org` | Stellar Horizon URL |
-| `config.networkPassphrase` | `Test SDF Network ; September 2015` | Network passphrase |
-| `externalSecret.enabled` | `true` | Create ExternalSecret |
-| `externalSecret.secretStoreName` | `aws-secretsmanager` | ClusterSecretStore name |
-| `externalSecret.remoteSecretKey` | `vesting/production/app-secrets` | AWS Secrets Manager path |
-| `externalSecret.keys` | see values.yaml | Key mappings (localKey / remoteProperty) |
+| `hpa.targetCPUUtilizationPercentage` | `70` | CPU utilization target % |
+| `serviceAccount.create` | `true` | Create a ServiceAccount |
+| `serviceAccount.annotations` | `{}` | Annotations (e.g. IRSA role ARN) |
+| `serviceAccount.name` | `""` | Override SA name (auto-generated when empty) |
+| `config.horizonUrl` | `https://horizon-testnet.stellar.org` | Stellar Horizon REST API URL |
+| `config.networkPassphrase` | `Test SDF Network ; September 2015` | Stellar network passphrase |
+| `config.contractId` | `""` | Deployed vesting contract ID |
+| `config.sorobanRpcUrl` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint |
+| `config.logLevel` | `info` | Log verbosity: `debug\|info\|warn\|error` |
+| `config.requestTimeoutMs` | `30000` | Soroban RPC timeout (ms) |
+| `config.graphqlMaxDepth` | `5` | GraphQL query depth limit |
+| `externalSecret.enabled` | `true` | Create ExternalSecret resource |
+| `externalSecret.refreshInterval` | `1h` | ESO re-fetch interval |
+| `externalSecret.secretStoreRef.name` | `aws-secretsmanager` | ClusterSecretStore / SecretStore name |
+| `externalSecret.secretStoreRef.kind` | `ClusterSecretStore` | `ClusterSecretStore` or `SecretStore` |
+| `externalSecret.remoteSecrets` | see values.yaml | Map of `ENV_VAR → {remoteKey, property}` |
 
-## Publishing to GitHub Pages (Helm Repo)
+### Default secret keys pulled from AWS Secrets Manager
+
+| Env var injected into Pod | `remoteKey` | `property` |
+|---|---|---|
+| `DATABASE_URL` | `vesting/production/app-secrets` | `database_url` |
+| `REDIS_URL` | `vesting/production/app-secrets` | `redis_url` |
+| `ADMIN_API_KEY` | `vesting/production/app-secrets` | `admin_api_key` |
+| `SPONSOR_SECRET_KEY` | `vesting/production/app-secrets` | `sponsor_secret_key` |
+
+---
+
+## Health probes
+
+The chart wires the Node.js health endpoints defined in `backend/src/routes/health.ts`:
+
+| Probe | Path | Notes |
+|---|---|---|
+| Liveness | `GET /health` | Always 200 if process is alive |
+| Readiness | `GET /ready` | 503 if DB or RPC is unreachable |
+
+---
+
+## Publishing to GitHub Pages (Helm repo)
+
+The `.github/workflows/helm-release.yml` workflow runs automatically on every
+push to `main` that touches `helm/**`.  It uses
+[chart-releaser-action](https://github.com/helm/chart-releaser-action) which:
+
+1. Packages the chart and uploads a GitHub Release asset.
+2. Pushes an updated `index.yaml` to the `gh-pages` branch.
+
+**One-time setup:**
 
 ```bash
-# 1. Package the chart
-helm package helm/vesting-backend -d docs/helm-repo/
-
-# 2. Update or create the index
-helm repo index docs/helm-repo/ --url https://<your-org>.github.io/<repo>/helm-repo/
-
-# 3. Commit and push — GitHub Pages serves docs/
-git add docs/helm-repo/
-git commit -m "chore: publish helm chart"
-git push
-
-# 4. Add the repo locally
-helm repo add vesting https://<your-org>.github.io/<repo>/helm-repo/
-helm repo update
-helm search repo vesting
+# Create the gh-pages branch (empty orphan)
+git checkout --orphan gh-pages
+git reset --hard
+git commit --allow-empty -m "chore: init gh-pages"
+git push origin gh-pages
+git checkout main
 ```
 
-Enable GitHub Pages in repository Settings → Pages → Source: `main` branch, `/docs` folder.
+Enable GitHub Pages in **Settings → Pages → Source: `gh-pages` branch, `/` (root)**.
+
+**Add the repo locally:**
+
+```bash
+helm repo add vesting https://<your-org>.github.io/<repo-name>
+helm repo update
+helm search repo vesting
+helm install vesting-backend vesting/vesting-backend
+```
