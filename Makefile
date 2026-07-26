@@ -6,7 +6,9 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc
+.PHONY: all build test spec-test optimize clean fmt lint check doc \
+        test-integration test-e2e test-e2e-ui \
+        bench bench-http bench-compare bench-update-baseline
 
 all: build
 
@@ -68,3 +70,48 @@ test-e2e: build
 	node tests/e2e/run_e2e.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run integration tests for the indexer event pipeline (issue #46)
+## Requires a running local Stellar quickstart node and a built WASM.
+test-integration: build
+	docker compose -f docker-compose.e2e.yml up -d
+	node tests/integration/indexer_pipeline.test.js; status=$$?; \
+	docker compose -f docker-compose.e2e.yml down; \
+	exit $$status
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Performance benchmarks
+# ──────────────────────────────────────────────────────────────────────────────
+
+## Measure WASM instruction counts per contract entry point.
+## Writes benchmarks/results.json.
+bench:
+	cargo test --features testutils --test bench bench_all_write_json -- --nocapture
+	@echo "Results written to benchmarks/results.json"
+
+## Run HTTP response-time benchmarks against a local frontend server.
+## Starts the Vite dev server on port 3000, runs autocannon, then stops it.
+## Writes benchmarks/http_results.json.
+bench-http:
+	@echo "Starting frontend dev server on port 3000..."
+	cd frontend && npm install --prefer-offline --silent && \
+	  npx vite --port 3000 & \
+	  sleep 5 && \
+	  node ../benchmarks/http_bench.js --url http://localhost:3000 && \
+	  kill %1 || true
+	@echo "Results written to benchmarks/http_results.json"
+
+## Compare latest benchmark results against baseline.json.
+## Exits with code 1 if any metric regresses more than 10%.
+bench-compare:
+	node benchmarks/compare.js
+
+## Update baselines from the latest benchmark results.
+## Only use this after verifying a regression is intentional.
+bench-update-baseline:
+	@echo "Current results:"
+	@cat benchmarks/results.json 2>/dev/null || echo "(no WASM results — run 'make bench' first)"
+	@cat benchmarks/http_results.json 2>/dev/null || echo "(no HTTP results — run 'make bench-http' first)"
+	@echo ""
+	@echo "Review benchmarks/baseline.json and update values manually, or run:"
+	@echo "  node -e \"const r=require('./benchmarks/results.json'); const b=require('./benchmarks/baseline.json'); b.wasm_instruction_counts=r.wasm_instruction_counts; require('fs').writeFileSync('benchmarks/baseline.json', JSON.stringify(b,null,2)+'\n')\""
