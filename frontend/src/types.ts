@@ -1,5 +1,14 @@
 export type StreamStatus = "active" | "pre-cliff" | "completed" | "cancelled";
 
+export interface WalletBalance {
+  /** SAC contract address, or "native" for XLM */
+  assetCode: string;
+  /** Full contract / issuer address; "native" for XLM */
+  contractAddress: string;
+  /** Human-readable balance string as returned by Horizon */
+  balance: string;
+}
+
 export interface VestingStream {
   id: string;
   recipient: string;
@@ -8,6 +17,12 @@ export interface VestingStream {
   rate: number;
   claimableAmount: number;
   status: StreamStatus;
+  // Optional schedule details (populated from contract reads)
+  startLedger?: number;
+  cliffLedger?: number;
+  endLedger?: number;
+  totalDeposit?: number;
+  totalVested?: number;
 }
 
 export type TxType = "claim" | "create" | "cancel";

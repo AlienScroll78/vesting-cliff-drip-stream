@@ -8,8 +8,9 @@ mod test_cancel;
 mod test_views;
 mod test_edge_cases;
 mod test_mutations;
-mod test_snapshots; // issue #102
-mod test_benchmarks;
+  mod test_snapshots; // issue #102
+  mod test_properties;   // from main
+  mod test_benchmarks;   // from this branch
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
