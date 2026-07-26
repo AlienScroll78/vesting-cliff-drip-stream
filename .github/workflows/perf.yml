@@ -1,0 +1,219 @@
+name: Performance Regression Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Job 1: WASM instruction-count benchmarks ─────────────────────────────────
+  wasm-bench:
+    name: WASM Instruction Counts
+    runs-on: ubuntu-latest
+    outputs:
+      results_artifact: wasm-bench-results
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-bench-
+
+      - name: Run instruction-count benchmarks
+        run: |
+          cargo test --features testutils --test bench bench_all_write_json -- --nocapture
+        # Results written to benchmarks/results.json by the test itself.
+
+      - name: Upload WASM benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-bench-results
+          path: benchmarks/results.json
+          retention-days: 7
+
+  # ── Job 2: HTTP response-time benchmarks ─────────────────────────────────────
+  http-bench:
+    name: HTTP Response Times
+    runs-on: ubuntu-latest
+    outputs:
+      results_artifact: http-bench-results
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install autocannon
+        run: npm install --no-save autocannon
+
+      - name: Start frontend dev server
+        working-directory: frontend
+        run: |
+          npm ci --prefer-offline
+          npx vite --port 3000 &
+          # Wait until the server is accepting connections (up to 30 s).
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/ > /dev/null && break
+            echo "Waiting for dev server... ($i)"
+            sleep 1
+          done
+
+      - name: Run HTTP benchmarks
+        run: node benchmarks/http_bench.js --duration 10 --connections 10
+
+      - name: Upload HTTP benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: http-bench-results
+          path: benchmarks/http_results.json
+          retention-days: 7
+
+  # ── Job 3: Lighthouse score check ────────────────────────────────────────────
+  lighthouse:
+    name: Lighthouse Scores
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci --prefer-offline
+          npm run build
+
+      - name: Read Lighthouse thresholds from baseline
+        id: thresholds
+        run: |
+          PERF=$(node -e "const b=require('./benchmarks/baseline.json'); console.log(b.lighthouse.performance)")
+          A11Y=$(node -e "const b=require('./benchmarks/baseline.json'); console.log(b.lighthouse.accessibility)")
+          BP=$(node -e "const b=require('./benchmarks/baseline.json'); console.log(b.lighthouse.best_practices)")
+          SEO=$(node -e "const b=require('./benchmarks/baseline.json'); console.log(b.lighthouse.seo)")
+          echo "perf=$PERF"        >> "$GITHUB_OUTPUT"
+          echo "a11y=$A11Y"        >> "$GITHUB_OUTPUT"
+          echo "best_practices=$BP" >> "$GITHUB_OUTPUT"
+          echo "seo=$SEO"          >> "$GITHUB_OUTPUT"
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://localhost:3000/
+          uploadArtifacts: true
+          temporaryPublicStorage: false
+          configPath: ".lighthouserc.json"
+        env:
+          # Serve the built frontend during the Lighthouse run.
+          LHCI_BUILD_CONTEXT__CURRENT_BRANCH: ${{ github.head_ref || github.ref_name }}
+
+      - name: Assert minimum scores
+        run: |
+          REPORT=$(find .lighthouseci -name 'lhr-*.json' | head -1)
+          if [ -z "$REPORT" ]; then
+            echo "::error::No Lighthouse report found"
+            exit 1
+          fi
+          node - <<'EOF'
+          import { readFileSync } from "fs";
+          import { execSync } from "child_process";
+          const report = JSON.parse(readFileSync(process.env.REPORT, "utf8"));
+          const thresholds = {
+            performance:    parseInt(process.env.PERF),
+            accessibility:  parseInt(process.env.A11Y),
+            "best-practices": parseInt(process.env.BP),
+            seo:            parseInt(process.env.SEO),
+          };
+          let failed = false;
+          for (const [cat, min] of Object.entries(thresholds)) {
+            const score = Math.round((report.categories[cat]?.score ?? 0) * 100);
+            const icon  = score >= min ? "✅" : "❌";
+            console.log(`${icon} ${cat}: ${score} (min ${min})`);
+            if (score < min) failed = true;
+          }
+          if (failed) process.exit(1);
+          EOF
+        env:
+          REPORT: ${{ steps.lighthouse.outputs.resultsPath }}
+          PERF:   ${{ steps.thresholds.outputs.perf }}
+          A11Y:   ${{ steps.thresholds.outputs.a11y }}
+          BP:     ${{ steps.thresholds.outputs.best_practices }}
+          SEO:    ${{ steps.thresholds.outputs.seo }}
+
+  # ── Job 4: Compare results against baseline and post PR comment ───────────────
+  compare:
+    name: Compare vs Baseline
+    runs-on: ubuntu-latest
+    needs: [wasm-bench, http-bench]
+    # Run even on push to main so the summary is always generated.
+    if: always()
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download WASM results
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-bench-results
+          path: benchmarks/
+        continue-on-error: true
+
+      - name: Download HTTP results
+        uses: actions/download-artifact@v4
+        with:
+          name: http-bench-results
+          path: benchmarks/
+        continue-on-error: true
+
+      - name: Run comparison script
+        id: compare
+        run: |
+          node benchmarks/compare.js --github-output
+        continue-on-error: true
+        # We capture the exit code ourselves so we can post the PR comment
+        # before failing the build.
+
+      - name: Post PR comment with performance table
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: perf-regression
+          message: ${{ steps.compare.outputs.perf_table }}
+
+      - name: Fail if regressions detected
+        if: steps.compare.outputs.regression_count != '0'
+        run: |
+          echo "::error::${{ steps.compare.outputs.regression_count }} performance regression(s) detected. See PR comment for details."
+          exit 1

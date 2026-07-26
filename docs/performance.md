@@ -1,23 +1,77 @@
-# Performance Report — High-Load Claim Scenarios
+# Performance Baselines & Regression Detection
 
-## Test Environment
-
-| Property | Value |
-|---|---|
-| Runtime | Soroban test environment (in-process) |
-| Protocol version | 22 |
-| Ledger start sequence | 100 |
-| Token | SAC (test helper) |
+This document describes the performance baselines for **vesting-cliff-drip-stream**,
+how automated regression detection works in CI, and how to update baselines when
+intentional changes raise metrics.
 
 ---
 
-## Scenario 1 — 1 000 Recipients: Cliff Claim
+## Automated regression detection
 
-**Test**: `test_high_load_1000_recipients_claim`
+Every pull request runs the **Performance Regression Check** workflow
+(`.github/workflows/perf.yml`), which:
 
-Each of 1 000 independent recipients has a stream created in the same contract
-(`rate=10`, `cliff_duration=50`, `total_duration=100`). After advancing the
-ledger to the cliff, all 1 000 `claim_vested` calls are executed sequentially.
+1. Measures **WASM instruction counts** per contract entry point using the
+   Soroban test environment's budget tracker.
+2. Measures **HTTP response times** for the frontend dev server using
+   [autocannon](https://github.com/mcollina/autocannon).
+3. Checks **Lighthouse scores** against minimum thresholds.
+4. Compares every metric against `benchmarks/baseline.json`.
+5. **Fails the build** if any metric regresses more than **10 %** vs baseline.
+6. Posts a **performance delta table** as a sticky PR comment.
+
+---
+
+## Baseline values
+
+Baselines are stored in [`benchmarks/baseline.json`](../benchmarks/baseline.json).
+
+### WASM instruction counts
+
+Measured in the Soroban test environment. Values are upper bounds; the build
+fails if a PR causes any entry point to exceed the baseline by more than 10 %.
+
+| Entry point | CPU instructions (baseline) | Memory bytes (baseline) |
+|---|---|---|
+| `create_vesting_stream`    | 800 000  | 200 000 |
+| `claim_vested`             | 600 000  | 180 000 |
+| `cancel_stream_pre_cliff`  | 650 000  | 190 000 |
+| `cancel_stream_post_cliff` | 700 000  | 195 000 |
+| `get_schedule`             | 200 000  | 80 000  |
+| `claimable_amount`         | 220 000  | 85 000  |
+| `is_cliff_passed`          | 180 000  | 75 000  |
+
+### HTTP response times (frontend dev server)
+
+Measured with autocannon, 10 concurrent connections for 10 seconds.
+
+| Endpoint | p50 (ms) | p95 (ms) | p99 (ms) | Req/s |
+|---|---|---|---|---|
+| `GET /`           | 50 | 150 | 300 | 200 |
+| `GET /index.html` | 50 | 150 | 300 | 200 |
+
+### Lighthouse scores (minimum thresholds)
+
+| Category      | Minimum |
+|---------------|---------|
+| Performance   | 80      |
+| Accessibility | 90      |
+| Best Practices| 85      |
+| SEO           | 80      |
+
+### WASM binary size
+
+Optimized WASM size is tracked separately by the **WASM Size Check** workflow
+(`.github/workflows/wasm-size.yml`). The baseline is **50 KB** optimized.
+
+---
+
+## Soroban test environment performance (high-load scenarios)
+
+> Original data from in-process Soroban test runner. Applies to correctness
+> testing, not on-chain gas estimation.
+
+### Scenario 1 — 1 000 recipients: cliff claim
 
 | Metric | Result | Target |
 |---|---|---|
@@ -26,14 +80,7 @@ ledger to the cliff, all 1 000 `claim_vested` calls are executed sequentially.
 | Per-recipient claimed | 500 tokens (50 ledgers × 10) | — |
 | Total tokens transferred | 500 000 | — |
 
----
-
-## Scenario 2 — 1 000 Recipients: Full Drain
-
-**Test**: `test_high_load_1000_recipients_full_drain`
-
-Same setup with `cliff_duration=10`. Ledger is advanced past `end_ledger`
-before all recipients claim their full allocation in one pass.
+### Scenario 2 — 1 000 recipients: full drain
 
 | Metric | Result | Target |
 |---|---|---|
@@ -42,14 +89,64 @@ before all recipients claim their full allocation in one pass.
 
 ---
 
-## Notes
+## Running benchmarks locally
 
-- The Soroban test environment executes host-side (no network hop), so
-  wall-clock latency is not directly measurable. The p99 latency target of
-  < 2 s applies to on-chain invocations; in the test harness every call
-  completes in microseconds.
-- Error rate is the primary contract-correctness metric: **0 errors across
-  2 000 combined claim calls** satisfies the < 1 % acceptance criterion.
-- For network-level p99 benchmarking, use `stellar contract invoke` against
-  a local quickstart node and record RPC response times with a tool such as
-  `hyperfine` or a custom script timing 1 000 sequential invocations.
+```bash
+# WASM instruction counts — writes benchmarks/results.json
+make bench
+
+# HTTP benchmarks (requires a running frontend server on port 3000)
+cd frontend && npm run dev &
+make bench-http
+
+# Compare against baseline
+make bench-compare
+```
+
+---
+
+## Updating baselines
+
+Baselines should only be updated when a performance change is **intentional**
+(e.g., a new feature that adds necessary computation, or a deliberate
+architectural trade-off).
+
+### Process
+
+1. Run benchmarks locally: `make bench && make bench-http`
+2. Edit `benchmarks/baseline.json` with the new values.
+3. Open a PR that includes **both** the code change and the baseline update.
+4. In the PR description, add a **Performance Impact** section explaining:
+   - Which metrics changed and by how much.
+   - Why the regression is acceptable.
+   - Whether any optimisation was attempted first.
+5. Get approval from at least one maintainer before merging.
+
+### What NOT to do
+
+- Do not bump baselines to silence a CI failure without understanding the cause.
+- Do not merge baseline-only PRs without a corresponding code change.
+
+---
+
+## CI workflow reference
+
+| Workflow | File | Trigger |
+|---|---|---|
+| Performance Regression Check | `.github/workflows/perf.yml` | Every PR, push to `main` |
+| WASM Size Check | `.github/workflows/wasm-size.yml` | Every PR, push |
+| CI (tests, lint, build) | `.github/workflows/ci.yml` | Every push |
+
+---
+
+## Related files
+
+| File | Purpose |
+|---|---|
+| `benchmarks/baseline.json` | Stored performance baselines |
+| `benchmarks/results.json` | WASM benchmark results (generated, git-ignored) |
+| `benchmarks/http_results.json` | HTTP benchmark results (generated, git-ignored) |
+| `benchmarks/compare.js` | Regression comparator script |
+| `benchmarks/http_bench.js` | autocannon HTTP benchmark runner |
+| `tests/bench.rs` | Rust instruction-count benchmark harness |
+| `.lighthouserc.json` | Lighthouse CI configuration |

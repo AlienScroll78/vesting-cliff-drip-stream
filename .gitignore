@@ -10,3 +10,10 @@ frontend/node_modules/
 frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
+
+# Benchmark results (generated — do not commit; only baseline.json is committed)
+benchmarks/results.json
+benchmarks/http_results.json
+
+# Lighthouse CI
+.lighthouseci/

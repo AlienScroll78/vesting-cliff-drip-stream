@@ -1,0 +1,65 @@
+{
+  "_meta": {
+    "version": "1",
+    "updated": "2026-07-26",
+    "description": "Performance baselines for vesting-cliff-drip-stream. Update this file via a PR with justification when intentional changes raise metrics.",
+    "threshold_pct": 10
+  },
+  "wasm_instruction_counts": {
+    "_note": "Instruction counts measured in Soroban test environment using env.budget().cpu_instruction_count(). Values are upper bounds; actual counts may be lower depending on inputs.",
+    "create_vesting_stream": {
+      "cpu_instructions": 800000,
+      "mem_bytes": 200000
+    },
+    "claim_vested": {
+      "cpu_instructions": 600000,
+      "mem_bytes": 180000
+    },
+    "cancel_stream_pre_cliff": {
+      "cpu_instructions": 650000,
+      "mem_bytes": 190000
+    },
+    "cancel_stream_post_cliff": {
+      "cpu_instructions": 700000,
+      "mem_bytes": 195000
+    },
+    "get_schedule": {
+      "cpu_instructions": 200000,
+      "mem_bytes": 80000
+    },
+    "claimable_amount": {
+      "cpu_instructions": 220000,
+      "mem_bytes": 85000
+    },
+    "is_cliff_passed": {
+      "cpu_instructions": 180000,
+      "mem_bytes": 75000
+    }
+  },
+  "http_response_times": {
+    "_note": "Response time baselines for the local Vite dev server measured with autocannon. These apply to frontend HTTP endpoints, not Soroban RPC.",
+    "GET /": {
+      "p50_ms": 50,
+      "p95_ms": 150,
+      "p99_ms": 300,
+      "requests_per_sec": 200
+    },
+    "GET /index.html": {
+      "p50_ms": 50,
+      "p95_ms": 150,
+      "p99_ms": 300,
+      "requests_per_sec": 200
+    }
+  },
+  "lighthouse": {
+    "_note": "Lighthouse score baselines for the frontend. CI fails if any score drops below the threshold.",
+    "performance": 80,
+    "accessibility": 90,
+    "best_practices": 85,
+    "seo": 80
+  },
+  "wasm_size": {
+    "_note": "Optimized WASM binary size in bytes. Tracked alongside instruction counts.",
+    "optimized_bytes": 51200
+  }
+}
