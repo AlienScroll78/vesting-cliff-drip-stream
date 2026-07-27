@@ -1,10 +1,58 @@
-# cargo audit configuration
-# To suppress a false-positive advisory, add a block like:
+# ──────────────────────────────────────────────────────────────────────────────
+# audit.toml – cargo-audit configuration
+# https://github.com/rustsec/rustsec/tree/main/cargo-audit
 #
-# [[advisory]]
-# id = "RUSTSEC-YYYY-NNNN"
-# ignore = true
-# comment = "Not affected because <reason>"
+# CI behaviour (see .github/workflows/audit.yml):
+#   • Runs on every PR, push to main, and weekly on Monday 03:00 UTC.
+#   • Fails on any vulnerability not listed in [advisories] ignore below.
+#   • A GitHub issue is automatically opened for new findings.
+#
+# To suppress a false-positive or a known/accepted advisory:
+#
+#   [[advisory]]
+#   id      = "RUSTSEC-YYYY-NNNN"   # advisory ID from https://rustsec.org
+#   ignore  = true
+#   comment = "Reason: not reachable / fixed in next release / etc."
+#
+# Severity reference:
+#   none | low | medium | high | critical
+# ──────────────────────────────────────────────────────────────────────────────
 
 [advisories]
+# List of advisory IDs to ignore (duplicated as structured blocks below for
+# richer documentation).  Keep this list in sync with the [[advisory]] blocks.
 ignore = []
+
+# ── Severity threshold ────────────────────────────────────────────────────────
+# CI is configured to deny warnings (--deny warnings), which covers all
+# severity levels.  Adjust the workflow flag to change the threshold:
+#   --deny warnings           → fail on any advisory
+#   --deny vulnerability      → fail on vulnerabilities only (not informational)
+
+# ── Yanked crate policy ───────────────────────────────────────────────────────
+# Uncomment to also fail when a dependency has been yanked from crates.io:
+# [yanked]
+# deny = true
+
+# ── Unsound code policy ───────────────────────────────────────────────────────
+# Uncomment to fail when a crate is marked as unsound in the advisory database:
+# [unsound]
+# deny = true
+
+# ── Example acknowledged advisory (template – remove before merging) ─────────
+#
+# [[advisory]]
+# id      = "RUSTSEC-2024-0001"
+# ignore  = true
+# comment = """
+# This advisory affects the `foo` crate's HTTP/2 HPACK decoder.
+# We do not expose an HTTP/2 server surface; the vulnerable code path is
+# unreachable in this project.
+# Tracked upstream: https://github.com/foo/foo/issues/123
+# Re-evaluate when foo > 1.2.3 is released.
+# """
+
+# ── Known-good state at project creation ─────────────────────────────────────
+# No advisories are ignored at this time.  All current dependencies
+# (soroban-sdk 22.0.0, proptest 1.x) are clean as of 2026-07-27.
+# When new findings appear, document them here before adding to `ignore`.
