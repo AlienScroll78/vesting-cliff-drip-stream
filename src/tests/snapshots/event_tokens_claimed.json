@@ -1,12 +1,7 @@
 {
-  "event": "TokensClaimed",
-  "topics": {
-    "0": { "type": "Symbol", "value": "vc_claim" },
-    "1": { "type": "Address", "description": "recipient address" }
-  },
+  "topics": ["vc_claim", "<recipient>"],
   "data": {
-    "0": { "type": "i128", "description": "amount claimed" },
-    "1": { "type": "u32", "description": "ledger_claimed_through" }
-  },
-  "changelog": []
+    "amount": 500,
+    "ledger_claimed_through": 150
+  }
 }

@@ -2,11 +2,15 @@
 
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
 
+> Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
+>
+> Have a question? Check the [FAQ](docs/faq.md) for common answers about stream lifecycle, claiming, token support, and fees.
+
 ---
 
 ## Concept
 
-Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **cliff period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
+Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
 
 ```
 Token Flow
@@ -17,10 +21,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
                │                 │                              │
 ```
 
-1. Sponsor deposits the **full allocation** upfront into the contract vault.
+1. [Sponsor](docs/glossary.md#sponsor) deposits the **full allocation** upfront into the contract vault.
 2. Recipient cannot claim anything until `cliff_ledger` is reached.
 3. At the cliff, all tokens accrued since `start_ledger` are **released instantly**.
-4. Remaining tokens continue to **drip linearly per ledger** until `end_ledger`.
+4. Remaining tokens continue to **drip linearly per [ledger](docs/glossary.md#ledger)** until `end_ledger`.
 
 ---
 
@@ -54,6 +58,16 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         ├── test_views.rs          # Read-only view function tests
         └── test_edge_cases.rs     # Boundary & integration scenarios
 ```
+
+
+## Architecture Decision Records
+
+Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
+## Security
+
+For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
+
 
 ---
 
@@ -114,6 +128,9 @@ Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens;
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
 | 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
+| 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
+| 9 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
+| 10 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
 
 ---
 
@@ -140,6 +157,9 @@ make build
 make test
 ```
 
+CI also runs the contract test suite through Soroban's WASM runner so the
+contract is exercised in the same target it is deployed to.
+
 ### Deploy to Testnet
 
 ```bash
@@ -165,14 +185,23 @@ export TOTAL_DURATION=172800  # ~10 days
 
 ## Security Considerations
 
-- **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
-- **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
+- **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
+- **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
-- **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
+- **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of notable changes.
+
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md).

@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test optimize clean fmt lint check test-snapshots test-e2e test-a11y test-migrations
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
 
 all: build
 
@@ -18,25 +18,10 @@ build:
 test:
 	cargo test --features testutils
 
-## Run contract event snapshot tests only (#363)
-test-snapshots:
-	cargo test --features testutils test_event_snapshots
-
-## Regenerate event snapshot JSON files (#363)
-update-snapshots:
-	UPDATE_SNAPSHOTS=1 cargo test --features testutils test_event_snapshots
-
-## Run Playwright E2E tests across all browsers (#362, #364)
-test-e2e:
-	cd frontend && npm ci && npx playwright install --with-deps && npx playwright test
-
-## Run axe-core accessibility tests only (#362)
-test-a11y:
-	cd frontend && npm ci && npx playwright install --with-deps && npx playwright test --grep @a11y
-
-## Run database migration tests (#365)
-test-migrations:
-	cd backend && npm ci && npm run test:migrations
+## Validate the on-chain contract spec (schema) against the expected API.
+## Requires the WASM to be built first; spec-test depends on `build`.
+spec-test: build
+	cargo test --test contract_spec
 
 ## Optimize the WASM binary with soroban CLI
 optimize: build
@@ -56,6 +41,38 @@ lint:
 check:
 	cargo check --all-targets --all-features
 
+## Build rustdoc; fails on any missing-doc warning (mirrors CI)
+doc:
+	RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+
+## Run mutation testing on contract.rs and storage.rs (requires cargo-mutants)
+## Install: cargo install cargo-mutants --locked
+## Results written to mutants.out/
+mutants:
+	cargo mutants --features testutils \
+		--file src/contract.rs --file src/storage.rs \
+		--output mutants.out
+
 ## Remove build artifacts
 clean:
 	cargo clean
+
+## Run Playwright E2E tests (requires Node.js + npm install in frontend/)
+test-e2e-ui:
+	cd frontend && npm install --prefer-offline && npx playwright install chromium --with-deps && npm run test:e2e
+
+## Run E2E tests against local Stellar quickstart (issue #97)
+## Starts docker-compose, builds WASM, runs test suite, then tears down.
+test-e2e: build
+	docker compose -f docker-compose.e2e.yml up -d
+	node tests/e2e/run_e2e.js; status=$$?; \
+	docker compose -f docker-compose.e2e.yml down; \
+	exit $$status
+
+## Run integration tests for the indexer event pipeline (issue #46)
+## Requires a running local Stellar quickstart node and a built WASM.
+test-integration: build
+	docker compose -f docker-compose.e2e.yml up -d
+	node tests/integration/indexer_pipeline.test.js; status=$$?; \
+	docker compose -f docker-compose.e2e.yml down; \
+	exit $$status

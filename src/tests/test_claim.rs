@@ -174,3 +174,49 @@ fn test_claim_nonexistent_schedule_fails() {
     let err = client.claim_vested(&random).unwrap_err();
     assert_eq!(err, VestingError::ScheduleNotFound.into());
 }
+
+// ── end_ledger boundary tests ─────────────────────────────────────────────────
+
+#[test]
+fn test_claimable_amount_at_end_ledger() {
+    // rate=10, cliff=50, total=200 → deposit=2000, end_ledger=300
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
+        setup_stream(10, 50, 200);
+
+    // Advance exactly to end_ledger (start=100, end=300 → +200 ledgers)
+    advance_ledger(&env, 200);
+
+    // Full deposit should be claimable
+    assert_eq!(client.claimable_amount(&recipient), 2_000);
+}
+
+#[test]
+fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
+    // rate=10, cliff=50, total=200 → deposit=2000
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
+        setup_stream(10, 50, 200);
+
+    // Claim halfway through (at ledger 200 = start+100)
+    advance_ledger(&env, 100);
+    client.claim_vested(&recipient).unwrap(); // claims 1000
+
+    // Advance well past end_ledger
+    advance_ledger(&env, 500);
+
+    // Only the remaining 1000 tokens should be claimable (capped at end_ledger)
+    assert_eq!(client.claimable_amount(&recipient), 1_000);
+}
+
+#[test]
+fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
+        setup_stream(10, 50, 200);
+
+    // Advance past end and claim everything
+    advance_ledger(&env, 300);
+    client.claim_vested(&recipient).unwrap();
+
+    // Schedule is removed; a second attempt should return ScheduleNotFound
+    let err = client.claim_vested(&recipient).unwrap_err();
+    assert_eq!(err, VestingError::ScheduleNotFound.into());
+}

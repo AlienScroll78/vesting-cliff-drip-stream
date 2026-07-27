@@ -1,16 +1,11 @@
 {
-  "event": "StreamCreated",
-  "topics": {
-    "0": { "type": "Symbol", "value": "vc_create" },
-    "1": { "type": "Address", "description": "recipient address" }
-  },
+  "topics": ["vc_create", "<recipient>"],
   "data": {
-    "0": { "type": "Address", "description": "sponsor address" },
-    "1": { "type": "Address", "description": "token address" },
-    "2": { "type": "i128", "description": "rate_per_ledger" },
-    "3": { "type": "u32", "description": "start_ledger" },
-    "4": { "type": "u32", "description": "cliff_ledger" },
-    "5": { "type": "u32", "description": "end_ledger" }
-  },
-  "changelog": []
+    "sponsor": "<sponsor>",
+    "token": "<token>",
+    "rate_per_ledger": 10,
+    "start_ledger": 100,
+    "cliff_ledger": 150,
+    "end_ledger": 300
+  }
 }

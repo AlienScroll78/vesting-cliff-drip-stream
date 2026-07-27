@@ -1,11 +1,6 @@
 {
-  "event": "StreamCancelled",
-  "topics": {
-    "0": { "type": "Symbol", "value": "vc_cancel" },
-    "1": { "type": "Address", "description": "recipient address" }
-  },
+  "topics": ["vc_cancel", "<recipient>"],
   "data": {
-    "0": { "type": "i128", "description": "refunded_amount to sponsor" }
-  },
-  "changelog": []
+    "refunded_amount": 2000
+  }
 }

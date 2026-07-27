@@ -1,0 +1,10 @@
+# cargo audit configuration
+# To suppress a false-positive advisory, add a block like:
+#
+# [[advisory]]
+# id = "RUSTSEC-YYYY-NNNN"
+# ignore = true
+# comment = "Not affected because <reason>"
+
+[advisories]
+ignore = []

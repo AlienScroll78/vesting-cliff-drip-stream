@@ -5,13 +5,8 @@ Cargo.lock
 *.wasm
 !target/*.optimized.wasm
 
-# Frontend (Playwright / axe-core)
+# Frontend
 frontend/node_modules/
+frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
-frontend/playwright/.auth/
-frontend/.cache/
-
-# Backend (migration tests)
-backend/node_modules/
-backend/dist/
