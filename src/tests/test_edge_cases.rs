@@ -222,6 +222,214 @@ fn test_regression_claimable_amount_zero_before_cliff() {
     assert_eq!(client.claimable_amount(&recipient), 500); // 50 × 10
 }
 
+// ── Arithmetic boundary tests (Issue #366) ───────────────────────────────────
+
+/// rate = i128::MAX / total_duration → deposit exactly at i128::MAX; must succeed.
+///
+/// This is the highest valid rate for the given duration. The multiplication
+/// `rate * total_duration` should equal `i128::MAX` (truncated), which is still
+/// representable, so `calculate_total_deposit` must return `Ok`.
+#[test]
+fn test_arithmetic_boundary_rate_max_div_duration_succeeds() {
+    let total_duration: u32 = 1_000;
+    let rate: i128 = i128::MAX / total_duration as i128;
+
+    // Direct unit-test of the helper — no environment needed.
+    let result = calculate_total_deposit(rate, total_duration);
+    assert!(
+        result.is_ok(),
+        "rate = i128::MAX / total_duration should succeed, got: {:?}",
+        result
+    );
+}
+
+/// rate = i128::MAX / total_duration + 1 → overflow; must return DepositOverflow.
+///
+/// One unit above the safe boundary overflows `checked_mul`, so the contract
+/// must reject the stream-creation request with error code 5.
+#[test]
+fn test_arithmetic_boundary_rate_one_above_max_overflows() {
+    let total_duration: u32 = 1_000;
+    let rate: i128 = i128::MAX / total_duration as i128 + 1;
+
+    let err = calculate_total_deposit(rate, total_duration)
+        .expect_err("rate one above boundary should overflow");
+    assert_eq!(err, VestingError::DepositOverflow);
+}
+
+/// create_vesting_stream with rate one above the overflow boundary returns
+/// DepositOverflow (error code 5) from the contract entry-point.
+#[test]
+fn test_create_stream_rate_overflow_rejected() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    // No mint needed — rejection happens before any transfer.
+
+    let total_duration: u32 = 1_000;
+    let rate: i128 = i128::MAX / total_duration as i128 + 1;
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &total_duration)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositOverflow.into());
+}
+
+/// cliff_duration = total_duration - 1 → maximum valid cliff (gap of 1 ledger).
+/// The contract must accept this configuration and produce a stream with exactly
+/// 1 post-cliff ledger of accrual.
+#[test]
+fn test_arithmetic_boundary_cliff_equals_total_minus_one_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, token_client) = create_token(&env, &sponsor);
+
+    let rate: i128 = 7;
+    let total_duration: u32 = 50;
+    let cliff_duration: u32 = total_duration - 1; // maximum valid cliff = 49
+    let deposit = rate * total_duration as i128;   // 350
+    mint_to(&env, &token_id, &sponsor, deposit);
+
+    // Must not error.
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
+        .unwrap();
+
+    // Advance to end_ledger (100 + 50 = 150) to capture all accrual.
+    advance_ledger(&env, total_duration);
+    let claimed = client.claim_vested(&recipient).unwrap();
+    assert_eq!(claimed, deposit);
+    assert_eq!(token_client.balance(&recipient), deposit);
+}
+
+/// cliff_duration = total_duration → stream with no post-cliff period is invalid.
+/// Must return InvalidDuration (error code 3).
+#[test]
+fn test_arithmetic_boundary_cliff_equals_total_duration_rejected() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    let total_duration: u32 = 50;
+    let cliff_duration: u32 = total_duration; // cliff == total → no post-cliff period
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &cliff_duration, &total_duration)
+        .unwrap_err();
+    assert_eq!(err, VestingError::InvalidDuration.into());
+}
+
+/// rate = 1 (minimum valid rate) → stream created and accrual is correct.
+/// Prevents a regression where small rates were rounded to zero inside arithmetic.
+#[test]
+fn test_arithmetic_boundary_minimum_rate_one_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, token_client) = create_token(&env, &sponsor);
+
+    let total_duration: u32 = 200;
+    let cliff_duration: u32 = 50;
+    let rate: i128 = 1;
+    mint_to(&env, &token_id, &sponsor, total_duration as i128);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
+        .unwrap();
+
+    // Advance exactly to cliff; catch-up claim covers start_ledger..cliff_ledger.
+    advance_ledger(&env, cliff_duration);
+    let at_cliff = client.claim_vested(&recipient).unwrap();
+    assert_eq!(at_cliff, cliff_duration as i128); // 50 × 1
+
+    // Advance to end; remaining post-cliff accrual.
+    advance_ledger(&env, total_duration - cliff_duration);
+    let remaining = client.claim_vested(&recipient).unwrap();
+    assert_eq!(remaining, (total_duration - cliff_duration) as i128); // 150 × 1
+
+    assert_eq!(token_client.balance(&recipient), total_duration as i128);
+}
+
+/// total_duration = 1 (minimum valid duration with cliff_duration = 0).
+/// A stream of exactly 1 ledger must succeed and pay `rate` tokens on claim.
+#[test]
+fn test_arithmetic_boundary_minimum_total_duration_one_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, token_client) = create_token(&env, &sponsor);
+
+    let rate: i128 = 42;
+    let cliff_duration: u32 = 0;
+    let total_duration: u32 = 1;
+    mint_to(&env, &token_id, &sponsor, rate);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
+        .unwrap();
+
+    // Advance 1 ledger → at cliff (cliff=0 means cliff_ledger = start = 100,
+    // but we are still at 100 here; advance to 101 which is >= cliff_ledger
+    // AND == end_ledger).
+    advance_ledger(&env, 1);
+    let claimed = client.claim_vested(&recipient).unwrap();
+    assert_eq!(claimed, rate);
+    assert_eq!(token_client.balance(&recipient), rate);
+    // Stream fully consumed at end_ledger.
+    assert!(client.get_schedule(&recipient).is_none());
+}
+
+/// Claim at exactly cliff_ledger returns all tokens accrued since start_ledger.
+///
+/// This validates the "instant catch-up" behaviour: on the first claim at the
+/// cliff boundary, `(cliff_ledger - start_ledger) * rate` tokens are released.
+#[test]
+fn test_claim_at_exactly_cliff_ledger_returns_cliff_amount() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, token_client) = create_token(&env, &sponsor);
+
+    let rate: i128 = 10;
+    let cliff_duration: u32 = 30;
+    let total_duration: u32 = 100;
+    mint_to(&env, &token_id, &sponsor, rate * total_duration as i128);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
+        .unwrap();
+
+    // Ledger starts at 100; advance exactly to cliff (100 + 30 = 130).
+    advance_ledger(&env, cliff_duration);
+    assert!(client.is_cliff_passed(&recipient));
+
+    let claimed = client.claim_vested(&recipient).unwrap();
+    // Catch-up: 30 ledgers × 10 = 300 tokens.
+    assert_eq!(claimed, rate * cliff_duration as i128);
+    assert_eq!(token_client.balance(&recipient), rate * cliff_duration as i128);
+}
+
 /// Guard: is_cliff_passed returns false before and true at/after the cliff.
 /// Prevents off-by-one regression in the boundary check (>= vs >).
 #[test]
