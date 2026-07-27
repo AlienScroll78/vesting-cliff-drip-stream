@@ -1,0 +1,20 @@
+{
+  "name": "vesting-cliff-drip-stream-frontend",
+  "version": "1.0.0",
+  "description": "Frontend E2E test suite for the Vesting Cliff Drip Stream dApp",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:firefox": "playwright test --project=firefox",
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "test:e2e:all-browsers": "playwright test --project=chromium --project=firefox --project=webkit",
+    "test:a11y": "playwright test --grep @a11y",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@playwright/test": "1.49.1",
+    "axe-core": "4.10.3"
+  }
+}

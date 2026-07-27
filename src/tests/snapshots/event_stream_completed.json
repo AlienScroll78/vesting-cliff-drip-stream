@@ -1,0 +1,11 @@
+{
+  "event": "StreamCompleted",
+  "topics": {
+    "0": { "type": "Symbol", "value": "vc_done" },
+    "1": { "type": "Address", "description": "recipient address" }
+  },
+  "data": {
+    "0": { "type": "Address", "description": "token address" }
+  },
+  "changelog": []
+}
