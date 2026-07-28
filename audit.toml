@@ -1,10 +1,9 @@
-# cargo audit configuration
-# To suppress a false-positive advisory, add a block like:
-#
-# [[advisory]]
-# id = "RUSTSEC-YYYY-NNNN"
-# ignore = true
-# comment = "Not affected because <reason>"
-
 [advisories]
-ignore = []
+ignore = [
+  # Transitive Soroban SDK dependency; no maintained replacement is available
+  # until the SDK upgrades its dependency graph.
+  "RUSTSEC-2024-0388",
+  # Transitive macro dependency; no maintained replacement is available
+  # until the SDK upgrades its dependency graph.
+  "RUSTSEC-2024-0436",
+]

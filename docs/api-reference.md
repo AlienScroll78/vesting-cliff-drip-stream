@@ -426,3 +426,24 @@ Emitted by `cancel_stream`.
 | Topic[0] | `SCVal::Symbol` | `"vc_cancel"` |
 | Topic[1] | `SCVal::Address` | `recipient` |
 | Data | `SCVal::I128` | `refunded_amount` returned to sponsor |
+
+---
+
+## `contract_version` Field
+
+All schedule-related API responses (e.g. `GET /schedule/:recipient`) include a `contract_version` field.
+
+This value reflects the on-chain ledger sequence at the time of the last version fetch, formatted as `"ledger-{sequence}"`. It is fetched via `SorobanRpc.getLatestLedger()` and **cached for 5 minutes** to avoid excessive RPC calls.
+
+**Example:**
+```json
+{
+  "recipient": "GABC...",
+  "contract_version": "ledger-123456"
+}
+```
+
+**Semantics:**
+- Treat `contract_version` as an opaque string for display and debugging purposes only.
+- A change in value between requests does not necessarily indicate a contract upgrade — it reflects ledger progression.
+- The value is not suitable for strict contract version gating; use the contract's Wasm hash for that.

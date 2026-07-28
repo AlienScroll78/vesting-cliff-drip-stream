@@ -19,10 +19,16 @@
     "posthog-js": "^1.393.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-i18next": "^17.0.8"
+    "react-i18next": "^17.0.8",
+    "recharts": "^2.15.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "@sentry/react": "^10.62.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/intro.js": "^5.1.5",
     "@types/jest": "^29.5.14",
     "@types/node": "^24.13.2",
