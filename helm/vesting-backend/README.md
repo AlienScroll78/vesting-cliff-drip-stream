@@ -117,6 +117,7 @@ helm uninstall vesting-backend --namespace vesting
 | `hpa.minReplicas` | `1` | Minimum replicas |
 | `hpa.maxReplicas` | `5` | Maximum replicas |
 | `hpa.targetCPUUtilizationPercentage` | `70` | CPU utilization target % |
+| `podAnnotations` | `{}` | Pod annotations (e.g. `reloader.stakater.com/auto: "true"`) |
 | `serviceAccount.create` | `true` | Create a ServiceAccount |
 | `serviceAccount.annotations` | `{}` | Annotations (e.g. IRSA role ARN) |
 | `serviceAccount.name` | `""` | Override SA name (auto-generated when empty) |
@@ -133,7 +134,7 @@ helm uninstall vesting-backend --namespace vesting
 | `externalSecret.secretStoreRef.kind` | `ClusterSecretStore` | `ClusterSecretStore` or `SecretStore` |
 | `externalSecret.remoteSecrets` | see values.yaml | Map of `ENV_VAR → {remoteKey, property}` |
 
-### Default secret keys pulled from AWS Secrets Manager
+### Default secret keys pulled from the secret store
 
 | Env var injected into Pod | `remoteKey` | `property` |
 |---|---|---|
@@ -141,6 +142,16 @@ helm uninstall vesting-backend --namespace vesting
 | `REDIS_URL` | `vesting/production/app-secrets` | `redis_url` |
 | `ADMIN_API_KEY` | `vesting/production/app-secrets` | `admin_api_key` |
 | `SPONSOR_SECRET_KEY` | `vesting/production/app-secrets` | `sponsor_secret_key` |
+| `JWT_SECRET` | `vesting/production/app-secrets` | `jwt_secret` |
+| `HORIZON_API_KEY` | `vesting/production/app-secrets` | `horizon_api_key` |
+
+### Secret rotation & pod restart
+
+When a remote secret rotates, ESO updates the in-cluster `Secret` resource
+within the `refreshInterval`. The Deployment's pod template carries a
+`checksum/secret` annotation computed from the `remoteSecrets` map — when the
+secret data changes, the annotation hash changes, triggering a rolling restart
+of the pods automatically.
 
 ---
 

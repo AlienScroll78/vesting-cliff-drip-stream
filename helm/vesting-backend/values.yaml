@@ -12,6 +12,9 @@ image:
 # Number of replicas (overridden by HPA when enabled)
 replicaCount: 1
 
+# Annotations applied to every pod (e.g. reloader.stakater.com/auto: "true")
+podAnnotations: {}
+
 # Port the Node.js backend listens on (process.env.PORT)
 appPort: 3001
 
@@ -124,3 +127,9 @@ externalSecret:
     SPONSOR_SECRET_KEY:
       remoteKey: vesting/production/app-secrets
       property: sponsor_secret_key
+    JWT_SECRET:
+      remoteKey: vesting/production/app-secrets
+      property: jwt_secret
+    HORIZON_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: horizon_api_key
