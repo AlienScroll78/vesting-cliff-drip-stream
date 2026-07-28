@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, Symbol, symbol_short};
+use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -48,10 +48,8 @@ pub fn emit_tokens_claimed(
 /// Topics: `["vesting_done", recipient]`
 /// Data:   `(token)`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
-    env.events().publish(
-        (symbol_short!("vc_done"), recipient.clone()),
-        token.clone(),
-    );
+    env.events()
+        .publish((symbol_short!("vc_done"), recipient.clone()), token.clone());
 }
 
 /// Emitted when a sponsor cancels a vesting stream before it completes.
