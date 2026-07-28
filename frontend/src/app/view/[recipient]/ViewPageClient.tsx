@@ -2,11 +2,15 @@
 import { useEffect, useState, useCallback } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { VestingTimeline } from "@/components/VestingTimeline";
 import { VestingStream } from "@/types";
+import { useWallet } from "@/contexts/WalletContext";
 
 // Stub lookup — replace with real contract read
 async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
   if (!recipient.startsWith("G") || recipient.length < 10) return null;
+  const BASE = 51_200_000;
   return {
     id: "demo",
     recipient,
@@ -15,12 +19,25 @@ async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
     rate: 10,
     claimableAmount: 1500,
     status: "active",
+    startLedger: BASE - 172_800,
+    cliffLedger: BASE - 86_400,
+    endLedger: BASE + 6_048_000,
+    totalDeposit: 62_208_000,
+    totalVested: 1728000,
   };
 }
 
+// Stub claim — replace with real Freighter/Soroban tx
+async function claimVested(_recipient: string): Promise<void> {
+  await new Promise((r) => setTimeout(r, 1200));
+}
+
 export default function ViewPageClient({ recipient }: { recipient: string }) {
+  const { address } = useWallet();
   const [stream, setStream] = useState<VestingStream | null | undefined>(undefined);
+  const [showClaim, setShowClaim] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
+  const [currentLedger] = useState(51_200_000);
 
   useEffect(() => {
     fetchSchedule(recipient).then(setStream);
@@ -46,6 +63,8 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
       </main>
     );
   }
+
+  const isRecipient = address === recipient;
 
   return (
     <main className="page">
@@ -77,6 +96,17 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
               {stream.claimableAmount.toLocaleString()} {stream.token}
             </div>
             <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>claimable</div>
+            {isRecipient && stream.status !== "completed" && stream.status !== "cancelled" && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ marginTop: "0.5rem" }}
+                onClick={() => setShowClaim(true)}
+                data-testid="claim-btn"
+              >
+                Claim
+              </button>
+            )}
           </div>
         </div>
 
@@ -88,8 +118,40 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
             {stream.sponsor}
             <CopyButton text={stream.sponsor} label="Copy sponsor address" />
           </dd>
+          {stream.totalDeposit && (
+            <>
+              <dt style={{ color: "#6b7280" }}>Total deposit</dt>
+              <dd>{stream.totalDeposit.toLocaleString()} {stream.token}</dd>
+            </>
+          )}
         </dl>
+
+        {/* Timeline chart */}
+        {stream.startLedger && stream.cliffLedger && stream.endLedger && (
+          <div style={{ marginTop: "0.5rem" }}>
+            <VestingTimeline
+              schedule={{
+                startLedger: stream.startLedger,
+                cliffLedger: stream.cliffLedger,
+                endLedger: stream.endLedger,
+                rate: stream.rate,
+                tokenSymbol: stream.token,
+                currentLedger,
+              }}
+              description="Cumulative claimable tokens over time. The cliff line marks when tokens first unlock."
+            />
+          </div>
+        )}
       </section>
+
+      {showClaim && (
+        <ClaimBottomSheet
+          stream={stream}
+          currentLedger={currentLedger}
+          onClaim={() => claimVested(recipient)}
+          onClose={() => setShowClaim(false)}
+        />
+      )}
     </main>
   );
 }

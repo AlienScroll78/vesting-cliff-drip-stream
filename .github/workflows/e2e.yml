@@ -47,7 +47,9 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-e2e-
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features opt
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Build WASM
         run: cargo build --target wasm32-unknown-unknown --release

@@ -128,6 +128,10 @@ Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens;
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
 | 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
+| 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
+| 9 | `TransferFailed` | Token transfer failed |
+| 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
+| 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
 
 ---
 
@@ -190,6 +194,12 @@ export TOTAL_DURATION=172800  # ~10 days
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
 ---
+
+## SBOM & License Compliance
+
+A Software Bill of Materials (SPDX 2.3 JSON) is generated for every release and attached as `sbom.spdx.json`. License scanning runs on every pull request and blocks merges if a dependency carries a copyleft or unapproved license.
+
+See [docs/sbom.md](docs/sbom.md) for the full policy, allowed license list, and instructions for adding new dependencies.
 
 ## Changelog
 

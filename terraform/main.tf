@@ -11,6 +11,15 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = merge({
+      Application = "vesting-cliff-drip-stream"
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Repository  = "Praisefotos1/vesting-cliff-drip-stream"
+    }, var.additional_tags)
+  }
 }
 
 module "network" {
@@ -31,4 +40,5 @@ module "data" {
   vpc_id             = module.network.vpc_id
   private_subnet_ids = module.network.private_subnet_ids
   db_password        = var.db_password
+  backup_failure_emails = var.cost_alert_emails
 }
