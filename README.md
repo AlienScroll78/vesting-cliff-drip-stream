@@ -68,6 +68,27 @@ Key design decisions (storage layout, rate type, cliff math, error codes, TTL st
 
 For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
 
+## Infrastructure Operations
+
+Terraform-managed AWS infrastructure (ECS, RDS, VPC, IAM). Configuration lives in [`terraform/`](terraform/).
+
+### Drift Detection
+
+A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) runs `terraform plan` daily at **02:00 UTC** against production state. If the plan detects any changes (exit code 2), it:
+
+1. Opens a GitHub issue labelled `infrastructure` + `drift` with the full plan output.
+2. Sends a Slack alert to `#ops`.
+
+### Operations Runbooks
+
+| Runbook | Purpose |
+|---------|---------|
+| [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
+| [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
+| [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
+| [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
+
+See the full [runbooks index](docs/runbooks/README.md) for all operational procedures.
 
 ---
 
