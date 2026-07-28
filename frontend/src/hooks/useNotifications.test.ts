@@ -16,13 +16,13 @@ describe("useNotifications", () => {
 
     expect(result.current.notifications).toHaveLength(1);
     expect(result.current.unreadCount).toBe(1);
-    expect(result.current.notifications[0].type).toBe("claim_available");
+    expect(result.current.notifications[0]!.type).toBe("claim_available");
 
     act(() => {
-      result.current.markRead(result.current.notifications[0].id);
+      result.current.markRead(result.current.notifications[0]!.id);
     });
 
-    expect(result.current.notifications[0].read).toBe(true);
+    expect(result.current.notifications[0]!.read).toBe(true);
     expect(result.current.unreadCount).toBe(0);
   });
 
@@ -51,6 +51,6 @@ describe("useNotifications", () => {
     });
 
     expect(result.current.notifications).toHaveLength(50);
-    expect(result.current.notifications[0].title).toBe("Reminder 59");
+    expect(result.current.notifications[0]!.title).toBe("Reminder 59");
   });
 });
