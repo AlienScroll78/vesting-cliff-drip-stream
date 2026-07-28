@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
+.PHONY: all build test spec-test optimize clean fmt lint check doc fuzz test-integration test-e2e test-e2e-ui
 
 all: build
 
@@ -40,6 +40,13 @@ lint:
 ## Type-check without building
 check:
 	cargo check --all-targets --all-features
+
+## Run fuzz targets with cargo-fuzz (requires nightly toolchain)
+## Each target runs for 60 seconds by default
+fuzz:
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/create_vesting_stream/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/claim_vested/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/metadata_validation/
 
 ## Build rustdoc; fails on any missing-doc warning (mirrors CI)
 doc:

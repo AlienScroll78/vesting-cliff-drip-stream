@@ -46,6 +46,24 @@ jobs:
       - name: Docs
         run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 
+      - name: Install nightly for fuzz
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Fuzz create_vesting_stream
+        run: cargo fuzz run create_vesting_stream -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/create_vesting_stream/
+        continue-on-error: true
+
+      - name: Fuzz claim_vested
+        run: cargo fuzz run claim_vested -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/claim_vested/
+        continue-on-error: true
+
+      - name: Fuzz metadata_validation
+        run: cargo fuzz run metadata_validation -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/metadata_validation/
+        continue-on-error: true
+
   typecheck:
     runs-on: ubuntu-latest
     defaults:
