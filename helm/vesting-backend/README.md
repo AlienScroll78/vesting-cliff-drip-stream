@@ -65,17 +65,20 @@ curl http://localhost:8080/health
 
 ---
 
-## Install (production)
+## Environment-specific overrides
+
+Override files are provided for staging and production:
 
 ```bash
+# Staging
+helm install vesting-backend ./helm/vesting-backend \
+  --namespace vesting-staging --create-namespace \
+  -f helm/vesting-backend/values-staging.yaml
+
+# Production
 helm install vesting-backend ./helm/vesting-backend \
   --namespace vesting --create-namespace \
-  --set image.repository=ghcr.io/your-org/vesting-backend \
-  --set image.tag=1.2.0 \
-  --set ingress.host=api.vesting.example.com \
-  --set ingress.tls.enabled=true \
-  --set externalSecret.secretStoreRef.name=aws-secretsmanager \
-  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/vesting-backend
+  -f helm/vesting-backend/values-production.yaml
 ```
 
 ## Upgrade
@@ -117,6 +120,8 @@ helm uninstall vesting-backend --namespace vesting
 | `hpa.minReplicas` | `1` | Minimum replicas |
 | `hpa.maxReplicas` | `5` | Maximum replicas |
 | `hpa.targetCPUUtilizationPercentage` | `70` | CPU utilization target % |
+| `podDisruptionBudget.enabled` | `false` | Create PodDisruptionBudget |
+| `podDisruptionBudget.minAvailable` | `1` | Minimum available pods during disruption |
 | `podAnnotations` | `{}` | Pod annotations (e.g. `reloader.stakater.com/auto: "true"`) |
 | `serviceAccount.create` | `true` | Create a ServiceAccount |
 | `serviceAccount.annotations` | `{}` | Annotations (e.g. IRSA role ARN) |
@@ -133,6 +138,12 @@ helm uninstall vesting-backend --namespace vesting
 | `externalSecret.secretStoreRef.name` | `aws-secretsmanager` | ClusterSecretStore / SecretStore name |
 | `externalSecret.secretStoreRef.kind` | `ClusterSecretStore` | `ClusterSecretStore` or `SecretStore` |
 | `externalSecret.remoteSecrets` | see values.yaml | Map of `ENV_VAR → {remoteKey, property}` |
+| `eventWorker.enabled` | `true` | Deploy separate event-indexing worker deployment |
+| `eventWorker.replicaCount` | `1` | Event worker replicas |
+| `eventWorker.resources` | see values.yaml | Event worker resource requests/limits |
+| `eventWorker.hpa.enabled` | `true` | HPA for event worker |
+| `eventWorker.hpa.minReplicas` | `1` | Event worker min replicas |
+| `eventWorker.hpa.maxReplicas` | `3` | Event worker max replicas |
 
 ### Default secret keys pulled from the secret store
 

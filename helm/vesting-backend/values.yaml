@@ -50,6 +50,13 @@ hpa:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
 
+# PodDisruptionBudget — set minAvailable or maxUnavailable to control
+# availability during voluntary disruptions (node drains, rolling updates).
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
 # Requires Argo Rollouts and the ingress-nginx traffic-routing plugin. The
 # rollout automatically aborts and returns traffic to stable on failed
 # Prometheus error-rate analysis.
@@ -133,3 +140,25 @@ externalSecret:
     HORIZON_API_KEY:
       remoteKey: vesting/production/app-secrets
       property: horizon_api_key
+
+# ── Event Worker ────────────────────────────────────────────────────────────
+# Separate deployment for the background event-indexing worker.  Reuses the
+# same container image with a different command/args entrypoint.
+eventWorker:
+  enabled: true
+  replicaCount: 1
+  # Command override (if the image supports multiple entrypoints)
+  # command: ["node", "dist/worker.js"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podAnnotations: {}
