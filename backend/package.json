@@ -7,7 +7,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:resilience": "vitest run --reporter=verbose src/routes/horizon-resilience.test.ts",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "express": "^4.21.2",
