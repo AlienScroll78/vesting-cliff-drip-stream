@@ -6,7 +6,7 @@
 //!     same address, which is confusing and hard to reason about.
 //!
 //! `create_vesting_stream` now rejects this case with `InvalidRecipient`
-//! (error code 10).
+//! (error code 11).
 //!
 //! # Note on the Soroban test client
 //! In testutils mode, the generated `VestingDripsClient` exposes two variants:
@@ -46,14 +46,14 @@ fn test_create_stream_sponsor_equals_recipient_fails() {
     assert_eq!(
         err,
         VestingError::InvalidRecipient,
-        "sponsor == recipient must return InvalidRecipient (code 10)"
+        "sponsor == recipient must return InvalidRecipient (code 11)"
     );
 }
 
-/// The `InvalidRecipient` error code is pinned to 10.
+/// The `InvalidRecipient` error code is pinned to 11.
 #[test]
-fn test_invalid_recipient_error_code_is_10() {
-    assert_eq!(VestingError::InvalidRecipient as u32, 10);
+fn test_invalid_recipient_error_code_is_11() {
+    assert_eq!(VestingError::InvalidRecipient as u32, 11);
 }
 
 /// Normal flow (sponsor ≠ recipient) must be unaffected by the new check.

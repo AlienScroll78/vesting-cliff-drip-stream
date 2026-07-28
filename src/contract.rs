@@ -2,8 +2,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
 
 use crate::{
     error::VestingError,
-    events,
-    storage,
+    events, storage,
     types::{StreamStatus, VestingSchedule},
 };
 
@@ -153,8 +152,8 @@ impl VestingDrips {
             // In production, replace with a stored admin key check if needed.
         }
 
-        let mut schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         // Already up-to-date — nothing to do.
         if schedule.version >= 1 {
@@ -182,37 +181,39 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current_ledger = env.ledger().sequence();
         let token_client = token::Client::new(&env, &schedule.token);
 
         // Determine how much has already been earned (if cliff passed).
-        let (recipient_share, sponsor_refund) =
-            if current_ledger >= schedule.cliff_ledger {
-                let active_end = current_ledger.min(schedule.end_ledger);
-                let earned_ledgers = active_end - schedule.last_claimed_ledger;
-                let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
+        let (recipient_share, sponsor_refund) = if current_ledger >= schedule.cliff_ledger {
+            let active_end = current_ledger.min(schedule.end_ledger);
+            let earned_ledgers = active_end - schedule.last_claimed_ledger;
+            let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
 
-                // Remaining tokens not yet accrued go back to sponsor.
-                let unclaimed_from_end = (schedule.end_ledger - active_end) as i128
-                    * schedule.rate_per_ledger;
-                (earned, unclaimed_from_end)
-            } else {
-                // Cliff not passed – full refund to sponsor.
-                let total_remaining =
-                    (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-                        * schedule.rate_per_ledger;
-                (0_i128, total_remaining)
-            };
+            // Remaining tokens not yet accrued go back to sponsor.
+            let unclaimed_from_end =
+                (schedule.end_ledger - active_end) as i128 * schedule.rate_per_ledger;
+            (earned, unclaimed_from_end)
+        } else {
+            // Cliff not passed – full refund to sponsor.
+            let total_remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+                * schedule.rate_per_ledger;
+            (0_i128, total_remaining)
+        };
 
         // Perform transfers before mutating storage so that a transfer failure
         // leaves the schedule intact (atomicity: schedule is only removed if
         // both transfers succeed).
         if recipient_share > 0 {
             token_client
-                .try_transfer(&env.current_contract_address(), &recipient, &recipient_share)
+                .try_transfer(
+                    &env.current_contract_address(),
+                    &recipient,
+                    &recipient_share,
+                )
                 .map_err(|_| VestingError::TransferFailed)?;
         }
         if sponsor_refund > 0 {
@@ -243,8 +244,8 @@ impl VestingDrips {
     pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
         recipient.require_auth();
 
-        let mut schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current_ledger = env.ledger().sequence();
 
@@ -265,7 +266,11 @@ impl VestingDrips {
         // transfer failure leaves the schedule intact.
         let token_client = token::Client::new(&env, &schedule.token);
         token_client
-            .try_transfer(&env.current_contract_address(), &recipient, &claimable_amount)
+            .try_transfer(
+                &env.current_contract_address(),
+                &recipient,
+                &claimable_amount,
+            )
             .map_err(|_| VestingError::TransferFailed)?;
 
         // Update or remove the schedule only after the transfer succeeds.
@@ -288,10 +293,7 @@ impl VestingDrips {
     // ── Read-only views ───────────────────────────────────────────────────────
 
     /// Returns the full `VestingSchedule` for `recipient`, or `None`.
-    pub fn get_schedule(
-        env: Env,
-        recipient: Address,
-    ) -> Option<VestingSchedule> {
+    pub fn get_schedule(env: Env, recipient: Address) -> Option<VestingSchedule> {
         storage::get_schedule(&env, &recipient)
     }
 
@@ -357,8 +359,8 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current = env.ledger().sequence();
 
@@ -366,16 +368,14 @@ impl VestingDrips {
             return Err(VestingError::StreamNotExpired);
         }
 
-        let drain_available_at = schedule
-            .end_ledger
-            .saturating_add(DRAIN_DELAY_LEDGERS);
+        let drain_available_at = schedule.end_ledger.saturating_add(DRAIN_DELAY_LEDGERS);
         if current < drain_available_at {
             return Err(VestingError::DrainDelayNotExpired);
         }
 
         // Any unclaimed remainder: full remaining balance from last_claimed_ledger.
-        let amount = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-            * schedule.rate_per_ledger;
+        let amount =
+            (schedule.end_ledger - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger;
 
         // Transfer before mutating storage so that a transfer failure leaves
         // the schedule intact.
@@ -404,8 +404,7 @@ impl VestingDrips {
     pub fn get_stats(env: Env, recipient: Address) -> Option<StreamStats> {
         let schedule = storage::get_schedule(&env, &recipient)?;
 
-        let total_duration =
-            (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_duration = (schedule.end_ledger - schedule.start_ledger) as i128;
         let total_deposited = schedule.rate_per_ledger * total_duration;
 
         // Read the authoritative on-chain counter directly.

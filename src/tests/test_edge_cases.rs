@@ -61,7 +61,7 @@ fn test_multiple_independent_streams() {
     let claimed_a = client.claim_vested(&recipient_a).unwrap();
     let claimed_b = client.claim_vested(&recipient_b).unwrap();
 
-    assert_eq!(claimed_a, 700);   // 70 × 10
+    assert_eq!(claimed_a, 700); // 70 × 10
     assert_eq!(claimed_b, 1_050); // 70 × 15
     assert_eq!(token_client.balance(&recipient_a), 700);
     assert_eq!(token_client.balance(&recipient_b), 1_050);
@@ -274,8 +274,8 @@ fn test_regression_negative_rate_rejected() {
 /// TTL = bump_amount - 1 because the current ledger is counted during creation.
 #[test]
 fn test_ttl_bumped_on_write() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
@@ -308,8 +308,8 @@ fn test_ttl_bumped_on_write() {
 /// the schedule bumps TTL back to PERSISTENT_BUMP_AMOUNT - 1 from the new ledger.
 #[test]
 fn test_ttl_bumped_on_read() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
     let contract_id = env.register(VestingDrips, ());
@@ -367,8 +367,8 @@ fn test_ttl_bumped_on_read() {
 /// Therefore `ScheduleNotFound` is always raised via explicit removal, not expiry.
 #[test]
 fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
     let contract_id = env.register(VestingDrips, ());

@@ -16,11 +16,11 @@ fn setup_stream(
     total_duration: u32,
 ) -> (
     soroban_sdk::Env,
-    Address,          // contract_id
+    Address, // contract_id
     VestingDripsClient<'static>,
-    Address,          // sponsor
-    Address,          // recipient
-    Address,          // token_id
+    Address, // sponsor
+    Address, // recipient
+    Address, // token_id
 ) {
     // Work-around: clone env for 'static lifetime in test context
     let env = setup_env();
@@ -34,7 +34,14 @@ fn setup_stream(
     mint_to(&env, &token_id, &sponsor, deposit);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
+        .create_vesting_stream(
+            &sponsor,
+            &recipient,
+            &token_id,
+            &rate,
+            &cliff_duration,
+            &total_duration,
+        )
         .unwrap();
 
     (env, contract_id, client, sponsor, recipient, token_id)
@@ -180,8 +187,7 @@ fn test_claim_nonexistent_schedule_fails() {
 #[test]
 fn test_claimable_amount_at_end_ledger() {
     // rate=10, cliff=50, total=200 → deposit=2000, end_ledger=300
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) = setup_stream(10, 50, 200);
 
     // Advance exactly to end_ledger (start=100, end=300 → +200 ledgers)
     advance_ledger(&env, 200);
@@ -193,8 +199,7 @@ fn test_claimable_amount_at_end_ledger() {
 #[test]
 fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
     // rate=10, cliff=50, total=200 → deposit=2000
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) = setup_stream(10, 50, 200);
 
     // Claim halfway through (at ledger 200 = start+100)
     advance_ledger(&env, 100);
@@ -209,8 +214,7 @@ fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
 
 #[test]
 fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
+    let (env, _contract_id, client, _sponsor, recipient, _token_id) = setup_stream(10, 50, 200);
 
     // Advance past end and claim everything
     advance_ledger(&env, 300);
