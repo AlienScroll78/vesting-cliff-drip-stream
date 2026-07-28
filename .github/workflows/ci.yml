@@ -40,6 +40,12 @@ jobs:
       - name: Tests
         run: cargo test --features testutils
 
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Coverage check (90% lines, 80% branches)
+        run: cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
+
       - name: Build WASM
         run: cargo build --target wasm32-unknown-unknown --release
 

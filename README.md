@@ -1,5 +1,7 @@
 # Vesting Cliff Drip Stream
 
+[![Coverage](https://img.shields.io/badge/coverage-90%25-green?logo=rust)](docs/coverage/html/index.html)
+
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
 
 > Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.

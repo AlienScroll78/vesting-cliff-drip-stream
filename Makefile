@@ -18,6 +18,17 @@ build:
 test:
 	cargo test --features testutils
 
+## Run coverage with cargo-llvm-cov (install: cargo install cargo-llvm-cov)
+## Generates HTML report in docs/coverage/html and lcov.info in docs/coverage/
+coverage:
+	cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
+	cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
+
+## Run coverage in CI mode with threshold enforcement
+## Fails if line coverage < 90% or branch coverage < 80%
+coverage-ci:
+	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
+
 ## Validate the on-chain contract spec (schema) against the expected API.
 ## Requires the WASM to be built first; spec-test depends on `build`.
 spec-test: build
