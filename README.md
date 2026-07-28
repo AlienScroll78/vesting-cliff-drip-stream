@@ -129,8 +129,9 @@ Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens;
 | 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
 | 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
-| 9 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
-| 10 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
+| 9 | `TransferFailed` | Token transfer failed |
+| 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
+| 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
 
 ---
 

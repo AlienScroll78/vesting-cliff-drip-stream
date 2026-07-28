@@ -47,6 +47,28 @@ hpa:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
 
+# Requires Argo Rollouts and the ingress-nginx traffic-routing plugin. The
+# rollout automatically aborts and returns traffic to stable on failed
+# Prometheus error-rate analysis.
+canary:
+  enabled: false
+  steps:
+    initialWeight: 10
+    initialPause: 5m
+    secondWeight: 25
+    secondPause: 10m
+  analysis:
+    prometheusAddress: ""
+    maxErrorRate: 0.02
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    labels:
+      release: prometheus
+    path: /metrics
+    interval: 30s
+
 # ServiceAccount — set create: true to have the chart manage it,
 # or set name to an existing SA (e.g. one with an IRSA annotation).
 serviceAccount:
