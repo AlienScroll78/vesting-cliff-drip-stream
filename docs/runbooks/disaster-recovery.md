@@ -5,7 +5,7 @@
 | Target | Value | Definition |
 |--------|-------|------------|
 | **RTO** | 2 hours | Maximum time from incident declaration to service restored |
-| **RPO** | 24 hours | Maximum acceptable data loss (one daily backup cycle) |
+| **RPO** | 5 minutes | Maximum acceptable data loss; PITR replays RDS archived WAL to a chosen recovery time within 35 days |
 
 ---
 

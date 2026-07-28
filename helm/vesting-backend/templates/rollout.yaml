@@ -1,14 +1,13 @@
-{{- if not .Values.canary.enabled }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if .Values.canary.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "vesting-backend.fullname" . }}
   labels:
     {{- include "vesting-backend.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.hpa.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
       {{- include "vesting-backend.selectorLabels" . | nindent 6 }}
@@ -30,12 +29,10 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
-              drop:
-                - ALL
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: {{ .Values.appPort }}
-              protocol: TCP
           env:
             - name: PORT
               value: {{ .Values.appPort | quote }}
@@ -53,17 +50,13 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
-            httpGet:
-              path: /health
-              port: http
+            httpGet: { path: /health, port: http }
             initialDelaySeconds: 10
             periodSeconds: 30
             failureThreshold: 3
             timeoutSeconds: 5
           readinessProbe:
-            httpGet:
-              path: /ready
-              port: http
+            httpGet: { path: /ready, port: http }
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
@@ -74,4 +67,24 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+  strategy:
+    canary:
+      canaryService: {{ include "vesting-backend.fullname" . }}-canary
+      stableService: {{ include "vesting-backend.fullname" . }}
+      trafficRouting:
+        nginx:
+          stableIngress: {{ include "vesting-backend.fullname" . }}
+      abortScaleDownDelaySeconds: 30
+      steps:
+        - setWeight: {{ .Values.canary.steps.initialWeight }}
+        - pause: { duration: {{ .Values.canary.steps.initialPause }} }
+        - analysis:
+            templates:
+              - templateName: {{ include "vesting-backend.fullname" . }}-error-rate
+        - setWeight: {{ .Values.canary.steps.secondWeight }}
+        - pause: { duration: {{ .Values.canary.steps.secondPause }} }
+        - analysis:
+            templates:
+              - templateName: {{ include "vesting-backend.fullname" . }}-error-rate
+        - setWeight: 100
 {{- end }}
