@@ -9,6 +9,7 @@
     "chromatic": "chromatic --exit-zero-on-changes"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.26.28",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.0.7",
     "typescript": "^5.7.2",
