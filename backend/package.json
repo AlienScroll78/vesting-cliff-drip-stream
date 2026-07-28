@@ -7,7 +7,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:property": "vitest run --reporter=verbose --test-timeout=30000 src/routes/property-based.test.ts",
+    "test:resilience": "vitest run --reporter=verbose src/routes/horizon-resilience.test.ts",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -23,6 +26,7 @@
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
+    "fast-check": "^3.23.0",
     "vitest": "^2.1.9"
   }
 }
