@@ -1,102 +1,57 @@
-#!/usr/bin/env bash
-# scripts/run_horizon_toxiproxy_tests.sh
-#
-# Spin up the resilience docker-compose stack, wait for services to be healthy,
-# initialise Toxiproxy proxies, and then run the resilience test suite.
-#
-# Usage:
-#   ./scripts/run_horizon_toxiproxy_tests.sh [--keep-up]
-#
-# Options:
-#   --keep-up   Do not tear down containers after the run (useful for debugging)
-#
-# Exit code mirrors the Jest exit code.
+#!/usr/bin/env sh
+set -eu
 
-set -euo pipefail
+BACKEND_BASE_URL="${BACKEND_BASE_URL:-http://127.0.0.1:3000}"
+TOXIPROXY_URL="${TOXIPROXY_URL:-http://127.0.0.1:8474}"
+HORIZON_UPSTREAM="${HORIZON_UPSTREAM:-horizon-testnet.stellar.org:443}"
+HORIZON_PROXY="${HORIZON_PROXY:-127.0.0.1:8666}"
+HORIZON_STATUS_PATH="${HORIZON_STATUS_PATH:-/health/horizon}"
+CIRCUIT_BREAKER_PATH="${CIRCUIT_BREAKER_PATH:-/health/horizon/circuit-breaker}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-COMPOSE_FILE="${REPO_ROOT}/docker-compose.toxiproxy.yml"
-KEEP_UP=false
+request_backend() {
+  curl -sS -o /tmp/horizon-test-response -w "%{http_code}" \
+    "$BACKEND_BASE_URL$HORIZON_STATUS_PATH"
+}
 
-for arg in "$@"; do
-  if [[ "$arg" == "--keep-up" ]]; then
-    KEEP_UP=true
+assert_503() {
+  status="$(request_backend || true)"
+  if [ "$status" != "503" ]; then
+    echo "expected backend to return 503, got $status"
+    cat /tmp/horizon-test-response 2>/dev/null || true
+    exit 1
   fi
-done
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-log() { echo "[toxiproxy-runner] $*"; }
-
-wait_for_port() {
-  local host=$1 port=$2 label=$3 retries=30
-  log "Waiting for ${label} (${host}:${port})…"
-  while ! nc -z "${host}" "${port}" 2>/dev/null; do
-    retries=$((retries - 1))
-    if [[ $retries -le 0 ]]; then
-      log "ERROR: ${label} did not become available in time."
-      exit 1
-    fi
-    sleep 1
-  done
-  log "${label} is up."
 }
 
-toxiproxy_create_proxy() {
-  local name=$1 listen=$2 upstream=$3
-  curl -sf -X POST http://localhost:8474/proxies \
-    -H 'Content-Type: application/json' \
-    -d "{\"name\":\"${name}\",\"listen\":\"0.0.0.0:${listen}\",\"upstream\":\"${upstream}\"}" \
-    > /dev/null || true   # tolerate "already exists" on reruns
+reset_proxy() {
+  curl -sS -X DELETE "$TOXIPROXY_URL/proxies/horizon" >/dev/null 2>&1 || true
+  curl -sS -X POST "$TOXIPROXY_URL/proxies" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"horizon\",\"listen\":\"$HORIZON_PROXY\",\"upstream\":\"$HORIZON_UPSTREAM\"}" \
+    >/dev/null
 }
 
-# ── Start stack ───────────────────────────────────────────────────────────────
+add_toxic() {
+  curl -sS -X POST "$TOXIPROXY_URL/proxies/horizon/toxics" \
+    -H "Content-Type: application/json" \
+    -d "$1" >/dev/null
+}
 
-log "Starting docker-compose stack…"
-docker compose -f "${COMPOSE_FILE}" up -d
+verify_circuit_breaker_open() {
+  body="$(curl -sS "$BACKEND_BASE_URL$CIRCUIT_BREAKER_PATH")"
+  echo "$body" | grep -qi "open"
+}
 
-# ── Wait for infrastructure ───────────────────────────────────────────────────
+reset_proxy
 
-wait_for_port localhost 8474   "Toxiproxy control API"
-wait_for_port localhost 5432   "Postgres (direct)"   || true  # may not be exposed
-wait_for_port localhost 6379   "Redis (direct)"       || true
-wait_for_port localhost 1080   "Mock Horizon"         || true
-wait_for_port localhost 9000   "Mock Webhook target"  || true
+curl -sS -X DELETE "$TOXIPROXY_URL/proxies/horizon" >/dev/null
+assert_503
 
-# Give WireMock an extra moment to initialise stub mappings.
-sleep 2
+reset_proxy
+add_toxic '{"name":"timeout","type":"timeout","stream":"downstream","toxicity":1,"attributes":{"timeout":0}}'
+assert_503
 
-# ── Configure Toxiproxy proxies ───────────────────────────────────────────────
+reset_proxy
+add_toxic '{"name":"slow_response","type":"latency","stream":"downstream","toxicity":1,"attributes":{"latency":30000,"jitter":0}}'
+assert_503
 
-log "Registering Toxiproxy proxies…"
-
-toxiproxy_create_proxy "horizon"       18080 "horizon:1080"
-toxiproxy_create_proxy "postgres"      15432 "postgres:5432"
-toxiproxy_create_proxy "redis"         16379 "redis:6379"
-toxiproxy_create_proxy "webhook"       19000 "webhook-target:9000"
-
-log "All proxies registered."
-
-# ── Run tests ─────────────────────────────────────────────────────────────────
-
-cd "${REPO_ROOT}/backend"
-
-TOXIPROXY_HOST=localhost \
-TOXIPROXY_PORT=8474 \
-HORIZON_URL="http://localhost:18080" \
-DATABASE_URL="postgres://vesting:vesting@localhost:15432/vesting_test" \
-REDIS_URL="redis://localhost:16379" \
-WEBHOOK_TARGET_URL="http://localhost:19000/webhook" \
-  npx jest --testPathPattern=resilience --runInBand --forceExit
-
-TEST_EXIT_CODE=$?
-
-# ── Tear down ─────────────────────────────────────────────────────────────────
-
-if [[ "$KEEP_UP" == "false" ]]; then
-  log "Tearing down docker-compose stack…"
-  docker compose -f "${COMPOSE_FILE}" down -v
-fi
-
-exit ${TEST_EXIT_CODE}
+verify_circuit_breaker_open
