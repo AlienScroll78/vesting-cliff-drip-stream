@@ -9,6 +9,10 @@ pub struct VestingSchedule {
     /// The token being streamed.
     pub token: Address,
 
+    /// The sponsor (funder) who created this stream.
+    /// Required for drain operations where unclaimed tokens are returned to sponsor.
+    pub sponsor: Address,
+
     /// Tokens released per ledger once the cliff has passed.
     pub rate_per_ledger: i128,
 
@@ -32,4 +36,7 @@ pub struct VestingSchedule {
 pub enum DataKey {
     /// Per-recipient vesting schedule.
     Schedule(Address),
+
+    /// Instance-level configuration: minimum deposit (i128).
+    MinDeposit,
 }

@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test optimize clean fmt lint check
+.PHONY: all build test optimize clean fmt lint check mutants
 
 all: build
 
@@ -39,3 +39,10 @@ check:
 ## Remove build artifacts
 clean:
 	cargo clean
+
+## Run mutation testing against critical arithmetic paths.
+## Fails (non-zero exit) if any arithmetic mutant in contract.rs or storage.rs survives.
+## Requires cargo-mutants: cargo install cargo-mutants
+mutants:
+	cargo mutants --package vesting-cliff-drip-stream --features testutils \
+	    -- --test-threads=1
