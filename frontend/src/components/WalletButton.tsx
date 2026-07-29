@@ -2,11 +2,13 @@
 import { useState } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { CopyButton } from "@/components/CopyButton";
+import { DisconnectWalletDialog } from "@/components/CancelConfirmModal";
 
 export function WalletButton() {
   const { address, freighterInstalled, connect, disconnect } = useWallet();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDisconnect, setShowDisconnect] = useState(false);
 
   async function handleConnect() {
     setError(null);
@@ -18,6 +20,11 @@ export function WalletButton() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleDisconnectConfirm() {
+    setShowDisconnect(false);
+    disconnect();
   }
 
   // Freighter not installed
@@ -41,28 +48,38 @@ export function WalletButton() {
   if (address) {
     const truncated = `${address.slice(0, 6)}…${address.slice(-4)}`;
     return (
-      <div className="wallet-connected" role="group" aria-label="Wallet account">
-        <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-          <span
-            data-testid="wallet-address"
-            className="wallet-address"
-            title={address}
-            aria-label={`Connected wallet: ${address}`}
+      <>
+        <div className="wallet-connected" role="group" aria-label="Wallet account">
+          <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <span
+              data-testid="wallet-address"
+              className="wallet-address"
+              title={address}
+              aria-label={`Connected wallet: ${address}`}
+            >
+              {truncated}
+            </span>
+            <CopyButton text={address} label="Copy wallet address" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDisconnect(true)}
+            className="btn btn-outline"
+            data-testid="disconnect-wallet"
+            aria-label="Disconnect wallet"
           >
-            {truncated}
-          </span>
-          <CopyButton text={address} label="Copy wallet address" />
+            Disconnect
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={disconnect}
-          className="btn btn-outline"
-          data-testid="disconnect-wallet"
-          aria-label="Disconnect wallet"
-        >
-          Disconnect
-        </button>
-      </div>
+
+        {/* #378 — Disconnect confirmation dialog */}
+        {showDisconnect && (
+          <DisconnectWalletDialog
+            onConfirm={handleDisconnectConfirm}
+            onClose={() => setShowDisconnect(false)}
+          />
+        )}
+      </>
     );
   }
 

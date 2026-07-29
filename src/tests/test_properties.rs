@@ -3,9 +3,9 @@
 use proptest::prelude::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
+use super::token_helper::{create_token, mint_to};
 use crate::contract::VestingDripsClient;
 use crate::tests::{advance_ledger, setup_env};
-use super::token_helper::{create_token, mint_to};
 
 // Property: claimable never exceeds total deposit (rate * total_duration)
 proptest! {
