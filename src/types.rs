@@ -1,3 +1,8 @@
+// `#[contracttype]` emits an inherent `impl Type { spec_xdr() }` with no doc
+// comment of its own; rustc doesn't propagate item-level `#[allow]` onto
+// attribute-macro-generated sibling impls, so the allow has to be module-scoped.
+#![allow(missing_docs)]
+
 use soroban_sdk::{contracttype, Address};
 
 /// Represents a single vesting schedule stored per recipient.
@@ -24,6 +29,10 @@ pub struct VestingSchedule {
 
     /// The token being streamed.
     pub token: Address,
+
+    /// The sponsor (funder) who created this stream.
+    /// Required for drain operations where unclaimed tokens are returned to sponsor.
+    pub sponsor: Address,
 
     /// Tokens released per ledger once the cliff has passed.
     pub rate_per_ledger: i128,
@@ -53,6 +62,9 @@ pub struct VestingSchedule {
 pub enum DataKey {
     /// Per-recipient vesting schedule.
     Schedule(Address),
+
+    /// Instance-level configuration: minimum deposit (i128).
+    MinDeposit,
 }
 
 /// Human-readable status of a vesting stream.

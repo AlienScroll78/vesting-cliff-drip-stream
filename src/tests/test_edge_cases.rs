@@ -61,7 +61,7 @@ fn test_multiple_independent_streams() {
     let claimed_a = client.claim_vested(&recipient_a).unwrap();
     let claimed_b = client.claim_vested(&recipient_b).unwrap();
 
-    assert_eq!(claimed_a, 700);   // 70 × 10
+    assert_eq!(claimed_a, 700); // 70 × 10
     assert_eq!(claimed_b, 1_050); // 70 × 15
     assert_eq!(token_client.balance(&recipient_a), 700);
     assert_eq!(token_client.balance(&recipient_b), 1_050);
@@ -274,8 +274,8 @@ fn test_regression_negative_rate_rejected() {
 /// TTL = bump_amount - 1 because the current ledger is counted during creation.
 #[test]
 fn test_ttl_bumped_on_write() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
@@ -302,14 +302,15 @@ fn test_ttl_bumped_on_write() {
     });
 }
 
-/// TTL read path: `get_schedule` re-extends TTL on every read.
+/// TTL read path: mutating calls (via `storage::get_schedule`) re-extend TTL.
 ///
-/// Verify that after ledger advances (reducing TTL), a contract call that reads
-/// the schedule bumps TTL back to PERSISTENT_BUMP_AMOUNT - 1 from the new ledger.
+/// Verify that after ledger advances (reducing TTL), a contract call that
+/// reads the schedule on a mutating path bumps TTL back to
+/// PERSISTENT_BUMP_AMOUNT - 1 from the new ledger.
 #[test]
 fn test_ttl_bumped_on_read() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
     let contract_id = env.register(VestingDrips, ());
@@ -337,8 +338,8 @@ fn test_ttl_bumped_on_read() {
         );
     });
 
-    // Any read-touching call (claimable_amount → get_schedule) re-bumps TTL.
-    client.claimable_amount(&recipient);
+    // A mutating call (claim_vested → storage::get_schedule) re-bumps TTL.
+    client.claim_vested(&recipient);
 
     // TTL is restored to 518_399 relative to the new current ledger.
     env.as_contract(&contract_id, || {
@@ -347,6 +348,47 @@ fn test_ttl_bumped_on_read() {
                 .persistent()
                 .get_ttl(&DataKey::Schedule(recipient.clone())),
             518_399
+        );
+    });
+}
+
+/// Perf optimisation (issue #16): pure read-only views must NOT bump TTL.
+///
+/// `claimable_amount` is called on every UI refresh, far more often than any
+/// mutating entry point. Routing it through `storage::get_schedule_readonly`
+/// skips the `extend_ttl` host call entirely, cutting its instruction cost
+/// without changing the returned value.
+#[test]
+fn test_claimable_amount_does_not_bump_ttl() {
+    use soroban_sdk::testutils::storage::Persistent;
+    use crate::types::DataKey;
+
+    let env = setup_env(); // sequence_number = 100
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .unwrap();
+
+    // Advance 200_000 ledgers without any contract interaction.
+    // TTL decays from 518_399 to 318_399.
+    advance_ledger(&env, 200_000);
+
+    // A pure view call must not touch the entry's TTL.
+    client.claimable_amount(&recipient);
+
+    env.as_contract(&contract_id, || {
+        assert_eq!(
+            env.storage()
+                .persistent()
+                .get_ttl(&DataKey::Schedule(recipient.clone())),
+            318_399
         );
     });
 }
@@ -367,8 +409,8 @@ fn test_ttl_bumped_on_read() {
 /// Therefore `ScheduleNotFound` is always raised via explicit removal, not expiry.
 #[test]
 fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found() {
-    use soroban_sdk::testutils::storage::Persistent;
     use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
     let contract_id = env.register(VestingDrips, ());

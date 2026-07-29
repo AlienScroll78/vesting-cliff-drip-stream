@@ -31,7 +31,7 @@ fn test_create_stream_success() {
     assert_eq!(schedule.rate_per_ledger, 10);
     assert_eq!(schedule.start_ledger, 100);
     assert_eq!(schedule.cliff_ledger, 150); // 100 + 50
-    assert_eq!(schedule.end_ledger, 300);   // 100 + 200
+    assert_eq!(schedule.end_ledger, 300); // 100 + 200
     assert_eq!(schedule.last_claimed_ledger, 100);
 
     // Sponsor's balance should be drained.
@@ -206,9 +206,9 @@ fn test_storage_keys_are_per_recipient() {
 
     assert_eq!(alice_sched.rate_per_ledger, 7);
     assert_eq!(alice_sched.cliff_ledger, 140); // 100 + 40
-    assert_eq!(alice_sched.end_ledger, 250);   // 100 + 150
+    assert_eq!(alice_sched.end_ledger, 250); // 100 + 150
 
     assert_eq!(bob_sched.rate_per_ledger, 13);
-    assert_eq!(bob_sched.cliff_ledger, 160);   // 100 + 60
-    assert_eq!(bob_sched.end_ledger, 300);     // 100 + 200
+    assert_eq!(bob_sched.cliff_ledger, 160); // 100 + 60
+    assert_eq!(bob_sched.end_ledger, 300); // 100 + 200
 }
