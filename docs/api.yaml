@@ -1,0 +1,211 @@
+openapi: 3.0.3
+info:
+  title: Vesting Cliff Drip Stream API
+  description: Backend service API for managing vesting streams, Horizon failover, and admin cleanups.
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:3000
+    description: Local server
+paths:
+  /health:
+    get:
+      summary: Overall system health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: System or upstream service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/horizon:
+    get:
+      summary: Horizon status check
+      operationId: getHorizonHealth
+      responses:
+        '200':
+          description: Horizon endpoints are healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  endpoints:
+                    type: array
+                    items:
+                      type: string
+        '503':
+          description: Horizon service unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unavailable
+                  error:
+                    type: string
+
+  /health/horizon/circuit-breaker:
+    get:
+      summary: Horizon circuit breaker status
+      operationId: getCircuitBreakerStatus
+      responses:
+        '200':
+          description: Circuit breaker status string
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: closed
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: closed
+
+  /api/openapi.json:
+    get:
+      summary: Raw OpenAPI specification JSON
+      operationId: getOpenApiJson
+      responses:
+        '200':
+          description: OpenAPI 3.0 JSON specification
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/admin/drain:
+    post:
+      summary: Trigger drain scan for expired streams
+      operationId: drainExpiredStreams
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: dry_run
+          in: query
+          required: false
+          description: If true, scan eligible streams without executing drain transactions
+          schema:
+            type: boolean
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                drain_delay_ledgers:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Drain summary response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrainResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - admin scope required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded (1 execution per 5 minutes)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, unavailable]
+        uptime:
+          type: number
+        horizon:
+          type: object
+    DrainResponse:
+      type: object
+      required:
+        - scanned
+        - eligible
+        - submitted
+        - dry_run
+        - streams
+      properties:
+        scanned:
+          type: integer
+        eligible:
+          type: integer
+        submitted:
+          type: integer
+        dry_run:
+          type: boolean
+        streams:
+          type: array
+          items:
+            type: object
+            properties:
+              recipient:
+                type: string
+              end_ledger:
+                type: integer
+              tx_hash:
+                type: string
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              message:
+                type: string
