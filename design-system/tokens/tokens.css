@@ -1,0 +1,75 @@
+/* ==========================================================================
+   Design Tokens — Vesting Cliff Drip Stream
+   All values defined here; components consume these variables exclusively.
+   ========================================================================== */
+
+:root {
+  /* ── Colour palette ─────────────────────────────────────────────────── */
+  --color-brand-primary:    #7C3AED; /* violet-600 */
+  --color-brand-secondary:  #4F46E5; /* indigo-600 */
+  --color-accent:           #06B6D4; /* cyan-500   */
+
+  --color-success:          #10B981; /* emerald-500 */
+  --color-warning:          #F59E0B; /* amber-500   */
+  --color-danger:           #EF4444; /* red-500     */
+
+  --color-bg-base:          #0F172A; /* slate-900 */
+  --color-bg-surface:       #1E293B; /* slate-800 */
+  --color-bg-elevated:      #334155; /* slate-700 */
+
+  --color-text-primary:     #F8FAFC; /* slate-50  */
+  --color-text-secondary:   #94A3B8; /* slate-400 */
+  --color-text-disabled:    #475569; /* slate-600 */
+
+  --color-border:           #334155; /* slate-700 */
+  --color-border-focus:     #7C3AED; /* brand-primary */
+
+  /* ── Typography scale ────────────────────────────────────────────────── */
+  --font-family-base: 'Inter', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --font-size-xs:   0.75rem;   /*  12px */
+  --font-size-sm:   0.875rem;  /*  14px */
+  --font-size-base: 1rem;      /*  16px */
+  --font-size-lg:   1.125rem;  /*  18px */
+  --font-size-xl:   1.25rem;   /*  20px */
+  --font-size-2xl:  1.5rem;    /*  24px */
+  --font-size-3xl:  1.875rem;  /*  30px */
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --line-height-tight:  1.25;
+  --line-height-base:   1.5;
+  --line-height-loose:  1.75;
+
+  /* ── Spacing scale (4-point grid) ────────────────────────────────────── */
+  --space-1:  0.25rem;  /*  4px */
+  --space-2:  0.5rem;   /*  8px */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-5:  1.25rem;  /* 20px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ── Border radius ───────────────────────────────────────────────────── */
+  --radius-sm:   0.25rem;
+  --radius-base: 0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-full: 9999px;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms ease;
+}

@@ -1,0 +1,6 @@
+{
+  "topics": ["vc_done", "<recipient>"],
+  "data": {
+    "token": "<token>"
+  }
+}
