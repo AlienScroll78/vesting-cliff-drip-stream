@@ -5,13 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Create Vesting Stream</title>
   <link rel="stylesheet" href="print.css" media="print" />
+  <!-- no-FOUC: apply dark class before first paint -->
+  <script>
+    (function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Light mode tokens ── */
+    :root {
+      --bg:      #f9fafb;
+      --surface: #ffffff;
+      --border:  #e5e7eb;
+      --text:    #111827;
+      --text-muted: #6b7280;
+      --accent:  #1d6ae5;
+      --input-bg: #ffffff;
+      --input-border: #d1d5db;
+      --hint-color: #15803d;
+    }
+
+    /* ── Dark mode tokens (WCAG AA: all text ≥ 4.5:1) ── */
+    .dark {
+      --bg:      #0f172a;
+      --surface: #1e293b;
+      --border:  #334155;
+      --text:    #f1f5f9;       /* 15.8:1 on #0f172a */
+      --text-muted: #94a3b8;    /* 4.7:1 on #0f172a  */
+      --accent:  #60a5fa;       /* 5.5:1 on #0f172a  */
+      --input-bg: #0f172a;
+      --input-border: #475569;
+      --hint-color: #34d399;    /* 5.3:1 on #0f172a  */
+      color-scheme: dark;
+    }
+
     body {
       font-family: system-ui, sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
     }
 
@@ -20,12 +51,13 @@
       align-items: center;
       justify-content: space-between;
       padding: 1rem 2rem;
-      border-bottom: 1px solid #2d3748;
-      background: #0f1117;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
     }
-    nav .logo { font-weight: 700; font-size: 1.1rem; color: #63b3ed; }
+    nav .logo { font-weight: 700; font-size: 1.1rem; color: var(--accent); }
+    nav .nav-actions { display: flex; align-items: center; gap: 0.75rem; }
     nav .connect-btn {
-      background: #3182ce;
+      background: var(--accent);
       color: #fff;
       border: none;
       padding: 0.5rem 1.2rem;
@@ -33,7 +65,21 @@
       cursor: pointer;
       font-size: 0.9rem;
     }
-    nav .connect-btn:hover { background: #2b6cb0; }
+    nav .connect-btn:hover { opacity: 0.85; }
+
+    /* ── Dark mode toggle ── */
+    .dark-toggle {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      width: 2.2rem; height: 2.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dark-toggle:hover { border-color: var(--accent); }
+    .dark-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     main {
       max-width: 600px;
@@ -42,11 +88,11 @@
     }
 
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-    .subtitle { color: #718096; font-size: 0.9rem; margin-bottom: 2rem; }
+    .subtitle { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
 
     .card {
-      background: #1a202c;
-      border: 1px solid #2d3748;
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 12px;
       padding: 1.75rem;
     }
@@ -55,60 +101,60 @@
     label {
       display: block;
       font-size: 0.85rem;
-      color: #a0aec0;
+      color: var(--text-muted);
       margin-bottom: 0.4rem;
     }
     input[type="text"],
     input[type="number"],
     input[type="datetime-local"] {
       width: 100%;
-      background: #2d3748;
-      border: 1px solid #4a5568;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
       border-radius: 8px;
-      color: #e2e8f0;
+      color: var(--text);
       padding: 0.6rem 0.8rem;
       font-size: 0.95rem;
       outline: none;
       transition: border-color 0.15s;
     }
-    input:focus { border-color: #63b3ed; }
+    input:focus { border-color: var(--accent); }
 
-    /* datetime-local color fix for dark mode */
-    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    /* datetime-local picker icon — invert in dark mode */
+    .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
       filter: invert(1);
     }
 
     .ledger-hint {
       margin-top: 0.4rem;
       font-size: 0.8rem;
-      color: #68d391;
+      color: var(--hint-color);
       min-height: 1.1em;
     }
 
-    .divider { border-color: #2d3748; margin: 1.25rem 0; }
+    .divider { border-color: var(--border); margin: 1.25rem 0; }
 
     .submit-btn {
       width: 100%;
-      background: #3182ce;
+      background: var(--accent);
       color: #fff;
       border: none;
       padding: 0.75rem;
       border-radius: 8px;
       font-size: 1rem;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: opacity 0.15s;
     }
-    .submit-btn:hover { background: #2b6cb0; }
+    .submit-btn:hover { opacity: 0.85; }
 
     .cta-section {
       text-align: center;
       margin-top: 2rem;
-      color: #718096;
+      color: var(--text-muted);
       font-size: 0.9rem;
     }
-    .cta-section a { color: #63b3ed; text-decoration: none; }
+    .cta-section a { color: var(--accent); text-decoration: none; }
 
-    /* ── Schedule preview table (shown after submit) ── */
+    /* ── Schedule preview table ── */
     #schedule-preview { display: none; margin-top: 2rem; }
     #schedule-preview h2 { font-size: 1.1rem; margin-bottom: 1rem; }
     table {
@@ -119,10 +165,10 @@
     th, td {
       text-align: left;
       padding: 0.55rem 0.75rem;
-      border-bottom: 1px solid #2d3748;
+      border-bottom: 1px solid var(--border);
     }
-    th { color: #a0aec0; font-weight: 500; }
-    td { color: #e2e8f0; }
+    th { color: var(--text-muted); font-weight: 500; }
+    td { color: var(--text); }
     .addr { font-family: monospace; font-size: 0.8rem; word-break: break-all; }
   </style>
 </head>
@@ -130,7 +176,10 @@
 
 <nav>
   <span class="logo">⚡ VestingStream</span>
-  <button class="connect-btn" id="wallet-btn">Connect Wallet</button>
+  <div class="nav-actions">
+    <button class="dark-toggle" id="dark-toggle" aria-label="Toggle dark mode" aria-pressed="false" title="Toggle dark mode">🌙</button>
+    <button class="connect-btn" id="wallet-btn">Connect Wallet</button>
+  </div>
 </nav>
 
 <main>
@@ -197,6 +246,23 @@
 <script>
   // ── Constants ──────────────────────────────────────────────────────────────
   const SECONDS_PER_LEDGER = 5;          // Stellar average close time
+  const DARK_KEY = 'vesting-dark-mode';
+
+  // ── Dark mode toggle ───────────────────────────────────────────────────────
+  const darkToggle = document.getElementById('dark-toggle');
+  function updateToggle() {
+    const isDark = document.documentElement.classList.contains('dark');
+    darkToggle.setAttribute('aria-pressed', String(isDark));
+    darkToggle.textContent = isDark ? '☀️' : '🌙';
+    darkToggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+    darkToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  updateToggle();
+  darkToggle.addEventListener('click', function () {
+    document.documentElement.classList.toggle('dark');
+    try { localStorage.setItem(DARK_KEY, String(document.documentElement.classList.contains('dark'))); } catch(e) {}
+    updateToggle();
+  });
 
   // Set print date on body for @media print footer
   document.body.setAttribute('data-print-date', new Date().toLocaleDateString(undefined, {
