@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun
 
 all: build
 
@@ -76,3 +76,12 @@ test-integration: build
 	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run k6 backend load tests (requires a running backend on localhost:3001)
+## See tests/load/backend_scenarios.js for scenario description.
+test-load:
+	cd tests/load && k6 run backend_scenarios.js
+
+## Run k6 load tests in dry-run mode (skips create/claim mutations)
+test-load-dryrun:
+	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
