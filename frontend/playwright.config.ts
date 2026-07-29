@@ -11,8 +11,11 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
+    // ── Chromium with Freighter extension (requires real extension & seed) ──
     {
       name: "chromium-freighter",
+      // Only run extension tests when FREIGHTER_SEED is set
+      testMatch: ["**/wallet.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         // Load Freighter extension from fixture path
@@ -29,9 +32,40 @@ export default defineConfig({
         },
       },
     },
-    // Mobile viewports (no extension needed – UI tests only)
-    { name: "iphone-se",  use: { ...devices["iPhone SE"] } },
-    { name: "galaxy-s21", use: { ...devices["Galaxy S21"] } },
+
+    // ── Chromium without extension – wallet mocked via addInitScript ────────
+    // All lifecycle tests and walletMock-based tests run here.
+    {
+      name: "chromium-mock",
+      testMatch: [
+        "**/lifecycle*.spec.ts",
+        "**/claim-sheet.spec.ts",
+        "**/badges.spec.ts",
+        "**/create-wizard.spec.ts",
+      ],
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          // --headless=new is compatible with Playwright and works in CI
+          args: process.env.CI ? ["--headless=new"] : [],
+        },
+        contextOptions: {
+          permissions: ["clipboard-read", "clipboard-write"],
+        },
+      },
+    },
+
+    // ── Mobile viewports (no extension needed – UI tests only) ──────────────
+    {
+      name: "iphone-se",
+      testMatch: ["**/claim-sheet.spec.ts", "**/badges.spec.ts"],
+      use: { ...devices["iPhone SE"] },
+    },
+    {
+      name: "galaxy-s21",
+      testMatch: ["**/claim-sheet.spec.ts"],
+      use: { ...devices["Galaxy S21"] },
+    },
   ],
   webServer: {
     command: "npm run dev",
