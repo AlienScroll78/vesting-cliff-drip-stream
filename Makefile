@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc fuzz test-integration test-e2e test-e2e-ui
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun
 
 all: build
 
@@ -17,6 +17,17 @@ build:
 ## Run all unit tests (native target, with testutils)
 test:
 	cargo test --features testutils
+
+## Run coverage with cargo-llvm-cov (install: cargo install cargo-llvm-cov)
+## Generates HTML report in docs/coverage/html and lcov.info in docs/coverage/
+coverage:
+	cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
+	cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
+
+## Run coverage in CI mode with threshold enforcement
+## Fails if line coverage < 90% or branch coverage < 80%
+coverage-ci:
+	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
 
 ## Validate the on-chain contract spec (schema) against the expected API.
 ## Requires the WASM to be built first; spec-test depends on `build`.
@@ -83,3 +94,12 @@ test-integration: build
 	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run k6 backend load tests (requires a running backend on localhost:3001)
+## See tests/load/backend_scenarios.js for scenario description.
+test-load:
+	cd tests/load && k6 run backend_scenarios.js
+
+## Run k6 load tests in dry-run mode (skips create/claim mutations)
+test-load-dryrun:
+	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
