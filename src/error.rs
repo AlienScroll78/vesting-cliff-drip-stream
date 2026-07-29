@@ -73,25 +73,12 @@ pub enum VestingError {
     ///
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
-    DrainDelayNotExpired = 11,
+    DrainDelayNotExpired = 10,
 
-    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
     ///
     /// A sponsor creating a stream to themselves is almost certainly a mistake
     /// and would produce confusing behaviour in `cancel_stream` (the same
     /// address would be both the refund target and the earned-tokens target).
-    InvalidRecipient = 10,
-
-    /// **Code 12** — Caller is not the contract's designated admin.
-    ///
-    /// Returned by `upgrade` and `transfer_admin` when the calling address
-    /// does not match the admin stored during `initialize`.
-    Unauthorized = 12,
-
-    /// **Code 13** — `initialize` was called on a contract that already has
-    /// an admin set.
-    ///
-    /// Prevents a second caller from hijacking admin control after the
-    /// contract has already been initialized.
-    AlreadyInitialized = 13,
+    InvalidRecipient = 11,
 }

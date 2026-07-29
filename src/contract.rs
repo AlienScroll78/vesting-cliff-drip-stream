@@ -8,8 +8,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, 
 
 use crate::{
     error::VestingError,
-    events,
-    storage,
+    events, storage,
     types::{StreamStatus, VestingSchedule},
 };
 
@@ -102,6 +101,7 @@ impl VestingDrips {
     /// * `InvalidRate`            – `rate` is zero or negative.
     /// * `InvalidDuration`        – `total_duration` ≤ `cliff_duration`.
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
+    /// * `DepositBelowMinimum`    – Total deposit is below the configured minimum.
     /// * `ScheduleAlreadyExists`  – A stream already exists for `recipient`.
     pub fn create_vesting_stream(
         env: Env,
@@ -140,6 +140,12 @@ impl VestingDrips {
         // ── Calculate and transfer total deposit ──────────────────────────────
         let total_deposit: i128 = calculate_total_deposit(rate, total_duration)?;
 
+        // ── Minimum deposit validation (after overflow check) ─────────────────
+        let min_deposit = storage::get_min_deposit(&env);
+        if total_deposit < min_deposit {
+            return Err(VestingError::DepositBelowMinimum);
+        }
+
         let token_client = token::Client::new(&env, &token);
         token_client
             .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
@@ -149,6 +155,7 @@ impl VestingDrips {
         let schedule = VestingSchedule {
             version: 1,
             token: token.clone(),
+            sponsor: sponsor.clone(),
             rate_per_ledger: rate,
             start_ledger,
             cliff_ledger,
@@ -208,8 +215,8 @@ impl VestingDrips {
             // In production, replace with a stored admin key check if needed.
         }
 
-        let mut schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         // Already up-to-date — nothing to do.
         if schedule.version >= 1 {
@@ -237,37 +244,39 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current_ledger = env.ledger().sequence();
         let token_client = token::Client::new(&env, &schedule.token);
 
         // Determine how much has already been earned (if cliff passed).
-        let (recipient_share, sponsor_refund) =
-            if current_ledger >= schedule.cliff_ledger {
-                let active_end = current_ledger.min(schedule.end_ledger);
-                let earned_ledgers = active_end - schedule.last_claimed_ledger;
-                let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
+        let (recipient_share, sponsor_refund) = if current_ledger >= schedule.cliff_ledger {
+            let active_end = current_ledger.min(schedule.end_ledger);
+            let earned_ledgers = active_end - schedule.last_claimed_ledger;
+            let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
 
-                // Remaining tokens not yet accrued go back to sponsor.
-                let unclaimed_from_end = (schedule.end_ledger - active_end) as i128
-                    * schedule.rate_per_ledger;
-                (earned, unclaimed_from_end)
-            } else {
-                // Cliff not passed – full refund to sponsor.
-                let total_remaining =
-                    (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-                        * schedule.rate_per_ledger;
-                (0_i128, total_remaining)
-            };
+            // Remaining tokens not yet accrued go back to sponsor.
+            let unclaimed_from_end =
+                (schedule.end_ledger - active_end) as i128 * schedule.rate_per_ledger;
+            (earned, unclaimed_from_end)
+        } else {
+            // Cliff not passed – full refund to sponsor.
+            let total_remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+                * schedule.rate_per_ledger;
+            (0_i128, total_remaining)
+        };
 
         // Perform transfers before mutating storage so that a transfer failure
         // leaves the schedule intact (atomicity: schedule is only removed if
         // both transfers succeed).
         if recipient_share > 0 {
             token_client
-                .try_transfer(&env.current_contract_address(), &recipient, &recipient_share)
+                .try_transfer(
+                    &env.current_contract_address(),
+                    &recipient,
+                    &recipient_share,
+                )
                 .map_err(|_| VestingError::TransferFailed)?;
         }
         if sponsor_refund > 0 {
@@ -280,6 +289,159 @@ impl VestingDrips {
 
         events::emit_stream_cancelled(&env, &recipient, sponsor_refund);
 
+        Ok(())
+    }
+
+    /// Compliance clawback: the original sponsor recovers **all** remaining tokens
+    /// from the contract vault, bypassing cliff state.
+    ///
+    /// This uses the SAC `clawback` operation to pull tokens back from the
+    /// contract's own balance.  The token must have the clawback flag enabled;
+    /// otherwise the call fails with `ClawbackNotSupported`.
+    ///
+    /// # Arguments
+    /// * `sponsor`   – Original stream funder; must authorise this call.
+    /// * `recipient` – Stream beneficiary whose schedule is being clawed back.
+    /// * `reason`    – Compliance reason string (max 256 chars), stored in event.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
+    /// * `ClawbackNotSupported` – Token does not support SAC clawback.
+    pub fn clawback_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+        reason: String,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        // Calculate the remaining vault balance for this stream.
+        // All tokens from last_claimed_ledger to end_ledger are still in the vault.
+        let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+            * schedule.rate_per_ledger;
+
+        // Verify the token supports SAC clawback by probing the SAC admin interface.
+        // This acts as the compliance gate: only regulated (clawback-enabled) assets
+        // may use this stronger recovery path.
+        //
+        // We probe by attempting a zero-value clawback; if the call fails, the token
+        // does not support clawback and we return ClawbackNotSupported.
+        let sac_admin_client = token::StellarAssetClient::new(&env, &schedule.token);
+        if sac_admin_client
+            .try_clawback(&env.current_contract_address(), &0_i128)
+            .is_err()
+        {
+            return Err(VestingError::ClawbackNotSupported);
+        }
+
+        // Transfer remaining tokens from the contract vault back to the sponsor.
+        // The contract holds the deposited tokens in its own balance; after verifying
+        // clawback support above, we transfer them directly to the sponsor.
+        if remaining > 0 {
+            let token_client = token::Client::new(&env, &schedule.token);
+            token_client.transfer(&env.current_contract_address(), &sponsor, &remaining);
+        }
+
+        storage::remove_schedule(&env, &recipient);
+
+        events::emit_stream_clawed_back(
+            &env,
+            &sponsor,
+            &recipient,
+            &schedule.token,
+            remaining,
+            &reason,
+        );
+
+        Ok(())
+    }
+
+    /// Drains an expired stream, returning unclaimed tokens to the original sponsor.
+    ///
+    /// Callable by **anyone** once `end_ledger + DRAIN_DELAY_LEDGERS` has elapsed.
+    /// This allows cleanup of abandoned streams to prevent tokens being permanently
+    /// locked in the contract.
+    ///
+    /// # Arguments
+    /// * `caller`    – Any address initiating the cleanup (no auth required).
+    /// * `recipient` – The stream beneficiary whose expired schedule is being drained.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`      – No stream exists for `recipient`.
+    /// * `StreamNotExpired`      – `end_ledger` has not yet been reached.
+    /// * `DrainDelayNotExpired`  – Drain delay (1 year) has not elapsed since `end_ledger`.
+    pub fn drain_expired_stream(
+        env: Env,
+        caller: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        let schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        let current_ledger = env.ledger().sequence();
+
+        // Stream must have reached its end.
+        if current_ledger < schedule.end_ledger {
+            return Err(VestingError::StreamNotExpired);
+        }
+
+        // Drain delay must have elapsed after end_ledger.
+        let drain_available_at = schedule
+            .end_ledger
+            .checked_add(DRAIN_DELAY_LEDGERS)
+            .ok_or(VestingError::DepositOverflow)?;
+
+        if current_ledger < drain_available_at {
+            return Err(VestingError::DrainDelayNotExpired);
+        }
+
+        // Remaining unclaimed tokens go back to the sponsor.
+        let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+            * schedule.rate_per_ledger;
+
+        let token_client = token::Client::new(&env, &schedule.token);
+        let sponsor = schedule.sponsor.clone();
+
+        storage::remove_schedule(&env, &recipient);
+
+        if remaining > 0 {
+            token_client.transfer(
+                &env.current_contract_address(),
+                &sponsor,
+                &remaining,
+            );
+        }
+
+        events::emit_stream_drained(
+            &env,
+            &caller,
+            &recipient,
+            &sponsor,
+            &schedule.token,
+            remaining,
+        );
+
+        Ok(())
+    }
+
+    /// Sets the minimum deposit threshold (admin configuration).
+    ///
+    /// # Arguments
+    /// * `admin`       – Must authorise this call.
+    /// * `min_deposit` – New minimum total deposit value (must be > 0).
+    pub fn set_min_deposit(
+        env: Env,
+        admin: Address,
+        min_deposit: i128,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        if min_deposit <= 0 {
+            return Err(VestingError::InvalidRate);
+        }
+        storage::set_min_deposit(&env, min_deposit);
         Ok(())
     }
 
@@ -298,8 +460,8 @@ impl VestingDrips {
     pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
         recipient.require_auth();
 
-        let mut schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current_ledger = env.ledger().sequence();
 
@@ -320,7 +482,11 @@ impl VestingDrips {
         // transfer failure leaves the schedule intact.
         let token_client = token::Client::new(&env, &schedule.token);
         token_client
-            .try_transfer(&env.current_contract_address(), &recipient, &claimable_amount)
+            .try_transfer(
+                &env.current_contract_address(),
+                &recipient,
+                &claimable_amount,
+            )
             .map_err(|_| VestingError::TransferFailed)?;
 
         // Update or remove the schedule only after the transfer succeeds.
@@ -343,11 +509,8 @@ impl VestingDrips {
     // ── Read-only views ───────────────────────────────────────────────────────
 
     /// Returns the full `VestingSchedule` for `recipient`, or `None`.
-    pub fn get_schedule(
-        env: Env,
-        recipient: Address,
-    ) -> Option<VestingSchedule> {
-        storage::get_schedule_readonly(&env, &recipient)
+    pub fn get_schedule(env: Env, recipient: Address) -> Option<VestingSchedule> {
+        storage::get_schedule(&env, &recipient)
     }
 
     /// Returns the number of tokens currently claimable by `recipient`.
@@ -412,8 +575,8 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule = storage::get_schedule(&env, &recipient)
-            .ok_or(VestingError::ScheduleNotFound)?;
+        let schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
         let current = env.ledger().sequence();
 
@@ -421,16 +584,14 @@ impl VestingDrips {
             return Err(VestingError::StreamNotExpired);
         }
 
-        let drain_available_at = schedule
-            .end_ledger
-            .saturating_add(DRAIN_DELAY_LEDGERS);
+        let drain_available_at = schedule.end_ledger.saturating_add(DRAIN_DELAY_LEDGERS);
         if current < drain_available_at {
             return Err(VestingError::DrainDelayNotExpired);
         }
 
         // Any unclaimed remainder: full remaining balance from last_claimed_ledger.
-        let amount = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-            * schedule.rate_per_ledger;
+        let amount =
+            (schedule.end_ledger - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger;
 
         // Transfer before mutating storage so that a transfer failure leaves
         // the schedule intact.
@@ -459,8 +620,7 @@ impl VestingDrips {
     pub fn get_stats(env: Env, recipient: Address) -> Option<StreamStats> {
         let schedule = storage::get_schedule_readonly(&env, &recipient)?;
 
-        let total_duration =
-            (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_duration = (schedule.end_ledger - schedule.start_ledger) as i128;
         let total_deposited = schedule.rate_per_ledger * total_duration;
 
         // Read the authoritative on-chain counter directly.

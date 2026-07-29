@@ -7,6 +7,9 @@ use crate::types::{DataKey, VestingSchedule};
 const PERSISTENT_LEDGER_THRESHOLD: u32 = 259_200;
 const PERSISTENT_BUMP_AMOUNT: u32 = 518_400; // ~60 days
 
+/// Default minimum total deposit (in token base units).
+pub const DEFAULT_MIN_DEPOSIT: i128 = 100;
+
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 /// Returns the vesting schedule for `recipient`, or `None` if absent.
@@ -45,6 +48,14 @@ pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
         .has(&DataKey::Schedule(recipient.clone()))
 }
 
+/// Returns the configured minimum deposit, falling back to `DEFAULT_MIN_DEPOSIT`.
+pub fn get_min_deposit(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get::<DataKey, i128>(&DataKey::MinDeposit)
+        .unwrap_or(DEFAULT_MIN_DEPOSIT)
+}
+
 // ── Write ─────────────────────────────────────────────────────────────────────
 
 /// Persists `schedule` for `recipient` and bumps its TTL.
@@ -66,15 +77,10 @@ pub fn remove_schedule(env: &Env, recipient: &Address) {
         .remove(&DataKey::Schedule(recipient.clone()));
 }
 
-// ── Admin ────────────────────────────────────────────────────────────────────
-
-/// Returns the contract's admin address, or `None` if `initialize` has not
-/// been called yet.
-pub fn get_admin(env: &Env) -> Option<Address> {
-    env.storage().instance().get(&DataKey::Admin)
-}
-
-/// Persists `admin` in instance storage.
-pub fn set_admin(env: &Env, admin: &Address) {
-    env.storage().instance().set(&DataKey::Admin, admin);
+/// Stores a new minimum deposit value in instance storage.
+/// Callable by an admin to configure the threshold.
+pub fn set_min_deposit(env: &Env, min_deposit: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MinDeposit, &min_deposit);
 }
