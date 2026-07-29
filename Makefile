@@ -52,6 +52,13 @@ lint:
 check:
 	cargo check --all-targets --all-features
 
+## Run fuzz targets with cargo-fuzz (requires nightly toolchain)
+## Each target runs for 60 seconds by default
+fuzz:
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/create_vesting_stream/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/claim_vested/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/metadata_validation/
+
 ## Build rustdoc; fails on any missing-doc warning (mirrors CI)
 doc:
 	RUSTDOCFLAGS="-D warnings" cargo doc --no-deps

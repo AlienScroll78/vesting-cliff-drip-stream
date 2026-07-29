@@ -651,7 +651,7 @@ impl VestingDrips {
 ///
 /// The exact safe boundary is `rate <= i128::MAX / total_duration`; the
 /// multiplication overflows immediately above that threshold.
-pub(crate) fn calculate_total_deposit(
+pub fn calculate_total_deposit(
     rate: i128,
     total_duration: u32,
 ) -> Result<i128, VestingError> {
