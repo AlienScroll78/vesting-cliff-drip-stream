@@ -1,0 +1,7 @@
+{
+  "topics": ["vc_claim", "<recipient>"],
+  "data": {
+    "amount": 500,
+    "ledger_claimed_through": 150
+  }
+}

@@ -2,11 +2,15 @@
 
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
 
+> Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
+>
+> Have a question? Check the [FAQ](docs/faq.md) for common answers about stream lifecycle, claiming, token support, and fees.
+
 ---
 
 ## Concept
 
-Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **cliff period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
+Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
 
 ```
 Token Flow
@@ -17,10 +21,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
                │                 │                              │
 ```
 
-1. Sponsor deposits the **full allocation** upfront into the contract vault.
+1. [Sponsor](docs/glossary.md#sponsor) deposits the **full allocation** upfront into the contract vault.
 2. Recipient cannot claim anything until `cliff_ledger` is reached.
 3. At the cliff, all tokens accrued since `start_ledger` are **released instantly**.
-4. Remaining tokens continue to **drip linearly per ledger** until `end_ledger`.
+4. Remaining tokens continue to **drip linearly per [ledger](docs/glossary.md#ledger)** until `end_ledger`.
 
 ---
 
@@ -61,6 +65,37 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         ├── test_drain.rs          # Drain expired stream tests (#316)
         └── test_min_deposit.rs    # Minimum deposit validation tests (#314)
 ```
+
+
+## Architecture Decision Records
+
+Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
+## Security
+
+For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
+
+## Infrastructure Operations
+
+Terraform-managed AWS infrastructure (ECS, RDS, VPC, IAM). Configuration lives in [`terraform/`](terraform/).
+
+### Drift Detection
+
+A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) runs `terraform plan` daily at **02:00 UTC** against production state. If the plan detects any changes (exit code 2), it:
+
+1. Opens a GitHub issue labelled `infrastructure` + `drift` with the full plan output.
+2. Sends a Slack alert to `#ops`.
+
+### Operations Runbooks
+
+| Runbook | Purpose |
+|---------|---------|
+| [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
+| [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
+| [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
+| [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
+
+See the full [runbooks index](docs/runbooks/README.md) for all operational procedures.
 
 ---
 
@@ -161,10 +196,10 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
 | 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
-| 8 | `StreamNotExpired` | Stream has not yet reached `end_ledger` |
-| 9 | `DrainDelayNotExpired` | 1-year drain delay has not elapsed since `end_ledger` |
-| 13 | `DepositBelowMinimum` | Total deposit is below the configured minimum |
-| 14 | `ClawbackNotSupported` | Token does not support SAC clawback |
+| 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
+| 9 | `TransferFailed` | Token transfer failed |
+| 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
+| 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
 
 ---
 
@@ -191,6 +226,9 @@ make build
 make test
 ```
 
+CI also runs the contract test suite through Soroban's WASM runner so the
+contract is exercised in the same target it is deployed to.
+
 ### Deploy to Testnet
 
 ```bash
@@ -216,14 +254,29 @@ export TOTAL_DURATION=172800  # ~10 days
 
 ## Security Considerations
 
-- **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
-- **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
+- **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
+- **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
-- **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
+- **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
 ---
 
+## SBOM & License Compliance
+
+A Software Bill of Materials (SPDX 2.3 JSON) is generated for every release and attached as `sbom.spdx.json`. License scanning runs on every pull request and blocks merges if a dependency carries a copyleft or unapproved license.
+
+See [docs/sbom.md](docs/sbom.md) for the full policy, allowed license list, and instructions for adding new dependencies.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a full history of notable changes.
+
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md).

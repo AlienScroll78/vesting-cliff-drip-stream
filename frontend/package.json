@@ -1,0 +1,46 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json"
+  },
+  "dependencies": {
+    "@stellar/freighter-api": "^6.0.1",
+    "framer-motion": "^12.42.0",
+    "i18next": "^26.3.2",
+    "i18next-browser-languagedetector": "^8.2.1",
+    "intro.js": "^8.3.2",
+    "posthog-js": "^1.393.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-i18next": "^17.0.8",
+    "recharts": "^2.15.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@sentry/react": "^10.62.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/intro.js": "^5.1.5",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^2.1.9",
+    "jsdom": "^25.0.1",
+    "oxlint": "^1.69.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.0",
+    "vite-plugin-pwa": "^0.21.1",
+    "vitest": "^2.1.9"
+  }
+}

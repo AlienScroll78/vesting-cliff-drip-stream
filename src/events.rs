@@ -1,4 +1,4 @@
-use soroban_sdk::{Address, Env, String, symbol_short};
+use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -48,10 +48,8 @@ pub fn emit_tokens_claimed(
 /// Topics: `["vc_done", recipient]`
 /// Data:   `(token)`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
-    env.events().publish(
-        (symbol_short!("vc_done"), recipient.clone()),
-        token.clone(),
-    );
+    env.events()
+        .publish((symbol_short!("vc_done"), recipient.clone()), token.clone());
 }
 
 /// Emitted when a sponsor cancels a vesting stream before it completes.
@@ -65,48 +63,13 @@ pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i1
     );
 }
 
-/// Emitted when a sponsor executes a compliance clawback on a stream.
-///
-/// Topics: `["vc_claw", recipient]`
-/// Data:   `(sponsor, token, clawed_back_amount, reason)`
-pub fn emit_stream_clawed_back(
-    env: &Env,
-    sponsor: &Address,
-    recipient: &Address,
-    token: &Address,
-    clawed_back_amount: i128,
-    reason: &String,
-) {
-    env.events().publish(
-        (symbol_short!("vc_claw"), recipient.clone()),
-        (
-            sponsor.clone(),
-            token.clone(),
-            clawed_back_amount,
-            reason.clone(),
-        ),
-    );
-}
-
-/// Emitted when an expired stream is drained back to the sponsor.
+/// Emitted when a sponsor recovers stuck tokens via the emergency drain.
 ///
 /// Topics: `["vc_drain", recipient]`
-/// Data:   `(sponsor, token, drained_amount, caller)`
-pub fn emit_stream_drained(
-    env: &Env,
-    caller: &Address,
-    recipient: &Address,
-    sponsor: &Address,
-    token: &Address,
-    drained_amount: i128,
-) {
+/// Data:   `(sponsor, amount)`
+pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, amount: i128) {
     env.events().publish(
         (symbol_short!("vc_drain"), recipient.clone()),
-        (
-            caller.clone(),
-            sponsor.clone(),
-            token.clone(),
-            drained_amount,
-        ),
+        (sponsor.clone(), amount),
     );
 }
