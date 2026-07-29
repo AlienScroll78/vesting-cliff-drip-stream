@@ -8,6 +8,9 @@ mod test_create;
 mod test_edge_cases;
 mod test_properties;
 mod test_views;
+mod test_milestone_stream;
+mod test_stream_status;
+mod test_upgrade_event;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},

@@ -21,9 +21,7 @@ fn test_claimable_amount_before_cliff_is_zero() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 30);
     assert_eq!(client.claimable_amount(&recipient), 0);
@@ -40,9 +38,7 @@ fn test_claimable_amount_after_cliff() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 75); // 75 ledgers past start → 75 × 10 = 750
     assert_eq!(client.claimable_amount(&recipient), 750);
@@ -59,9 +55,7 @@ fn test_is_cliff_passed() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     assert!(!client.is_cliff_passed(&recipient));
     advance_ledger(&env, 50);
@@ -79,12 +73,10 @@ fn test_get_schedule_returns_none_after_completion() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     assert!(client.get_schedule(&recipient).is_none());
 }
@@ -100,9 +92,7 @@ fn test_get_status_pre_cliff() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     assert_eq!(client.get_status(&recipient), Some(StreamStatus::PreCliff));
 }
@@ -118,9 +108,7 @@ fn test_get_status_active() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 100);
     assert_eq!(client.get_status(&recipient), Some(StreamStatus::Active));
@@ -137,12 +125,10 @@ fn test_get_status_completed() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 200); // past end_ledger
-    assert_eq!(client.get_status(&recipient), Some(StreamStatus::Completed));
+    assert_eq!(client.get_status(&recipient), Some(StreamStatus::Expired));
 }
 
 #[test]

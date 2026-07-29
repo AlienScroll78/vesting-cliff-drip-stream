@@ -22,7 +22,6 @@ fn setup_stream(
     Address, // recipient
     Address, // token_id
 ) {
-    // Work-around: clone env for 'static lifetime in test context
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
@@ -33,16 +32,14 @@ fn setup_stream(
     let deposit = rate * total_duration as i128;
     mint_to(&env, &token_id, &sponsor, deposit);
 
-    client
-        .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
-            &rate,
-            &cliff_duration,
-            &total_duration,
-        )
-        .unwrap();
+    client.create_vesting_stream(
+        &sponsor,
+        &recipient,
+        &token_id,
+        &rate,
+        &cliff_duration,
+        &total_duration,
+    );
 
     (env, contract_id, client, sponsor, recipient, token_id)
 }
@@ -58,15 +55,13 @@ fn test_claim_before_cliff_fails() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     // Try to claim at ledger 120 (cliff is 150)
     advance_ledger(&env, 20);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::CliffNotReached.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::CliffNotReached);
 }
 
 #[test]
@@ -81,14 +76,12 @@ fn test_first_claim_at_cliff_includes_all_accrued() {
     // rate=10, cliff=50, total=200 → deposit = 2000
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     // Jump exactly to the cliff (ledger 150).
     advance_ledger(&env, 50);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     // 50 ledgers accrued since start × 10 = 500
     assert_eq!(claimed, 500);
     assert_eq!(token_client.balance(&recipient), 500);
@@ -105,18 +98,16 @@ fn test_partial_claim_mid_stream() {
     let (token_id, token_client) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     // First claim at cliff+50 (ledger 200)
     advance_ledger(&env, 100);
-    let claimed1 = client.claim_vested(&recipient).unwrap();
+    let claimed1 = client.claim_vested(&recipient);
     assert_eq!(claimed1, 1_000); // 100 ledgers × 10
 
     // Second claim at ledger 250
     advance_ledger(&env, 50);
-    let claimed2 = client.claim_vested(&recipient).unwrap();
+    let claimed2 = client.claim_vested(&recipient);
     assert_eq!(claimed2, 500); // 50 ledgers × 10
 
     assert_eq!(token_client.balance(&recipient), 1_500);
@@ -133,14 +124,12 @@ fn test_claim_past_end_caps_at_end_ledger() {
     let (token_id, token_client) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     // Jump way past the end ledger (300)
     advance_ledger(&env, 500);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 2_000); // entire deposit, capped at end_ledger
     assert_eq!(token_client.balance(&recipient), 2_000);
 
@@ -159,16 +148,14 @@ fn test_double_claim_same_ledger_returns_nothing_to_claim() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Claiming again at the same ledger should return NothingToClaim.
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::NothingToClaim.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::NothingToClaim);
 }
 
 #[test]
@@ -178,8 +165,8 @@ fn test_claim_nonexistent_schedule_fails() {
     let client = VestingDripsClient::new(&env, &contract_id);
     let random = Address::generate(&env);
 
-    let err = client.claim_vested(&random).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_claim_vested(&random).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }
 
 // ── end_ledger boundary tests ─────────────────────────────────────────────────
@@ -203,7 +190,7 @@ fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
 
     // Claim halfway through (at ledger 200 = start+100)
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap(); // claims 1000
+    client.claim_vested(&recipient); // claims 1000
 
     // Advance well past end_ledger
     advance_ledger(&env, 500);
@@ -218,9 +205,9 @@ fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
 
     // Advance past end and claim everything
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Schedule is removed; a second attempt should return ScheduleNotFound
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }

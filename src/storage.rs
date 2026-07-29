@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, Env};
 
-use crate::types::{DataKey, VestingSchedule};
+use crate::types::{DataKey, MilestoneSchedule, VestingSchedule};
 
 /// Number of ledgers to extend TTL on persistent storage entries.
 /// ~30 days at ~5s per ledger (6 * 60 * 24 * 30 = 259_200).
@@ -56,6 +56,42 @@ pub fn get_min_deposit(env: &Env) -> i128 {
         .unwrap_or(DEFAULT_MIN_DEPOSIT)
 }
 
+/// Returns the stored admin address, or `None` if `initialize` has not been called.
+pub fn get_admin(env: &Env) -> Option<Address> {
+    env.storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Admin)
+}
+
+// ── Milestone Schedule ────────────────────────────────────────────────────────
+
+/// Returns the milestone schedule for `recipient`, bumping TTL (for mutations).
+pub fn get_milestone_schedule(env: &Env, recipient: &Address) -> Option<MilestoneSchedule> {
+    let key = DataKey::MilestoneSchedule(recipient.clone());
+    let schedule = env
+        .storage()
+        .persistent()
+        .get::<DataKey, MilestoneSchedule>(&key)?;
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+    Some(schedule)
+}
+
+/// Returns the milestone schedule for `recipient` without bumping TTL.
+pub fn get_milestone_schedule_readonly(env: &Env, recipient: &Address) -> Option<MilestoneSchedule> {
+    env.storage()
+        .persistent()
+        .get::<DataKey, MilestoneSchedule>(&DataKey::MilestoneSchedule(recipient.clone()))
+}
+
+/// Returns `true` if a milestone schedule exists for `recipient`.
+pub fn has_milestone_schedule(env: &Env, recipient: &Address) -> bool {
+    env.storage()
+        .persistent()
+        .has(&DataKey::MilestoneSchedule(recipient.clone()))
+}
+
 // ── Write ─────────────────────────────────────────────────────────────────────
 
 /// Persists `schedule` for `recipient` and bumps its TTL.
@@ -83,4 +119,29 @@ pub fn set_min_deposit(env: &Env, min_deposit: i128) {
     env.storage()
         .instance()
         .set(&DataKey::MinDeposit, &min_deposit);
+}
+
+/// Stores the admin address in instance storage.
+pub fn set_admin(env: &Env, admin: &Address) {
+    env.storage()
+        .instance()
+        .set(&DataKey::Admin, admin);
+}
+
+/// Persists a milestone schedule for `recipient` and bumps its TTL.
+pub fn set_milestone_schedule(env: &Env, recipient: &Address, schedule: &MilestoneSchedule) {
+    let key = DataKey::MilestoneSchedule(recipient.clone());
+    env.storage().persistent().set(&key, schedule);
+    env.storage().persistent().extend_ttl(
+        &key,
+        PERSISTENT_LEDGER_THRESHOLD,
+        PERSISTENT_BUMP_AMOUNT,
+    );
+}
+
+/// Removes the milestone schedule for `recipient`.
+pub fn remove_milestone_schedule(env: &Env, recipient: &Address) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::MilestoneSchedule(recipient.clone()));
 }

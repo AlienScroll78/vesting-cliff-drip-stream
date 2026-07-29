@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
     contract::{VestingDrips, VestingDripsClient},
@@ -23,9 +23,7 @@ fn test_create_stream_success() {
     // Mint enough to cover rate(10) * duration(200) = 2000
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.rate_per_ledger, 10);
@@ -51,10 +49,11 @@ fn test_create_stream_zero_rate_fails() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &0, &50, &200)
-        .unwrap_err();
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &0, &50, &200)
+        .unwrap_err()
+        .unwrap();
 
-    assert_eq!(err, VestingError::InvalidRate.into());
+    assert_eq!(err, VestingError::InvalidRate);
 }
 
 #[test]
@@ -69,15 +68,17 @@ fn test_create_stream_invalid_duration_fails() {
 
     // cliff == total should fail
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &200, &200)
-        .unwrap_err();
-    assert_eq!(err, VestingError::InvalidDuration.into());
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &200, &200)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, VestingError::InvalidDuration);
 
     // cliff > total should also fail
     let err2 = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &300, &200)
-        .unwrap_err();
-    assert_eq!(err2, VestingError::InvalidDuration.into());
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &300, &200)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err2, VestingError::InvalidDuration);
 }
 
 #[test]
@@ -91,15 +92,14 @@ fn test_create_duplicate_stream_fails() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 10_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap_err();
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap_err()
+        .unwrap();
 
-    assert_eq!(err, VestingError::ScheduleAlreadyExists.into());
+    assert_eq!(err, VestingError::ScheduleAlreadyExists);
 }
 
 // ── Issue #104: Multi-recipient independence ──────────────────────────────────
@@ -120,18 +120,14 @@ fn test_two_recipients_claim_independently() {
     // bob:   rate=20, cliff=30, total=100 → 2000
     mint_to(&env, &token_id, &sponsor, 4_000);
 
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &20, &30, &100)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &20, &30, &100);
 
     // Advance past both cliffs (cliff_ledger for alice=150, bob=130).
     advance_ledger(&env, 60); // ledger 160
 
     // Only alice claims.
-    let alice_claimed = client.claim_vested(&alice).unwrap();
+    let alice_claimed = client.claim_vested(&alice);
     assert_eq!(alice_claimed, 600); // 60 × 10
 
     // Bob's schedule is untouched: last_claimed_ledger still at start (100).
@@ -154,15 +150,11 @@ fn test_cancel_one_recipient_other_unaffected() {
     // alice: rate=10, total=200 → 2000; bob: rate=5, total=100 → 500
     mint_to(&env, &token_id, &sponsor, 2_500);
 
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100);
 
     // Cancel alice before her cliff (ledger still 100).
-    client.cancel_stream(&sponsor, &alice).unwrap();
+    client.cancel_stream(&sponsor, &alice);
 
     // Alice's schedule is gone.
     assert!(client.get_schedule(&alice).is_none());
@@ -174,7 +166,7 @@ fn test_cancel_one_recipient_other_unaffected() {
 
     // Bob can still claim after his cliff (ledger 120 → advance 20).
     advance_ledger(&env, 20);
-    let bob_claimed = client.claim_vested(&bob).unwrap();
+    let bob_claimed = client.claim_vested(&bob);
     assert_eq!(bob_claimed, 100); // 20 × 5
     assert_eq!(token_client.balance(&bob), 100);
 }
@@ -194,12 +186,8 @@ fn test_storage_keys_are_per_recipient() {
     mint_to(&env, &token_id, &sponsor, 10_000);
 
     // Different rates, cliffs, durations.
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &7, &40, &150)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &13, &60, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &7, &40, &150);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &13, &60, &200);
 
     let alice_sched = client.get_schedule(&alice).unwrap();
     let bob_sched = client.get_schedule(&bob).unwrap();

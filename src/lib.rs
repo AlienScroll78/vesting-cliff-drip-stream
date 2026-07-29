@@ -12,6 +12,11 @@
 #![no_std]
 #![deny(missing_docs)]
 
+// proptest and other test utilities require std macros (format!, vec!, etc.)
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 mod contract;
 mod error;
 mod events;
@@ -20,7 +25,7 @@ mod types;
 
 pub use contract::{StreamStats, VestingDrips};
 pub use error::VestingError;
-pub use types::{StreamStatus, VestingSchedule};
+pub use types::{DataKey, Milestone, MilestoneSchedule, StreamStatus, VestingSchedule};
 
 #[cfg(test)]
 mod tests;
