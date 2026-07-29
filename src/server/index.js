@@ -1,9 +1,18 @@
-import defaultApp from './app.js';
+import { createApp } from './app.js';
+import { ShutdownManager } from './shutdown.js';
 
 const PORT = process.env.PORT || 3000;
 
-const server = defaultApp.listen(PORT, () => {
+export const shutdownManager = new ShutdownManager();
+
+const app = createApp({
+  inFlightMiddleware: shutdownManager.getInFlightMiddleware()
+});
+
+const server = app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
 
-export { server };
+shutdownManager.registerSignalHandlers(server);
+
+export { server, app };
