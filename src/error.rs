@@ -28,4 +28,7 @@ pub enum VestingError {
 
     /// Nothing available to claim at the current ledger.
     NothingToClaim = 7,
+
+    /// The batch contains more than the maximum allowed number of recipients (50).
+    BatchSizeExceeded = 11,
 }
