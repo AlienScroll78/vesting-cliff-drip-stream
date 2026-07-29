@@ -180,21 +180,22 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — not the dialog, just the overlay */}
       <div
         className="bottom-sheet-backdrop"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         onClick={handleBackdropClick}
+        aria-hidden="true"
         style={{
           // Align to bottom, sheet takes 60% of viewport height
           alignItems: "flex-end",
         }}
       >
-        {/* Sheet */}
+        {/* Sheet — this is the actual dialog */}
         <div
           ref={sheetRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
           className="bottom-sheet"
           data-testid="claim-bottom-sheet"
           tabIndex={-1}
@@ -430,9 +431,10 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
             type="button"
             className="btn btn-ghost btn-full"
             onClick={onClose}
+            data-testid="claim-close-btn"
             style={{ marginTop: "0.25rem", color: "#6b7280", fontSize: "0.875rem", minHeight: 44 }}
           >
-            Cancel
+            Close
           </button>
         </div>
       </div>

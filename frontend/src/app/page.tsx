@@ -177,16 +177,6 @@ function StreamList() {
                     </button>
                   )}
                 </div>
-                {s.status === "active" && (
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: "0.4rem" }}
-                    onClick={() => setClaimTarget(s)}
-                    data-testid={`claim-btn-${s.id}`}
-                  >
-                    {t("claim")}
-                  </button>
-                )}
               </div>
             </div>
 

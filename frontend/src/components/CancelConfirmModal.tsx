@@ -13,7 +13,7 @@ interface DialogShellProps {
   children: React.ReactNode;
 }
 
-function DialogShell({ titleId: _id, onClose, borderColor = "var(--color-cancelled)", children }: DialogShellProps) {
+function DialogShell({ titleId, onClose, borderColor = "var(--color-cancelled)", children }: DialogShellProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Focus trap
@@ -51,6 +51,7 @@ function DialogShell({ titleId: _id, onClose, borderColor = "var(--color-cancell
         ref={containerRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         style={{
           background: "var(--color-surface)",
           borderRadius: "var(--radius)",

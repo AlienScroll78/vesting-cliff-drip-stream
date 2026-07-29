@@ -288,6 +288,16 @@ export function NotificationCenter() {
                 >
                   ⚙️
                 </button>
+                <a
+                  href="/notifications"
+                  className="btn btn-ghost"
+                  style={{ padding: "0.25rem 0.4rem", minWidth: "auto", fontSize: "0.75rem" }}
+                  aria-label="Open notification preferences page"
+                  data-testid="notification-prefs-link"
+                  onClick={() => setOpen(false)}
+                >
+                  Preferences
+                </a>
                 <button
                   type="button"
                   className="btn btn-ghost"
