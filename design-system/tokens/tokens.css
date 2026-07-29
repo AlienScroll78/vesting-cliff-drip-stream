@@ -1,0 +1,102 @@
+/* ==========================================================================
+   Design Tokens — Vesting Cliff Drip Stream
+   All values defined here; components consume these variables exclusively.
+   ========================================================================== */
+
+:root {
+  /* ── Colour palette ─────────────────────────────────────────────────── */
+  --color-brand-primary:    #7C3AED; /* violet-600 */
+  --color-brand-secondary:  #4F46E5; /* indigo-600 */
+  --color-accent:           #06B6D4; /* cyan-500   */
+
+  --color-success:          #10B981; /* emerald-500 */
+  --color-warning:          #F59E0B; /* amber-500   */
+  --color-danger:           #EF4444; /* red-500     */
+
+  --color-bg-base:          #0F172A; /* slate-900 */
+  --color-bg-surface:       #1E293B; /* slate-800 */
+  --color-bg-elevated:      #334155; /* slate-700 */
+
+  --color-text-primary:     #F8FAFC; /* slate-50  */
+  --color-text-secondary:   #94A3B8; /* slate-400 */
+  --color-text-disabled:    #475569; /* slate-600 */
+
+  --color-border:           #334155; /* slate-700 */
+  --color-border-focus:     #7C3AED; /* brand-primary */
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  /*
+   * Font families — system stack (body) and monospace (addresses/numbers).
+   * Full fluid type scale is in tokens/typography.css (issue #384).
+   * Import typography.css AFTER this file to have access to all tokens.
+   */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+
+  /*
+   * Static fallback sizes — kept for backwards compatibility with any
+   * component that has not yet migrated to the fluid scale tokens.
+   * Prefer --font-size-fluid-* from typography.css for all new work.
+   */
+  --font-size-xs:   0.6875rem; /*  11px — matches fluid-xs min */
+  --font-size-sm:   0.8125rem; /*  13px — matches fluid-sm min */
+  --font-size-base: 1rem;      /*  16px — matches fluid-base min */
+  --font-size-lg:   1.125rem;  /*  18px — matches fluid-lg min  */
+  --font-size-xl:   1.25rem;   /*  20px — matches fluid-xl min  */
+  --font-size-2xl:  1.5rem;    /*  24px — matches fluid-2xl min */
+  --font-size-3xl:  1.875rem;  /*  30px — matches fluid-3xl min */
+
+  /* Aliases to fluid scale — use these in all components (issue #384) */
+  --font-size-body:     clamp(1rem, 0.9292rem + 0.3542vw, 1.125rem);   /* 16→18px */
+  --font-size-body-lg:  clamp(1.125rem, 1.0542rem + 0.3542vw, 1.25rem); /* 18→20px */
+  --font-size-label:    clamp(0.8125rem, 0.7833rem + 0.1458vw, 0.875rem); /* 13→14px */
+  --font-size-caption:  clamp(0.6875rem, 0.6583rem + 0.1458vw, 0.75rem);  /* 11→12px */
+
+  --font-weight-normal:    400;
+  --font-weight-medium:    500;
+  --font-weight-semibold:  600;
+  --font-weight-bold:      700;
+  --font-weight-extrabold: 800;
+
+  --line-height-none:    1;
+  --line-height-tight:   1.25;
+  --line-height-snug:    1.375;
+  --line-height-base:    1.6;   /* updated: 1.5 → 1.6 per issue #384 */
+  --line-height-loose:   1.75;
+
+  /* Maximum line length for body text — issue #384 */
+  --measure-body:    72ch;
+  --measure-narrow:  45ch;
+  --measure-wide:    90ch;
+
+  /* Numeric rendering for amounts, addresses, ledger numbers */
+  --font-variant-numeric: tabular-nums;
+
+  /* ── Spacing scale (4-point grid) ────────────────────────────────────── */
+  --space-1:  0.25rem;  /*  4px */
+  --space-2:  0.5rem;   /*  8px */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-5:  1.25rem;  /* 20px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ── Border radius ───────────────────────────────────────────────────── */
+  --radius-sm:   0.25rem;
+  --radius-base: 0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-full: 9999px;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms ease;
+}

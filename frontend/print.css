@@ -1,0 +1,87 @@
+@media print {
+  /* ── Hide non-content elements ── */
+  nav,
+  .connect-btn,
+  .subtitle,
+  .cta-section,
+  button,
+  #vesting-form,
+  input {
+    display: none !important;
+  }
+
+  /* ── Reset page for paper ── */
+  body {
+    background: #fff;
+    color: #000;
+    font-family: Georgia, serif;
+    font-size: 11pt;
+  }
+
+  main {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1 {
+    font-size: 16pt;
+    margin-bottom: 0.5rem;
+  }
+
+  /* ── Always show schedule preview when printing ── */
+  #schedule-preview {
+    display: block !important;
+    border: none;
+    padding: 0;
+    background: transparent;
+  }
+
+  #schedule-preview h2 {
+    font-size: 13pt;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Clean table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10pt;
+  }
+
+  th, td {
+    border: 1px solid #999;
+    padding: 5pt 8pt;
+    text-align: left;
+  }
+
+  th {
+    background: #f0f0f0;
+    font-weight: bold;
+    color: #000;
+  }
+
+  td { color: #000; }
+
+  .addr {
+    font-family: "Courier New", monospace;
+    font-size: 8pt;
+    word-break: break-all;
+  }
+
+  /* ── Footer with print date ── */
+  @page {
+    margin: 1.5cm;
+  }
+
+  body::after {
+    content: "Printed on " attr(data-print-date) " — Vesting Cliff Drip Stream";
+    display: block;
+    margin-top: 2rem;
+    font-size: 8pt;
+    color: #555;
+    text-align: center;
+    border-top: 1px solid #ccc;
+    padding-top: 0.5rem;
+  }
+}

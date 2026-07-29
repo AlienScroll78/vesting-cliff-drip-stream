@@ -1,129 +1,87 @@
-# Backend Configuration Reference
+# Configuration Reference
 
-All backend configuration is read from environment variables.  The
-application validates the entire set of variables at startup using a
-[Zod](https://zod.dev) schema defined in
-[`backend/src/config.ts`](../backend/src/config.ts).  Any missing or
-invalid value causes an immediate exit with a human-readable error.
-
-Copy `.env.example` to `.env` and fill in the required values before
-running the server.
+All configuration is supplied via environment variables. Copy `.env.example` to `.env` and fill in the required values before starting the service.
 
 ---
 
-## Variable Reference
+## Required Variables
 
-### Server
-
-| Variable   | Required | Default         | Description |
-|------------|----------|-----------------|-------------|
-| `PORT`     | No       | `3000`          | TCP port the HTTP server listens on (1–65535). |
-| `NODE_ENV` | No       | `development`   | Deployment environment: `development`, `test`, `staging`, or `production`. |
-
----
-
-### Stellar / Horizon
-
-| Variable               | Required | Default | Description |
-|------------------------|----------|---------|-------------|
-| `HORIZON_URL`          | **Yes**  | —       | Base URL of the Horizon instance used for submitting transactions (must be a valid URL). |
-| `NETWORK_PASSPHRASE`   | **Yes**  | —       | Stellar network passphrase, e.g. `"Test SDF Network ; September 2015"`. |
-| `VESTING_CONTRACT_ID`  | **Yes**  | —       | Deployed vesting contract address in C… Strkey format. |
+| Variable | Type | Description |
+|---|---|---|
+| `HORIZON_URL` | `string` (URL) | Horizon REST API endpoint. Use `https://horizon-testnet.stellar.org` for testnet or `https://horizon.stellar.org` for mainnet. |
+| `NETWORK_PASSPHRASE` | `string` | Stellar network passphrase. Must match the network your contract is deployed on. |
+| `CONTRACT_ID` | `string` | Soroban contract address of the deployed `vesting_cliff_drip_stream` contract (starts with `C`). |
 
 ---
 
-### Database
+## Required Variables (admin / bulk-claim only)
 
-| Variable       | Required | Default | Description |
-|----------------|----------|---------|-------------|
-| `DATABASE_URL` | **Yes**  | —       | PostgreSQL connection URL (`postgres://user:pass@host:port/db`). |
-| `DB_POOL_MAX`  | No       | `10`    | Maximum number of connections in the pool (positive integer). |
+These are only required if you run the `POST /admin/bulk-claim` endpoint.
 
----
-
-### Redis
-
-| Variable            | Required | Default | Description |
-|---------------------|----------|---------|-------------|
-| `REDIS_URL`         | **Yes**  | —       | Redis connection URL (`redis://[:password@]host[:port][/db]`). |
-| `REDIS_TTL_SECONDS` | No       | `300`   | Default TTL for cached entries in seconds (positive integer). |
+| Variable | Type | Description |
+|---|---|---|
+| `ADMIN_API_KEY` | `string` (secret) | Bearer token that callers must supply in `Authorization: Bearer <key>`. Use a strong random value (≥ 32 bytes). Store in AWS Secrets Manager or equivalent. |
+| `SPONSOR_SECRET_KEY` | `string` (secret) | Stellar secret key (`S...`) of the account that signs claim transactions on behalf of recipients. Never commit this value. |
+| `SOROBAN_RPC_URL` | `string` (URL) | Soroban RPC endpoint for transaction submission. Defaults to the RPC path on the same host as `HORIZON_URL` (e.g. `http://localhost:8000/soroban/rpc`). |
 
 ---
 
-### Webhooks
+## Optional Variables
 
-| Variable                | Required | Default | Description |
-|-------------------------|----------|---------|-------------|
-| `WEBHOOK_SECRET`        | **Yes**  | —       | Shared secret for HMAC-SHA256 payload signatures (≥ 16 characters). |
-| `WEBHOOK_ALLOWED_URLS`  | No       | `""`    | Comma-separated list of allowed webhook destination URLs. Empty disables outgoing webhooks. |
-
----
-
-### OpenTelemetry
-
-| Variable                       | Required | Default             | Description |
-|--------------------------------|----------|---------------------|-------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | No       | `""` (disabled)     | OTLP HTTP endpoint for trace export. Leave empty to disable tracing entirely. |
-| `OTEL_SERVICE_NAME`            | No       | `vesting-backend`   | Logical service name reported in every span. |
-| `OTEL_SERVICE_VERSION`         | No       | `0.0.0`             | Service version string reported in every span. |
-| `OTEL_SAMPLE_RATE`             | No       | `0.1`               | Tail-sampling rate as a fraction (0–1). `0.1` = 10 % sampled. |
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `PORT` | `number` | `3000` | TCP port the HTTP server listens on. |
+| `LOG_LEVEL` | `string` | `info` | Logging verbosity. Accepted values: `debug`, `info`, `warn`, `error`. |
+| `REQUEST_TIMEOUT_MS` | `number` | `30000` | Maximum milliseconds to wait for a Soroban RPC response before aborting. |
 
 ---
 
-### Auth / Security
+## Startup Validation
 
-| Variable          | Required | Default | Description |
-|-------------------|----------|---------|-------------|
-| `JWT_SECRET`      | **Yes**  | —       | Secret for signing JWT access tokens (≥ 32 characters). Use a strong random value in production. |
-| `JWT_EXPIRES_IN`  | No       | `1h`    | JWT expiry as a [vercel/ms](https://github.com/vercel/ms) duration string, e.g. `15m`, `2h`, `7d`. |
-| `CORS_ALL_ORIGINS`| No       | `false` | Set to `true` to allow CORS from all origins. **Do not enable in production.** |
+The service validates all required environment variables on startup. If any are missing it logs a clear error and exits with code 1:
 
----
-
-### Logging
-
-| Variable    | Required | Default | Description |
-|-------------|----------|---------|-------------|
-| `LOG_LEVEL` | No       | `info`  | Minimum log level: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`. |
-
----
-
-## Type coercions
-
-The Zod schema performs the following automatic coercions so all raw
-environment strings are returned as the correct TypeScript types:
-
-| Target type      | Examples |
-|------------------|----------|
-| `number`         | `PORT`, `DB_POOL_MAX`, `REDIS_TTL_SECONDS`, `OTEL_SAMPLE_RATE` |
-| `boolean`        | `CORS_ALL_ORIGINS` — truthy values: `"true"`, `"1"`, `"yes"` (case-insensitive) |
-| `string[]`       | `WEBHOOK_ALLOWED_URLS` — split on commas, whitespace-trimmed |
-
----
-
-## Using the config object
-
-```typescript
-import { config } from './config';
-
-// Typed, frozen, validated at startup
-console.log(config.horizonUrl);    // string
-console.log(config.dbPoolMax);     // number
-console.log(config.corsAllOrigins); // boolean
+```
+Error: Missing required environment variables: CONTRACT_ID, NETWORK_PASSPHRASE.
+See docs/config.md for details.
 ```
 
-## Unit-testing config validation
+This prevents silent misconfiguration in production deployments.
 
-Import `parseConfig` directly and pass a mock env map:
+---
 
-```typescript
-import { parseConfig } from './config';
+## Example Values
 
-it('rejects missing HORIZON_URL', () => {
-  const env = { ...validEnv, HORIZON_URL: undefined };
-  // parseConfig calls process.exit(1) on failure; spy or mock as needed.
-});
+### Testnet
+
+```dotenv
+HORIZON_URL=https://horizon-testnet.stellar.org
+SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
-See [`backend/tests/config.test.ts`](../backend/tests/config.test.ts) for
-the full test suite.
+### Local quickstart
+
+```dotenv
+HORIZON_URL=http://localhost:8000
+SOROBAN_RPC_URL=http://localhost:8000/soroban/rpc
+NETWORK_PASSPHRASE=Standalone Network ; February 2017
+CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+### Mainnet
+
+```dotenv
+HORIZON_URL=https://horizon.stellar.org
+SOROBAN_RPC_URL=https://soroban.stellar.org
+NETWORK_PASSPHRASE=Public Global Stellar Network ; September 2015
+CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+---
+
+## Security Notes
+
+- `ADMIN_API_KEY` and `SPONSOR_SECRET_KEY` are secrets. Store them in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.) and inject them at runtime. See `infra/secrets/` for the AWS Secrets Manager setup.
+- Never commit `.env` to version control. It is listed in `.gitignore`.
+- Rotate `ADMIN_API_KEY` periodically. Old keys are immediately invalid once the environment variable is updated and the service restarts.

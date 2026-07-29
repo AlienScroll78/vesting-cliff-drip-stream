@@ -1,0 +1,15 @@
+{
+  "name": "vesting-load-tests",
+  "private": true,
+  "scripts": {
+    "bundle": "esbuild create_streams_bundle_src.js --bundle --outfile=create_streams_bundle.js --platform=neutral --target=es2020 --external:k6 --external:k6/*",
+    "run:dryrun": "k6 run create_streams.js -e SKIP_TX=1 -e VESTING_CONTRACT=placeholder -e TOKEN=placeholder",
+    "run:testnet": "k6 run create_streams_bundle.js -e RPC_URL=https://soroban-testnet.stellar.org -e VESTING_CONTRACT=$VESTING_CONTRACT -e TOKEN=$TOKEN -e SPONSOR_SECRETS=$SPONSOR_SECRETS"
+  },
+  "devDependencies": {
+    "esbuild": "0.21.5"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "12.3.0"
+  }
+}

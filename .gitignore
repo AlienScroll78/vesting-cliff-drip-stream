@@ -4,3 +4,9 @@ Cargo.lock
 .DS_Store
 *.wasm
 !target/*.optimized.wasm
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/playwright-report/
+frontend/test-results/
