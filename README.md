@@ -33,11 +33,15 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 .
 ├── Cargo.toml                     # Package manifest & dependencies
-├── Makefile                       # Build / test / lint helpers
+├── Makefile                       # Build / test / lint / mutants helpers
 ├── README.md
 ├── .cargo/
 │   └── config.toml                # WASM build target
+├── .cargo-mutants.toml            # Mutation testing exclusions & config
 ├── .gitignore
+├── docs/
+│   └── mutation/
+│       └── report.md              # Mutation testing results
 ├── scripts/
 │   ├── deploy.sh                  # Build + optimize + deploy to testnet
 │   ├── invoke_create.sh           # CLI helper: create_vesting_stream
@@ -56,7 +60,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         ├── test_claim.rs          # Claim / vesting logic tests
         ├── test_cancel.rs         # Cancellation & refund tests
         ├── test_views.rs          # Read-only view function tests
-        └── test_edge_cases.rs     # Boundary & integration scenarios
+        ├── test_edge_cases.rs     # Boundary & integration scenarios
+        ├── test_clawback.rs       # Clawback compliance tests (#317)
+        ├── test_drain.rs          # Drain expired stream tests (#316)
+        └── test_min_deposit.rs    # Minimum deposit validation tests (#314)
 ```
 
 
@@ -108,6 +115,8 @@ pub fn create_vesting_stream(
 ) -> Result<(), VestingError>
 ```
 
+Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
+
 ### `claim_vested`
 
 ```rust
@@ -128,6 +137,43 @@ pub fn cancel_stream(
 
 Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens; the sponsor receives the remainder. If the cliff has not passed, the full deposit is refunded to the sponsor.
 
+### `clawback_stream`
+
+```rust
+pub fn clawback_stream(
+    env: Env,
+    sponsor: Address,    // original stream funder; must sign
+    recipient: Address,
+    reason: String,      // compliance reason (max 256 chars)
+) -> Result<(), VestingError>
+```
+
+Compliance clawback: the original sponsor recovers **all remaining tokens** in the vault, bypassing cliff state. Only available on tokens that support the SAC clawback flag. Emits `StreamClawedBack` event with the reason string.
+
+### `drain_expired_stream`
+
+```rust
+pub fn drain_expired_stream(
+    env: Env,
+    caller: Address,     // any address; no auth required
+    recipient: Address,
+) -> Result<(), VestingError>
+```
+
+Permissionless cleanup of a fully expired stream. Available to any caller after `end_ledger + 6,307,200` ledgers (~1 year) have elapsed. Transfers remaining tokens to the original sponsor. Emits `StreamDrained` event.
+
+### `set_min_deposit`
+
+```rust
+pub fn set_min_deposit(
+    env: Env,
+    admin: Address,     // must sign
+    min_deposit: i128,  // new minimum total deposit (must be > 0)
+) -> Result<(), VestingError>
+```
+
+Updates the minimum total deposit threshold in instance storage. Default is 100 tokens.
+
 ### View functions
 
 | Function | Returns |
@@ -135,6 +181,7 @@ Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens;
 | `get_schedule(recipient)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
 | `is_cliff_passed(recipient)` | `bool` |
+| `get_min_deposit()` | `i128` — current minimum deposit threshold |
 
 ---
 
