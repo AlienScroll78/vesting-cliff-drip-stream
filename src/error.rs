@@ -8,6 +8,7 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
+#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ///
@@ -75,4 +76,18 @@ pub enum VestingError {
     /// and would produce confusing behaviour in `cancel_stream` (the same
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
+
+    /// **Code 15** — The schedule's `version` counter has reached `u32::MAX`
+    /// and cannot be incremented further.
+    ///
+    /// In practice this requires 4 294 967 295 mutations on a single stream,
+    /// so it should never occur in normal operation.
+    VersionOverflow = 15,
+
+    /// **Code 16** — The supplied token contract is not on the allowlist.
+    ///
+    /// Add the token with `add_allowed_token` before creating a stream that
+    /// uses it.  If the allowlist is empty (permissive mode) all tokens are
+    /// accepted.
+    TokenNotAllowed = 16,
 }

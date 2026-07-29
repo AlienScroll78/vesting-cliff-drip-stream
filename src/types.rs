@@ -4,24 +4,22 @@ use soroban_sdk::{contracttype, Address};
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
 ///
-/// ## Schema versioning
+/// ## Mutation versioning (Issue #318)
 ///
-/// The `version` field guards against future deserialization mismatches.
-/// All schedules created by the current contract code carry `version = 1`.
-/// Schedules written before this field was introduced have an implicit
-/// `version = 0` (XDR default for a missing `u32`).  Use
-/// `migrate_schedule` to upgrade old entries in-place.
+/// The `version` field is a monotonically increasing mutation counter that
+/// provides an on-chain audit trail.  It is initialised to `1` at stream
+/// creation and incremented atomically on every state-changing operation
+/// (cancel, claim, transfer, etc.).  Overflow to `u32::MAX` returns
+/// [`VestingError::VersionOverflow`] rather than wrapping.
+///
+/// The field is placed **last** in the struct so that XDR-encoded storage
+/// entries written before this field was introduced (which omit it) decode
+/// with an implicit default of `0`, allowing `migrate_schedule` to upgrade
+/// them in-place.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub struct VestingSchedule {
-    /// Schema version for forward-compatibility.
-    ///
-    /// | Value | Meaning                          |
-    /// |-------|----------------------------------|
-    /// | `0`   | Legacy – written before versioning was added |
-    /// | `1`   | Current – all fields present     |
-    pub version: u32,
-
     /// The token being streamed.
     pub token: Address,
 
@@ -45,14 +43,41 @@ pub struct VestingSchedule {
     /// Initialised to `0` on stream creation and incremented on every successful claim.
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
+
+    /// Mutation counter — incremented atomically on every state-changing operation.
+    ///
+    /// | Value | Meaning                              |
+    /// |-------|--------------------------------------|
+    /// | `0`   | Legacy entry written before versioning was added; upgrade with `migrate_schedule` |
+    /// | `1`   | Created (initial value)              |
+    /// | `n>1` | Modified `n-1` times since creation  |
+    ///
+    /// Placed last so that old XDR-encoded entries (which lack this field)
+    /// decode with an implicit XDR default of `0`.
+    pub version: u32,
+}
+
+impl VestingSchedule {
+    /// Increments the version counter, returning `VersionOverflow` at `u32::MAX`.
+    pub fn increment_version(&mut self) -> Result<(), crate::error::VestingError> {
+        self.version = self
+            .version
+            .checked_add(1)
+            .ok_or(crate::error::VestingError::VersionOverflow)?;
+        Ok(())
+    }
 }
 
 /// Storage key variants used for keying contract data.
 #[contracttype]
 #[derive(Clone)]
+#[allow(missing_docs)]
 pub enum DataKey {
     /// Per-recipient vesting schedule.
     Schedule(Address),
+    /// Token allowlist stored in instance storage.
+    /// The value is a `soroban_sdk::Map<Address, bool>`.
+    Allowlist,
 }
 
 /// Human-readable status of a vesting stream.
@@ -68,6 +93,7 @@ pub enum DataKey {
 /// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub enum StreamStatus {
     /// Cliff has not yet been reached; no tokens can be claimed.
     PreCliff,
