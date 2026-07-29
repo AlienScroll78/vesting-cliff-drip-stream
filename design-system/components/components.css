@@ -1,5 +1,6 @@
 /* ==========================================================================
-   Component Styles — consume design tokens from tokens.css
+   Component Styles — consume design tokens from tokens.css + typography.css
+   Import order: tokens.css → typography.css → components.css
    ========================================================================== */
 
 /* ── Button variants ───────────────────────────────────────────────────── */
@@ -11,11 +12,13 @@
   border: 1px solid transparent;
   border-radius: var(--radius-base);
   font-family: var(--font-family-base);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);    /* fluid: 13→14px */
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
   cursor: pointer;
   transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
+  /* Minimum touch target: 44×44px (WCAG 2.5.5) */
+  min-height: 2.75rem;
 }
 .btn:focus-visible {
   outline: 2px solid var(--color-border-focus);
@@ -48,8 +51,8 @@
   color: var(--color-text-primary);
 }
 
-.btn--sm { padding: var(--space-1) var(--space-3); font-size: var(--font-size-xs); }
-.btn--lg { padding: var(--space-3) var(--space-6); font-size: var(--font-size-base); }
+.btn--sm { padding: var(--space-1) var(--space-3); font-size: var(--font-size-caption); min-height: 2rem; }
+.btn--lg { padding: var(--space-3) var(--space-6); font-size: var(--font-size-body); min-height: 3rem; }
 
 /* ── Input styles ──────────────────────────────────────────────────────── */
 .input {
@@ -61,9 +64,11 @@
   border-radius: var(--radius-base);
   color: var(--color-text-primary);
   font-family: var(--font-family-base);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body);   /* fluid: 16→18px — body text size */
   line-height: var(--line-height-base);
   transition: border-color var(--transition-fast);
+  /* Minimum touch target height */
+  min-height: 2.75rem;
 }
 .input::placeholder { color: var(--color-text-disabled); }
 .input:focus {
@@ -87,14 +92,16 @@
 }
 .card__header {
   margin-bottom: var(--space-4);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-body-lg);   /* fluid: 18→20px */
   font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
   color: var(--color-text-primary);
 }
 .card__body {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);     /* fluid: 13→14px */
   line-height: var(--line-height-base);
+  max-width: var(--measure-body);        /* 72ch max line length */
 }
 .card__footer {
   margin-top: var(--space-6);
@@ -103,4 +110,35 @@
   display: flex;
   gap: var(--space-3);
   justify-content: flex-end;
+}
+
+/* ── Address / ledger / hash display ───────────────────────────────────── */
+/* Use these classes whenever rendering Stellar addresses, ledger numbers,
+   or transaction hashes. Ensures tabular-nums and monospace rendering. */
+.ds-address,
+.ds-ledger,
+.ds-tx-hash {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono-base, 0.9375rem);
+  font-variant-numeric: var(--font-variant-numeric, tabular-nums);
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  letter-spacing: 0.05em;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* ── Amount display (claim sheet, balance) ─────────────────────────────── */
+.ds-amount-display {
+  font-family: var(--font-family-mono);
+  font-size: clamp(1.875rem, 1.5917rem + 1.4167vw, 2.375rem); /* fluid-3xl */
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  line-height: 1;
+}
+
+.ds-amount-inline {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
 }

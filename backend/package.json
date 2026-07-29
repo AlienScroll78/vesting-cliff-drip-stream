@@ -7,7 +7,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:resilience": "vitest run --reporter=verbose src/routes/horizon-resilience.test.ts",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -18,9 +20,11 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.31",
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.11.10",
+    "jsonwebtoken": "^9.0.3",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9"
