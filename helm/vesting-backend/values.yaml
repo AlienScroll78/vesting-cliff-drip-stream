@@ -1,0 +1,167 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# vesting-backend default values
+# Override with --set or a custom values file (-f my-values.yaml)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Container image
+image:
+  repository: ghcr.io/your-org/vesting-cliff-drip-stream
+  tag: "1.0.0"
+  # digest pins the exact image content and takes precedence over tag when set.
+  # Format: sha256:<64-hex-chars>  (populated automatically by pin-image-digest.sh)
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Number of replicas (overridden by HPA when enabled)
+replicaCount: 1
+
+# Annotations applied to every pod (e.g. reloader.stakater.com/auto: "true")
+podAnnotations: {}
+
+# Port the Node.js backend listens on (process.env.PORT)
+appPort: 3001
+
+# Resource limits/requests
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Service configuration
+service:
+  type: ClusterIP
+  # External port exposed by the Service
+  port: 80
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  host: vesting.example.com
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: vesting-tls
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+# PodDisruptionBudget — set minAvailable or maxUnavailable to control
+# availability during voluntary disruptions (node drains, rolling updates).
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Requires Argo Rollouts and the ingress-nginx traffic-routing plugin. The
+# rollout automatically aborts and returns traffic to stable on failed
+# Prometheus error-rate analysis.
+canary:
+  enabled: false
+  steps:
+    initialWeight: 10
+    initialPause: 5m
+    secondWeight: 25
+    secondPause: 10m
+  analysis:
+    prometheusAddress: ""
+    maxErrorRate: 0.02
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    labels:
+      release: prometheus
+    path: /metrics
+    interval: 30s
+
+# ServiceAccount — set create: true to have the chart manage it,
+# or set name to an existing SA (e.g. one with an IRSA annotation).
+serviceAccount:
+  create: true
+  # Annotations to apply (e.g. IRSA role ARN)
+  annotations: {}
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/vesting-backend
+  # Override the generated name
+  name: ""
+
+# ── Application configuration (rendered into ConfigMap) ──────────────────────
+config:
+  # Stellar Horizon REST API endpoint
+  horizonUrl: "https://horizon-testnet.stellar.org"
+  # Stellar network passphrase
+  networkPassphrase: "Test SDF Network ; September 2015"
+  # Soroban contract ID of the deployed vesting contract
+  contractId: ""
+  # Soroban RPC endpoint used for transaction submission and RPC health check
+  sorobanRpcUrl: "https://soroban-testnet.stellar.org"
+  # Log verbosity: debug | info | warn | error
+  logLevel: "info"
+  # Request timeout to Soroban RPC in milliseconds
+  requestTimeoutMs: "30000"
+  # GraphQL query depth limit
+  graphqlMaxDepth: "5"
+
+# ── External Secrets Operator (ExternalSecret CRD → AWS Secrets Manager) ─────
+#
+# All keys map to a single remote secret object.  Each entry becomes one env
+# var injected into the Pod via the generated K8s Secret.
+#
+# externalSecret.remoteSecrets.<ENV_VAR_KEY>:
+#   remoteKey:  path in the secret store (e.g. "vesting/prod/app")
+#   property:   JSON key inside the secret object (omit for plaintext secrets)
+externalSecret:
+  enabled: true
+  # Interval at which ESO re-fetches from the store
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: aws-secretsmanager
+    kind: ClusterSecretStore
+  remoteSecrets:
+    DATABASE_URL:
+      remoteKey: vesting/production/app-secrets
+      property: database_url
+    REDIS_URL:
+      remoteKey: vesting/production/app-secrets
+      property: redis_url
+    ADMIN_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: admin_api_key
+    SPONSOR_SECRET_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: sponsor_secret_key
+    JWT_SECRET:
+      remoteKey: vesting/production/app-secrets
+      property: jwt_secret
+    HORIZON_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: horizon_api_key
+
+# ── Event Worker ────────────────────────────────────────────────────────────
+# Separate deployment for the background event-indexing worker.  Reuses the
+# same container image with a different command/args entrypoint.
+eventWorker:
+  enabled: true
+  replicaCount: 1
+  # Command override (if the image supports multiple entrypoints)
+  # command: ["node", "dist/worker.js"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podAnnotations: {}

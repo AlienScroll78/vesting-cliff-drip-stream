@@ -1,0 +1,41 @@
+{
+  "name": "vesting-cliff-drip-stream-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server/index.js",
+    "validate:openapi": "node scripts/validate-openapi.js",
+    "test:backend": "node --test src/server/*.test.js",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "chromatic": "chromatic --exit-zero-on-changes",
+    "test:e2e": "npm run test:e2e --workspace=frontend",
+    "test:e2e:contract": "node tests/e2e/run_e2e.js"
+  },
+  "dependencies": {
+    "@floating-ui/react": "^0.26.28",
+    "@vitejs/plugin-react": "^4.3.4",
+    "cockatiel": "^4.0.0",
+    "express": "^5.2.1",
+    "express-openapi-validator": "^5.6.2",
+    "jsonwebtoken": "^9.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "swagger-ui-express": "^5.0.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@chromatic-com/storybook": "^3.2.3",
+    "@storybook/addon-a11y": "^8.4.7",
+    "@storybook/addon-essentials": "^8.4.7",
+    "@storybook/addon-interactions": "^8.4.7",
+    "@storybook/blocks": "^8.4.7",
+    "@storybook/react": "^8.4.7",
+    "@storybook/react-vite": "^8.4.7",
+    "@storybook/test": "^8.4.7",
+    "chromatic": "^11.20.2"
+  }
+}
