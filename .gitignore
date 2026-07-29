@@ -4,6 +4,10 @@ Cargo.lock
 .DS_Store
 *.wasm
 !target/*.optimized.wasm
+node_modules/
+package-lock.json
+proptest-regressions/
+test_snapshots/
 
 # Frontend
 frontend/node_modules/
