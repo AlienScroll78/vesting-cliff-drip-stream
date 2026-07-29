@@ -1,8 +1,10 @@
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AnalyticsInit } from "@/components/AnalyticsInit";
 import { DarkModeToggle } from "@/components/DarkModeToggle";
+import { NotificationCenter } from "@/components/NotificationCenter";
 
 // Inline script run before paint to prevent flash of unstyled content
 const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
@@ -25,11 +27,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <I18nProvider>
           <AnalyticsInit />
           <WalletProvider>
-            <header className="header" style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}>
-              <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
-              <DarkModeToggle />
-            </header>
-            {children}
+            <NotificationProvider>
+              <header
+                className="header"
+                style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}
+              >
+                <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {/* #382 — Notification bell */}
+                  <NotificationCenter />
+                  <DarkModeToggle />
+                </div>
+              </header>
+              {children}
+            </NotificationProvider>
           </WalletProvider>
         </I18nProvider>
       </body>
