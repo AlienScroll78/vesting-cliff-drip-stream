@@ -1,8 +1,8 @@
-use soroban_sdk::{Address, Env, Symbol, symbol_short};
+use soroban_sdk::{Address, Env, String, symbol_short};
 
 /// Emitted when a new vesting stream is created.
 ///
-/// Topics: `["vesting_created", recipient]`
+/// Topics: `["vc_create", recipient]`
 /// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger)`
 pub fn emit_stream_created(
     env: &Env,
@@ -29,7 +29,7 @@ pub fn emit_stream_created(
 
 /// Emitted when a recipient successfully claims vested tokens.
 ///
-/// Topics: `["vesting_claim", recipient]`
+/// Topics: `["vc_claim", recipient]`
 /// Data:   `(amount, ledger_claimed_through)`
 pub fn emit_tokens_claimed(
     env: &Env,
@@ -45,7 +45,7 @@ pub fn emit_tokens_claimed(
 
 /// Emitted when a vesting schedule is fully exhausted.
 ///
-/// Topics: `["vesting_done", recipient]`
+/// Topics: `["vc_done", recipient]`
 /// Data:   `(token)`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
     env.events().publish(
@@ -56,11 +56,57 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 
 /// Emitted when a sponsor cancels a vesting stream before it completes.
 ///
-/// Topics: `["vesting_cancel", recipient]`
+/// Topics: `["vc_cancel", recipient]`
 /// Data:   `(refunded_amount)`
 pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
         refunded_amount,
+    );
+}
+
+/// Emitted when a sponsor executes a compliance clawback on a stream.
+///
+/// Topics: `["vc_claw", recipient]`
+/// Data:   `(sponsor, token, clawed_back_amount, reason)`
+pub fn emit_stream_clawed_back(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    token: &Address,
+    clawed_back_amount: i128,
+    reason: &String,
+) {
+    env.events().publish(
+        (symbol_short!("vc_claw"), recipient.clone()),
+        (
+            sponsor.clone(),
+            token.clone(),
+            clawed_back_amount,
+            reason.clone(),
+        ),
+    );
+}
+
+/// Emitted when an expired stream is drained back to the sponsor.
+///
+/// Topics: `["vc_drain", recipient]`
+/// Data:   `(sponsor, token, drained_amount, caller)`
+pub fn emit_stream_drained(
+    env: &Env,
+    caller: &Address,
+    recipient: &Address,
+    sponsor: &Address,
+    token: &Address,
+    drained_amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_drain"), recipient.clone()),
+        (
+            caller.clone(),
+            sponsor.clone(),
+            token.clone(),
+            drained_amount,
+        ),
     );
 }

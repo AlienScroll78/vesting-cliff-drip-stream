@@ -7,6 +7,9 @@ mod test_claim;
 mod test_cancel;
 mod test_views;
 mod test_edge_cases;
+mod test_clawback;
+mod test_drain;
+mod test_min_deposit;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
