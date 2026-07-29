@@ -7,26 +7,38 @@ use crate::types::{DataKey, VestingSchedule};
 const PERSISTENT_LEDGER_THRESHOLD: u32 = 259_200;
 const PERSISTENT_BUMP_AMOUNT: u32 = 518_400; // ~60 days
 
-// ── Schedule: Read ────────────────────────────────────────────────────────────
+/// Default minimum total deposit (in token base units).
+pub const DEFAULT_MIN_DEPOSIT: i128 = 100;
+
+// ── Read ─────────────────────────────────────────────────────────────────────
 
 /// Returns the vesting schedule for `recipient`, or `None` if absent.
+///
+/// Bumps the entry's TTL, since a schedule fetched on this path is about to
+/// be mutated (claim/cancel/drain) and must not expire mid-stream. Read-only
+/// views should call [`get_schedule_readonly`] instead to skip the extra
+/// storage-write instructions.
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    if let Some(schedule) = env
+    let schedule = env
         .storage()
         .persistent()
-        .get::<DataKey, VestingSchedule>(&key)
-    {
-        // Bump TTL each time it is read so active streams don't expire.
-        env.storage().persistent().extend_ttl(
-            &key,
-            PERSISTENT_LEDGER_THRESHOLD,
-            PERSISTENT_BUMP_AMOUNT,
-        );
-        Some(schedule)
-    } else {
-        None
-    }
+        .get::<DataKey, VestingSchedule>(&key)?;
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+    Some(schedule)
+}
+
+/// Returns the vesting schedule for `recipient` without bumping its TTL.
+///
+/// For pure read-only views (`claimable_amount`, `get_status`, ...) that are
+/// called far more often than the contract's mutating entry points and gain
+/// nothing from refreshing the entry's expiry on every call.
+pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
+    env.storage()
+        .persistent()
+        .get::<DataKey, VestingSchedule>(&DataKey::Schedule(recipient.clone()))
 }
 
 /// Returns `true` if a schedule already exists for `recipient`.
@@ -36,7 +48,15 @@ pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
         .has(&DataKey::Schedule(recipient.clone()))
 }
 
-// ── Schedule: Write ───────────────────────────────────────────────────────────
+/// Returns the configured minimum deposit, falling back to `DEFAULT_MIN_DEPOSIT`.
+pub fn get_min_deposit(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get::<DataKey, i128>(&DataKey::MinDeposit)
+        .unwrap_or(DEFAULT_MIN_DEPOSIT)
+}
+
+// ── Write ─────────────────────────────────────────────────────────────────────
 
 /// Persists `schedule` for `recipient` and bumps its TTL.
 pub fn set_schedule(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
@@ -57,72 +77,10 @@ pub fn remove_schedule(env: &Env, recipient: &Address) {
         .remove(&DataKey::Schedule(recipient.clone()));
 }
 
-// ── Allowlist: Read ───────────────────────────────────────────────────────────
-
-/// Returns the current allowlist map from instance storage.
-///
-/// An absent key is equivalent to an empty map (permissive mode).
-fn get_allowlist_map(env: &Env) -> Map<Address, bool> {
+/// Stores a new minimum deposit value in instance storage.
+/// Callable by an admin to configure the threshold.
+pub fn set_min_deposit(env: &Env, min_deposit: i128) {
     env.storage()
         .instance()
-        .get::<DataKey, Map<Address, bool>>(&DataKey::Allowlist)
-        .unwrap_or_else(|| Map::new(env))
-}
-
-/// Returns `true` if `token` is allowed.
-///
-/// When the allowlist is empty the contract operates in *permissive mode*
-/// and all tokens are accepted (backward-compatible default).
-pub fn is_token_allowed(env: &Env, token: &Address) -> bool {
-    let map = get_allowlist_map(env);
-    // Bump instance TTL on every read to prevent archival.
-    env.storage()
-        .instance()
-        .extend_ttl(PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
-    if map.is_empty() {
-        // Permissive mode — empty list means allow all.
-        return true;
-    }
-    map.get(token.clone()).unwrap_or(false)
-}
-
-/// Returns all currently allowed token addresses as a `Vec`.
-pub fn get_allowed_tokens(env: &Env) -> Vec<Address> {
-    let map = get_allowlist_map(env);
-    // Collect keys where the value is `true`.
-    let mut result: Vec<Address> = Vec::new(env);
-    for (addr, allowed) in map.iter() {
-        if allowed {
-            result.push_back(addr);
-        }
-    }
-    result
-}
-
-// ── Allowlist: Write ──────────────────────────────────────────────────────────
-
-/// Adds `token` to the allowlist.
-pub fn add_allowed_token(env: &Env, token: &Address) {
-    let mut map = get_allowlist_map(env);
-    map.set(token.clone(), true);
-    env.storage()
-        .instance()
-        .set(&DataKey::Allowlist, &map);
-    env.storage()
-        .instance()
-        .extend_ttl(PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
-}
-
-/// Removes `token` from the allowlist.
-///
-/// If `token` was not present this is a no-op.
-pub fn remove_allowed_token(env: &Env, token: &Address) {
-    let mut map = get_allowlist_map(env);
-    map.remove(token.clone());
-    env.storage()
-        .instance()
-        .set(&DataKey::Allowlist, &map);
-    env.storage()
-        .instance()
-        .extend_ttl(PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+        .set(&DataKey::MinDeposit, &min_deposit);
 }
