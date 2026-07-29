@@ -28,4 +28,16 @@ pub enum VestingError {
 
     /// Nothing available to claim at the current ledger.
     NothingToClaim = 7,
+
+    /// The stream has not yet reached its end ledger; drain is not permitted yet.
+    StreamNotExpired = 8,
+
+    /// The 1-year drain delay has not elapsed since the stream ended.
+    DrainDelayNotExpired = 9,
+
+    /// The total deposit is below the configured minimum deposit threshold.
+    DepositBelowMinimum = 13,
+
+    /// The token contract does not support the SAC clawback operation.
+    ClawbackNotSupported = 14,
 }

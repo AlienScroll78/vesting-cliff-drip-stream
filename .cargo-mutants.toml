@@ -1,0 +1,42 @@
+# cargo-mutants configuration for vesting-cliff-drip-stream
+# https://mutants.rs/configuration.html
+
+# Packages to run mutations against
+# (run: cargo mutants --package vesting-cliff-drip-stream)
+
+# ── Exclusion list ────────────────────────────────────────────────────────────
+# Paths excluded from mutation testing (non-critical or boilerplate code)
+exclude_globs = [
+    # Storage TTL/bump constants — changing these affects performance, not correctness.
+    "src/storage.rs:PERSISTENT_LEDGER_THRESHOLD",
+    "src/storage.rs:PERSISTENT_BUMP_AMOUNT",
+
+    # Event emission helpers — these are observability, not logic.
+    "src/events.rs",
+
+    # Error enum declarations — these are data definitions, not logic.
+    "src/error.rs",
+
+    # Type definitions — struct layouts, not computation.
+    "src/types.rs",
+
+    # Test scaffolding.
+    "src/tests/**",
+]
+
+# ── Timeout ───────────────────────────────────────────────────────────────────
+# Seconds to allow each mutant's test suite to run.
+# Soroban tests are native (no WASM), so 60 s is generous.
+timeout_multiplier = 3.0
+
+# ── Critical paths (must have 0 survivors) ────────────────────────────────────
+# Arithmetic operations in these functions are mutation-tested with zero tolerance:
+#   - claimable_amount         (src/contract.rs)
+#   - claim_vested             (src/contract.rs)
+#   - cancel_stream            (src/contract.rs)
+#   - clawback_stream          (src/contract.rs)
+#   - drain_expired_stream     (src/contract.rs)
+#   - create_vesting_stream    (src/contract.rs)
+#   - get_schedule / set_schedule (src/storage.rs)
+#
+# These are NOT excluded; all arithmetic mutants in them must be killed.
