@@ -29,6 +29,7 @@ Soroban contract errors are returned as a `u32` code inside a
 | 5 | `DepositOverflow` | `rate × total_duration` overflows `i128` | Reduce rate or duration; never submit | ✗ |
 | 6 | `ScheduleAlreadyExists` | Create called for a recipient who already has a stream | Inform sponsor; offer to view existing stream | ✗ |
 | 7 | `NothingToClaim` | Claimable amount is zero | Suppress or show "up to date"; retry next ledger | ✓ (wait) |
+| 9 | `DrainDelayNotExpired` | Admin drain called before `end_ledger + drain_delay` | Wait until drain delay ledgers have passed | ✓ (wait) |
 
 ---
 

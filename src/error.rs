@@ -28,4 +28,7 @@ pub enum VestingError {
 
     /// Nothing available to claim at the current ledger.
     NothingToClaim = 7,
+
+    /// The drain delay after stream completion has not expired.
+    DrainDelayNotExpired = 9,
 }
