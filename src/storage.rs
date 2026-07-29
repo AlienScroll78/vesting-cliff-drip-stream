@@ -13,23 +13,32 @@ pub const DEFAULT_MIN_DEPOSIT: i128 = 100;
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 /// Returns the vesting schedule for `recipient`, or `None` if absent.
+///
+/// Bumps the entry's TTL, since a schedule fetched on this path is about to
+/// be mutated (claim/cancel/drain) and must not expire mid-stream. Read-only
+/// views should call [`get_schedule_readonly`] instead to skip the extra
+/// storage-write instructions.
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    if let Some(schedule) = env
+    let schedule = env
         .storage()
         .persistent()
-        .get::<DataKey, VestingSchedule>(&key)
-    {
-        // Bump TTL each time it is read so active streams don't expire.
-        env.storage().persistent().extend_ttl(
-            &key,
-            PERSISTENT_LEDGER_THRESHOLD,
-            PERSISTENT_BUMP_AMOUNT,
-        );
-        Some(schedule)
-    } else {
-        None
-    }
+        .get::<DataKey, VestingSchedule>(&key)?;
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+    Some(schedule)
+}
+
+/// Returns the vesting schedule for `recipient` without bumping its TTL.
+///
+/// For pure read-only views (`claimable_amount`, `get_status`, ...) that are
+/// called far more often than the contract's mutating entry points and gain
+/// nothing from refreshing the entry's expiry on every call.
+pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
+    env.storage()
+        .persistent()
+        .get::<DataKey, VestingSchedule>(&DataKey::Schedule(recipient.clone()))
 }
 
 /// Returns `true` if a schedule already exists for `recipient`.

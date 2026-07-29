@@ -1,3 +1,8 @@
+// `#[contracttype]` emits an inherent `impl Type { spec_xdr() }` with no doc
+// comment of its own; rustc doesn't propagate item-level `#[allow]` onto
+// attribute-macro-generated sibling impls, so the allow has to be module-scoped.
+#![allow(missing_docs)]
+
 use soroban_sdk::{contracttype, Address};
 
 /// Represents a single vesting schedule stored per recipient.
