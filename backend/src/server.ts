@@ -8,6 +8,7 @@ import { startAdminServer } from "./admin/server.js";
 import { healthHandler, readyHandler } from "./routes/health.js";
 import { sponsorAnalyticsHandler } from "./routes/analytics.js";
 import { vestingRouter } from "./routes/vesting.js";
+import { schedulesExportRouter } from "./routes/schedules-export.js";
 import { attachWebSocketServer } from "./ws.js";
 import { startIndexer } from "./indexer.js";
 
@@ -26,6 +27,9 @@ app.get("/ready", readyHandler);
 
 // Analytics (#34)
 app.get("/analytics/sponsor/:address", sponsorAnalyticsHandler);
+
+// Issue #297 — CSV / JSON export endpoints
+app.use("/api/v1", schedulesExportRouter);
 
 // Issue #26 — REST API for vesting schedule queries
 app.use("/api", vestingRouter);
