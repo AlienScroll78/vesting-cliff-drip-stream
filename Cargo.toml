@@ -19,6 +19,7 @@ soroban-sdk = { version = "22.0.0", features = [] }
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
 soroban-token-sdk = { version = "22.0.0" }
+proptest = "1.0"
 
 [profile.release]
 opt-level = "z"

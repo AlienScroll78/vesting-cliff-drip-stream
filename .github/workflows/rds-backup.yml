@@ -1,0 +1,57 @@
+name: RDS Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # daily at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      snapshot_identifier:
+        description: 'Manual snapshot identifier suffix'
+        required: false
+        default: 'manual'
+
+jobs:
+  backup:
+    name: Create RDS Snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_BACKUP_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Create snapshot
+        id: snapshot
+        run: |
+          SUFFIX=${{ github.event.inputs.snapshot_identifier || 'scheduled' }}
+          SNAP_ID="vesting-$(date +%Y%m%d-%H%M)-${SUFFIX}"
+          aws rds create-db-snapshot \
+            --db-instance-identifier ${{ secrets.RDS_INSTANCE_ID }} \
+            --db-snapshot-identifier "${SNAP_ID}"
+          echo "snapshot_id=${SNAP_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for snapshot to complete
+        run: |
+          aws rds wait db-snapshot-completed \
+            --db-snapshot-identifier "${{ steps.snapshot.outputs.snapshot_id }}"
+
+      - name: Verify snapshot status
+        run: |
+          STATUS=$(aws rds describe-db-snapshots \
+            --db-snapshot-identifier "${{ steps.snapshot.outputs.snapshot_id }}" \
+            --query 'DBSnapshots[0].Status' --output text)
+          echo "Snapshot status: ${STATUS}"
+          [ "${STATUS}" = "available" ] || exit 1
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: '{"text":":red_circle: RDS backup failed for run <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>."}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

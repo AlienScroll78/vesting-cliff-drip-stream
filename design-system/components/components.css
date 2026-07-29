@@ -1,0 +1,106 @@
+/* ==========================================================================
+   Component Styles — consume design tokens from tokens.css
+   ========================================================================== */
+
+/* ── Button variants ───────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-base);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-brand-primary);
+  color: var(--color-text-primary);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-brand-secondary);
+}
+
+.btn--secondary {
+  background: transparent;
+  border-color: var(--color-brand-primary);
+  color: var(--color-brand-primary);
+}
+.btn--secondary:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+}
+
+.btn--danger {
+  background: var(--color-danger);
+  color: var(--color-text-primary);
+}
+
+.btn--sm { padding: var(--space-1) var(--space-3); font-size: var(--font-size-xs); }
+.btn--lg { padding: var(--space-3) var(--space-6); font-size: var(--font-size-base); }
+
+/* ── Input styles ──────────────────────────────────────────────────────── */
+.input {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+  transition: border-color var(--transition-fast);
+}
+.input::placeholder { color: var(--color-text-disabled); }
+.input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgb(124 58 237 / 0.25);
+}
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.input--error { border-color: var(--color-danger); }
+
+/* ── Card styles ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-md);
+}
+.card__header {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.card__body {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+}
+.card__footer {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}

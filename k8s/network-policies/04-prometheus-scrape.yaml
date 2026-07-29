@@ -1,0 +1,78 @@
+# NetworkPolicy: Prometheus → all services (port 9090 scrape)
+#
+# Allows Prometheus to scrape metrics from every pod in the vesting namespace
+# that exposes port 9090 (/metrics).
+#
+# Two complementary policies:
+#   1. Egress from Prometheus pods to any pod on port 9090
+#   2. Ingress to any service pod from Prometheus on port 9090
+#
+# This follows the "scrape port" convention.  If some services expose metrics
+# on a different port (e.g. 8080 or 3001), add that port to both policies or
+# create a separate rule for that workload.
+#
+# Label assumptions:
+#   Prometheus pods: app.kubernetes.io/name=prometheus
+#                    (kube-prometheus-stack uses this label by default)
+#
+# Namespace note: Prometheus commonly runs in a dedicated namespace (e.g.
+# "monitoring").  If so, replace the podSelector-only from/to rules with a
+# combined namespaceSelector + podSelector pattern.  See the inline comments.
+---
+# Egress from Prometheus → all pods in vesting namespace on port 9090
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    # Scrape any pod in the same namespace on port 9090
+    - to:
+        - podSelector: {}   # matches all pods in the vesting namespace
+      ports:
+        - protocol: TCP
+          port: 9090
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Ingress to all service pods ← Prometheus on port 9090
+# This policy is applied to every pod (podSelector: {}) so any workload that
+# binds :9090 will accept scrape connections from Prometheus.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape-ingress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector: {}   # all pods in the vesting namespace
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+          # Uncomment the block below if Prometheus runs in a separate namespace
+          # (e.g. "monitoring").  The namespaceSelector and podSelector are AND-ed.
+          # namespaceSelector:
+          #   matchLabels:
+          #     kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
