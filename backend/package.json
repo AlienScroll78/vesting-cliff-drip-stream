@@ -1,0 +1,44 @@
+{
+  "name": "vesting-cliff-drip-stream-backend",
+  "version": "1.0.0",
+  "description": "Backend service for the Vesting Cliff Drip Stream contract",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest --testPathIgnorePatterns=resilience",
+    "test:resilience": "jest --testPathPattern=resilience --runInBand --forceExit",
+    "lint": "eslint src tests --ext .ts"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "0.54.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.54.0",
+    "@opentelemetry/instrumentation-http": "0.54.0",
+    "@opentelemetry/instrumentation-pg": "0.54.0",
+    "@opentelemetry/instrumentation-redis-4": "0.54.0",
+    "@opentelemetry/resources": "1.27.0",
+    "@opentelemetry/sdk-node": "0.54.0",
+    "@opentelemetry/sdk-trace-node": "1.27.0",
+    "@opentelemetry/semantic-conventions": "1.27.0",
+    "pg": "8.13.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.14",
+    "@types/node": "20.17.10",
+    "@types/pg": "8.11.10",
+    "jest": "29.7.0",
+    "ts-jest": "29.2.5",
+    "typescript": "5.7.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/tests"
+    ],
+    "testTimeout": 30000
+  }
+}
