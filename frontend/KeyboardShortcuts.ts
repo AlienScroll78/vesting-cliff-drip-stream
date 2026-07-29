@@ -135,7 +135,8 @@ export function initKeyboardShortcuts(options: {
         "button, [href], input, [tabindex]:not([tabindex='-1'])"
       )];
       if (!focusable.length) return;
-      const first = focusable[0], last = focusable[focusable.length - 1];
+      // Non-null: length guard above ensures these indices exist
+      const first = focusable[0]!, last = focusable[focusable.length - 1]!;
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault(); last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {

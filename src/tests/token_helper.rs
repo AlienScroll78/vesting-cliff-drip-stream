@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use soroban_sdk::{testutils::Address as _, Address, Env};
-use soroban_token_sdk::TokenClient;
 
 // The soroban test framework ships a built-in token contract.
 // We use `env.register_stellar_asset_contract_v2` to get a real SAC token.
