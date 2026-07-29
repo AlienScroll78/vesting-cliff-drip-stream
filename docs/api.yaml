@@ -1,211 +1,195 @@
-openapi: 3.0.3
+openapi: "3.1.0"
 info:
   title: Vesting Cliff Drip Stream API
-  description: Backend service API for managing vesting streams, Horizon failover, and admin cleanups.
-  version: 1.0.0
+  version: "1.0.0"
+  description: |
+    REST API for querying vesting schedules and claimable balances without
+    running a Stellar node.  All view calls are simulated via Soroban RPC.
+
 servers:
-  - url: http://127.0.0.1:3000
-    description: Local server
+  - url: http://localhost:3001/api
+    description: Local development
+  - url: https://api.vesting.example.com/api
+    description: Production
+
 paths:
-  /health:
+  /schedules/{recipient}:
     get:
-      summary: Overall system health check
-      operationId: getHealth
-      responses:
-        '200':
-          description: System is healthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-        '503':
-          description: System or upstream service is unhealthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-
-  /health/horizon:
-    get:
-      summary: Horizon status check
-      operationId: getHorizonHealth
-      responses:
-        '200':
-          description: Horizon endpoints are healthy
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: healthy
-                  endpoints:
-                    type: array
-                    items:
-                      type: string
-        '503':
-          description: Horizon service unavailable
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: unavailable
-                  error:
-                    type: string
-
-  /health/horizon/circuit-breaker:
-    get:
-      summary: Horizon circuit breaker status
-      operationId: getCircuitBreakerStatus
-      responses:
-        '200':
-          description: Circuit breaker status string
-          content:
-            text/plain:
-              schema:
-                type: string
-                example: closed
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: closed
-
-  /api/openapi.json:
-    get:
-      summary: Raw OpenAPI specification JSON
-      operationId: getOpenApiJson
-      responses:
-        '200':
-          description: OpenAPI 3.0 JSON specification
-          content:
-            application/json:
-              schema:
-                type: object
-
-  /api/v1/admin/drain:
-    post:
-      summary: Trigger drain scan for expired streams
-      operationId: drainExpiredStreams
-      security:
-        - BearerAuth: []
+      operationId: getSchedule
+      summary: Get vesting schedule for a recipient
       parameters:
-        - name: dry_run
+        - name: recipient
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar account ID (G...)
+      responses:
+        "200":
+          description: Vesting schedule found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VestingSchedule"
+        "404":
+          description: No schedule found for recipient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: RPC or server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /schedules/sponsor/{sponsor}:
+    get:
+      operationId: getSchedulesBySponsor
+      summary: List vesting schedules created by a sponsor (paginated)
+      parameters:
+        - name: sponsor
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar account ID (G...) of the sponsor
+        - name: page
           in: query
           required: false
-          description: If true, scan eligible streams without executing drain transactions
           schema:
-            type: boolean
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                dry_run:
-                  type: boolean
-                drain_delay_ledgers:
-                  type: integer
-                  minimum: 0
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Horizon paging token for cursor-based pagination
       responses:
-        '200':
-          description: Drain summary response
+        "200":
+          description: Paginated list of stream summaries
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DrainResponse'
-        '400':
-          description: Validation error
+                $ref: "#/components/schemas/SponsorSchedulesPage"
+        "502":
+          description: Horizon unavailable
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Unauthorized - missing or invalid token
+                $ref: "#/components/schemas/Error"
+
+  /claimable/{recipient}:
+    get:
+      operationId: getClaimable
+      summary: Get the current claimable token amount for a recipient
+      parameters:
+        - name: recipient
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Claimable amount
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - admin scope required
+                $ref: "#/components/schemas/ClaimableResponse"
+        "500":
+          description: RPC or server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '429':
-          description: Rate limit exceeded (1 execution per 5 minutes)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/Error"
 
 components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
   schemas:
-    HealthResponse:
+    VestingSchedule:
       type: object
       required:
-        - status
+        - recipient
+        - sponsor
+        - token
+        - rate
+        - cliff_ledger
+        - end_ledger
+        - start_ledger
+        - claimable_amount
+        - is_cliff_passed
       properties:
-        status:
+        recipient:
           type: string
-          enum: [ok, degraded, unavailable]
-        uptime:
-          type: number
-        horizon:
-          type: object
-    DrainResponse:
-      type: object
-      required:
-        - scanned
-        - eligible
-        - submitted
-        - dry_run
-        - streams
-      properties:
-        scanned:
+        sponsor:
+          type: string
+        token:
+          type: string
+        rate:
+          type: string
+          description: Tokens per ledger (as string to preserve i128 precision)
+        cliff_ledger:
           type: integer
-        eligible:
+        end_ledger:
           type: integer
-        submitted:
+        start_ledger:
           type: integer
-        dry_run:
+        claimable_amount:
+          type: string
+          description: Currently claimable tokens (as string)
+        is_cliff_passed:
           type: boolean
-        streams:
-          type: array
-          items:
-            type: object
-            properties:
-              recipient:
-                type: string
-              end_ledger:
-                type: integer
-              tx_hash:
-                type: string
-    ErrorResponse:
+
+    ClaimableResponse:
       type: object
-      required:
-        - message
+      required: [recipient, claimable_amount]
       properties:
-        message:
+        recipient:
           type: string
-        errors:
+        claimable_amount:
+          type: string
+
+    SponsorSchedulesPage:
+      type: object
+      required: [items, page, limit]
+      properties:
+        items:
           type: array
           items:
-            type: object
-            properties:
-              path:
-                type: string
-              message:
-                type: string
+            $ref: "#/components/schemas/StreamSummary"
+        page:
+          type: integer
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+          nullable: true
+
+    StreamSummary:
+      type: object
+      properties:
+        recipient:
+          type: string
+        sponsor:
+          type: string
+        token:
+          type: string
+        ledger:
+          type: integer
+        event_id:
+          type: string
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
