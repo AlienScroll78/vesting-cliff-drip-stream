@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "@/i18n";
 import { WalletButton } from "@/components/WalletButton";
@@ -16,6 +16,9 @@ import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #389 — keyboard navigation & focus management
+import { StreamCardList } from "@/components/StreamCardList";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { formatAmount, abbreviateAmount } from "@/utils/formatAmount";
@@ -91,7 +94,16 @@ function StreamList() {
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // #389 — trigger refs for focus restoration when modals close
+  const claimTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const cancelTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // #389 — focus management: move focus into modal on open; restore on close
+  useModalFocus(claimTarget !== null, claimTriggerRef);
+  useModalFocus(cancelTarget !== null, cancelTriggerRef);
 
   useState(() => {
     const timer = setTimeout(() => setLoading(false), 800);
@@ -135,9 +147,30 @@ function StreamList() {
 
   return (
     <>
-      <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label={t("streams")}>
+      {/* #389 — StreamCardList provides Arrow/Home/End keyboard navigation */}
+      <StreamCardList
+        streamIds={MOCK_STREAMS.map((s) => s.id)}
+        activeId={activeCardId}
+        onActivate={(id) => {
+          const stream = MOCK_STREAMS.find((s) => s.id === id);
+          if (stream?.status === "active") setClaimTarget(stream);
+        }}
+        onActiveChange={setActiveCardId}
+        ariaLabel={t("streams")}
+        className="stream-list"
+        style={{ marginTop: "1rem" }}
+      >
         {MOCK_STREAMS.map((s) => (
-          <li key={s.id} className="stream-card">
+          <li
+            key={s.id}
+            id={`stream-option-${s.id}`}
+            role="option"
+            aria-selected={activeCardId === s.id}
+            className="stream-card"
+            // #389 — cards are focusable for keyboard navigation
+            tabIndex={0}
+            onFocus={() => setActiveCardId(s.id)}
+          >
             <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
@@ -166,11 +199,21 @@ function StreamList() {
                     </button>
                   )}
                   {s.status === "active" && (
+                    // #389 — store ref on the button that opens the claim sheet
+                    // so focus can be restored when the sheet closes
                     <button
                       type="button"
                       className="btn btn-primary"
                       style={{ padding: "0.35rem 1rem" }}
-                      onClick={() => setClaimTarget(s)}
+                      ref={(el) => {
+                        if (claimTarget?.id === s.id || (!claimTarget && activeCardId === s.id)) {
+                          claimTriggerRef.current = el;
+                        }
+                      }}
+                      onClick={(e) => {
+                        claimTriggerRef.current = e.currentTarget;
+                        setClaimTarget(s);
+                      }}
                       data-testid={`claim-btn-${s.id}`}
                     >
                       {t("claim")}
@@ -205,7 +248,7 @@ function StreamList() {
             )}
           </li>
         ))}
-      </ul>
+      </StreamCardList>
 
       {claimTarget && (
         <ClaimBottomSheet

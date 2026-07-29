@@ -205,3 +205,39 @@ body {
   background: var(--color-border);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+/* #389 — Keyboard navigation & visible focus indicators                       */
+/* ──────────────────────────────────────────────────────────────────────────── */
+
+/* Global focus-visible — overrides any lingering outline:none rules */
+:focus-visible {
+  outline: 2px solid var(--color-active, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* Stream card keyboard focus — additional box-shadow for extra visibility */
+.stream-card:focus-visible {
+  outline: 2px solid var(--color-active, #3b82f6);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+
+/* Skip nav — transform-based reveal (replaces legacy top:-100% approach) */
+.skip-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--color-active, #3b82f6);
+  color: #fff;
+  font-weight: 600;
+  transform: translateY(-100%);
+  transition: transform 0.2s;
+}
+.skip-nav:focus-visible {
+  transform: translateY(0);
+  /* Cancel the legacy :focus rule below so transform takes precedence */
+  top: 0;
+}
