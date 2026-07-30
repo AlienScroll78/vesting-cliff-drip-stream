@@ -1,0 +1,195 @@
+openapi: "3.1.0"
+info:
+  title: Vesting Cliff Drip Stream API
+  version: "1.0.0"
+  description: |
+    REST API for querying vesting schedules and claimable balances without
+    running a Stellar node.  All view calls are simulated via Soroban RPC.
+
+servers:
+  - url: http://localhost:3001/api
+    description: Local development
+  - url: https://api.vesting.example.com/api
+    description: Production
+
+paths:
+  /schedules/{recipient}:
+    get:
+      operationId: getSchedule
+      summary: Get vesting schedule for a recipient
+      parameters:
+        - name: recipient
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar account ID (G...)
+      responses:
+        "200":
+          description: Vesting schedule found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VestingSchedule"
+        "404":
+          description: No schedule found for recipient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: RPC or server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /schedules/sponsor/{sponsor}:
+    get:
+      operationId: getSchedulesBySponsor
+      summary: List vesting schedules created by a sponsor (paginated)
+      parameters:
+        - name: sponsor
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Stellar account ID (G...) of the sponsor
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Horizon paging token for cursor-based pagination
+      responses:
+        "200":
+          description: Paginated list of stream summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SponsorSchedulesPage"
+        "502":
+          description: Horizon unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /claimable/{recipient}:
+    get:
+      operationId: getClaimable
+      summary: Get the current claimable token amount for a recipient
+      parameters:
+        - name: recipient
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Claimable amount
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimableResponse"
+        "500":
+          description: RPC or server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    VestingSchedule:
+      type: object
+      required:
+        - recipient
+        - sponsor
+        - token
+        - rate
+        - cliff_ledger
+        - end_ledger
+        - start_ledger
+        - claimable_amount
+        - is_cliff_passed
+      properties:
+        recipient:
+          type: string
+        sponsor:
+          type: string
+        token:
+          type: string
+        rate:
+          type: string
+          description: Tokens per ledger (as string to preserve i128 precision)
+        cliff_ledger:
+          type: integer
+        end_ledger:
+          type: integer
+        start_ledger:
+          type: integer
+        claimable_amount:
+          type: string
+          description: Currently claimable tokens (as string)
+        is_cliff_passed:
+          type: boolean
+
+    ClaimableResponse:
+      type: object
+      required: [recipient, claimable_amount]
+      properties:
+        recipient:
+          type: string
+        claimable_amount:
+          type: string
+
+    SponsorSchedulesPage:
+      type: object
+      required: [items, page, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StreamSummary"
+        page:
+          type: integer
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+          nullable: true
+
+    StreamSummary:
+      type: object
+      properties:
+        recipient:
+          type: string
+        sponsor:
+          type: string
+        token:
+          type: string
+        ledger:
+          type: integer
+        event_id:
+          type: string
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

@@ -10,6 +10,7 @@
 //! 4. Remaining tokens continue to drip linearly per ledger until `end_ledger`.
 
 #![no_std]
+#![deny(missing_docs)]
 
 mod contract;
 mod error;
@@ -17,9 +18,9 @@ mod events;
 mod storage;
 mod types;
 
-pub use contract::VestingDrips;
-pub use storage::ContractConfig;
-pub use types::{StreamInfo, VestingSchedule};
+pub use contract::{calculate_total_deposit, StreamStats, VestingDrips};
+pub use error::VestingError;
+pub use types::{StreamStatus, VestingSchedule};
 
 #[cfg(test)]
 mod tests;

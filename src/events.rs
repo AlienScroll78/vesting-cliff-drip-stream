@@ -1,14 +1,9 @@
-use soroban_sdk::{symbol_short, Address, Env};
-
-// ── Stream lifecycle events ───────────────────────────────────────────────────
+use soroban_sdk::{symbol_short, Address, Env, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
 /// Topics: `["vc_create", recipient]`
-/// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger, total_deposit)`
-///
-/// The `total_deposit` field allows off-chain indexers to track total value locked
-/// without re-computing `rate * duration`.
+/// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger)`
 pub fn emit_stream_created(
     env: &Env,
     sponsor: &Address,
@@ -55,26 +50,15 @@ pub fn emit_tokens_claimed(
 /// Topics: `["vc_done", recipient]`
 /// Data:   `(token)`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
-    env.events().publish(
-        (symbol_short!("vc_done"), recipient.clone()),
-        token.clone(),
-    );
+    env.events()
+        .publish((symbol_short!("vc_done"), recipient.clone()), token.clone());
 }
 
 /// Emitted when a sponsor cancels a vesting stream before it completes.
 ///
 /// Topics: `["vc_cancel", recipient]`
-/// Data:   `(sponsor, refunded_to_sponsor, released_to_recipient)`
-///
-/// Including `sponsor` lets off-chain monitors attribute cancellations and track
-/// sponsor-level refund totals without additional lookups.
-pub fn emit_stream_cancelled(
-    env: &Env,
-    sponsor: &Address,
-    recipient: &Address,
-    refunded_to_sponsor: i128,
-    released_to_recipient: i128,
-) {
+/// Data:   `(refunded_amount)`
+pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
         (
@@ -82,5 +66,16 @@ pub fn emit_stream_cancelled(
             refunded_to_sponsor,
             released_to_recipient,
         ),
+    );
+}
+
+/// Emitted when a sponsor recovers stuck tokens via the emergency drain.
+///
+/// Topics: `["vc_drain", recipient]`
+/// Data:   `(sponsor, amount)`
+pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("vc_drain"), recipient.clone()),
+        (sponsor.clone(), amount),
     );
 }
