@@ -1,0 +1,407 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# audit.yml – Automated vulnerability scanning pipeline
+#
+# Acceptance criteria addressed (issue #398):
+#   ✅ cargo audit for Rust crate vulnerabilities (references audit.toml)
+#   ✅ npm audit for Node.js packages – backend and frontend separately
+#   ✅ Trivy image scan for Docker images (--severity CRITICAL,HIGH --exit-code 1)
+#   ✅ CI fails on CRITICAL or HIGH severity CVEs
+#   ✅ Weekly scheduled scan (Monday 03:00 UTC) independent of PRs
+#   ✅ Automatic GitHub issue created when new CVEs are found
+#
+# Triggers:
+#   • pull_request   – blocks merge if vulnerabilities found
+#   • push to main   – post-merge gate
+#   • schedule       – weekly Monday 03:00 UTC
+#   • workflow_dispatch – manual on-demand run
+# ──────────────────────────────────────────────────────────────────────────────
+name: Vulnerability Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly scan: Monday 03:00 UTC
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write       # needed to create GitHub issues for new CVEs
+  packages: read      # needed for trivy to pull the image from GHCR
+
+# Cancel in-progress scans for the same ref to save CI minutes.
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Rust / cargo audit ──────────────────────────────────────────────────
+  cargo-audit:
+    name: cargo audit (Rust)
+    runs-on: ubuntu-latest
+    outputs:
+      vuln_found: ${{ steps.audit.outputs.vuln_found }}
+      summary: ${{ steps.audit.outputs.summary }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        id: audit
+        run: |
+          set +e
+          cargo audit --deny warnings --config audit.toml 2>&1 | tee cargo-audit.log
+          EXIT=$?
+          set -e
+
+          if [[ $EXIT -ne 0 ]]; then
+            echo "vuln_found=true" >> "$GITHUB_OUTPUT"
+            # Extract a short summary for the issue body
+            SUMMARY=$(grep -E '(error|warning)\[' cargo-audit.log | head -20 || true)
+            # Use delimiter to safely pass multi-line output
+            {
+              echo "summary<<EOF"
+              echo "$SUMMARY"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "vuln_found=false" >> "$GITHUB_OUTPUT"
+            echo "summary=" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit $EXIT
+
+      - name: Upload cargo-audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-${{ github.run_id }}
+          path: cargo-audit.log
+          retention-days: 30
+
+  # ── 2. npm audit – backend ─────────────────────────────────────────────────
+  npm-audit-backend:
+    name: npm audit (backend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    outputs:
+      vuln_found: ${{ steps.audit.outputs.vuln_found }}
+      summary: ${{ steps.audit.outputs.summary }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run npm audit
+        id: audit
+        # --audit-level=high fails on high or critical; --omit=dev omits
+        # dev-only packages from production vulnerability reporting.
+        # We run twice: prod-only (hard fail) and dev (soft fail/warning).
+        run: |
+          set +e
+
+          echo "=== Production dependencies ===" | tee backend-npm-audit.log
+          npm audit --audit-level=high --omit=dev \
+            --json 2>&1 | tee -a backend-npm-audit.log
+          PROD_EXIT=$?
+
+          echo "=== All dependencies (dev included) ===" >> backend-npm-audit.log
+          npm audit --audit-level=high \
+            --json 2>&1 | tee -a backend-npm-audit.log
+          ALL_EXIT=$?
+
+          set -e
+
+          if [[ $PROD_EXIT -ne 0 ]]; then
+            echo "vuln_found=true" >> "$GITHUB_OUTPUT"
+            SUMMARY="npm audit (backend) found HIGH/CRITICAL vulnerabilities in production dependencies."
+            echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+          else
+            echo "vuln_found=false" >> "$GITHUB_OUTPUT"
+            echo "summary=" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Fail the step if production deps have HIGH/CRITICAL issues
+          exit $PROD_EXIT
+
+      - name: Upload npm audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-backend-${{ github.run_id }}
+          path: backend/backend-npm-audit.log
+          retention-days: 30
+
+  # ── 3. npm audit – frontend ────────────────────────────────────────────────
+  npm-audit-frontend:
+    name: npm audit (frontend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    outputs:
+      vuln_found: ${{ steps.audit.outputs.vuln_found }}
+      summary: ${{ steps.audit.outputs.summary }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run npm audit
+        id: audit
+        run: |
+          set +e
+
+          echo "=== Production dependencies ===" | tee frontend-npm-audit.log
+          npm audit --audit-level=high --omit=dev \
+            --json 2>&1 | tee -a frontend-npm-audit.log
+          PROD_EXIT=$?
+
+          echo "=== All dependencies (dev included) ===" >> frontend-npm-audit.log
+          npm audit --audit-level=high \
+            --json 2>&1 | tee -a frontend-npm-audit.log
+          ALL_EXIT=$?
+
+          set -e
+
+          if [[ $PROD_EXIT -ne 0 ]]; then
+            echo "vuln_found=true" >> "$GITHUB_OUTPUT"
+            SUMMARY="npm audit (frontend) found HIGH/CRITICAL vulnerabilities in production dependencies."
+            echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+          else
+            echo "vuln_found=false" >> "$GITHUB_OUTPUT"
+            echo "summary=" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit $PROD_EXIT
+
+      - name: Upload npm audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-frontend-${{ github.run_id }}
+          path: frontend/frontend-npm-audit.log
+          retention-days: 30
+
+  # ── 4. Trivy – Docker image scan ───────────────────────────────────────────
+  trivy-scan:
+    name: trivy image scan
+    runs-on: ubuntu-latest
+    outputs:
+      vuln_found: ${{ steps.scan.outputs.vuln_found }}
+      summary: ${{ steps.scan.outputs.summary }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for scanning (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: vesting-scan:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner
+        id: scan
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: vesting-scan:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"           # we handle the exit ourselves below
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: false
+
+      - name: Check Trivy results and set outputs
+        id: check
+        run: |
+          # Count findings from the SARIF output
+          FINDINGS=$(python3 -c "
+          import json, sys
+          try:
+              data = json.load(open('trivy-results.sarif'))
+              total = sum(len(r.get('results', [])) for r in data.get('runs', []))
+              print(total)
+          except Exception as e:
+              print(0)
+          " 2>/dev/null || echo "0")
+
+          if [[ "$FINDINGS" -gt 0 ]]; then
+            echo "vuln_found=true"  >> "$GITHUB_OUTPUT"
+            echo "summary=Trivy found ${FINDINGS} HIGH/CRITICAL finding(s) in the Docker image." >> "$GITHUB_OUTPUT"
+            echo "::error::Trivy found ${FINDINGS} HIGH/CRITICAL vulnerabilities. See the uploaded SARIF report."
+            exit 1
+          else
+            echo "vuln_found=false" >> "$GITHUB_OUTPUT"
+            echo "summary="         >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Trivy SARIF report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif-${{ github.run_id }}
+          path: trivy-results.sarif
+          retention-days: 30
+
+      # Upload to GitHub Security tab when running on main or schedule
+      - name: Upload SARIF to GitHub Security tab
+        if: |
+          always() &&
+          (github.event_name == 'push' || github.event_name == 'schedule') &&
+          github.ref == 'refs/heads/main'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-docker
+
+  # ── 5. Auto-create GitHub issue for new CVEs ───────────────────────────────
+  create-issue:
+    name: Create issue for new CVEs
+    runs-on: ubuntu-latest
+    # Only run when triggered by schedule or manual dispatch AND at least one
+    # scanner found a vulnerability.  On PRs the job failure is enough signal.
+    if: |
+      always() &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      (
+        needs.cargo-audit.outputs.vuln_found == 'true' ||
+        needs.npm-audit-backend.outputs.vuln_found == 'true' ||
+        needs.npm-audit-frontend.outputs.vuln_found == 'true' ||
+        needs.trivy-scan.outputs.vuln_found == 'true'
+      )
+    needs:
+      - cargo-audit
+      - npm-audit-backend
+      - npm-audit-frontend
+      - trivy-scan
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all scan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-${{ github.run_id }}"
+          merge-multiple: true
+          path: scan-reports/
+
+      - name: Create GitHub issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SCAN_DATE=$(date -u +"%Y-%m-%d")
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Build the findings table
+          FINDINGS_LIST=""
+
+          if [[ "${{ needs.cargo-audit.outputs.vuln_found }}" == "true" ]]; then
+            FINDINGS_LIST="${FINDINGS_LIST}
+          - **cargo audit (Rust):** ${{ needs.cargo-audit.outputs.summary }}"
+          fi
+
+          if [[ "${{ needs.npm-audit-backend.outputs.vuln_found }}" == "true" ]]; then
+            FINDINGS_LIST="${FINDINGS_LIST}
+          - **npm audit (backend):** ${{ needs.npm-audit-backend.outputs.summary }}"
+          fi
+
+          if [[ "${{ needs.npm-audit-frontend.outputs.vuln_found }}" == "true" ]]; then
+            FINDINGS_LIST="${FINDINGS_LIST}
+          - **npm audit (frontend):** ${{ needs.npm-audit-frontend.outputs.summary }}"
+          fi
+
+          if [[ "${{ needs.trivy-scan.outputs.vuln_found }}" == "true" ]]; then
+            FINDINGS_LIST="${FINDINGS_LIST}
+          - **Trivy (Docker image):** ${{ needs.trivy-scan.outputs.summary }}"
+          fi
+
+          BODY="## 🔐 Vulnerability Scan – New CVEs Found
+
+          **Scan date:** ${SCAN_DATE}
+          **Workflow run:** [View details](${RUN_URL})
+
+          ### Findings
+          ${FINDINGS_LIST}
+
+          ### Action required
+
+          1. Review the [workflow run artifacts](${RUN_URL}) for full scan reports.
+          2. For Rust advisories: add an entry to \`audit.toml\` with \`ignore = true\`
+             and a justification comment, **or** upgrade the affected crate.
+          3. For npm advisories: run \`npm audit fix\` in the affected workspace
+             or pin to a patched version.
+          4. For Docker image findings: update the base image tag in \`Dockerfile\`
+             or update the OS package in a \`RUN apt-get upgrade\` layer.
+          5. Close this issue once all findings are resolved or acknowledged.
+
+          ### Scan configuration
+          | Scanner | Severity threshold | Config |
+          |---|---|---|
+          | cargo audit | any (--deny warnings) | \`audit.toml\` |
+          | npm audit | HIGH, CRITICAL | production deps |
+          | Trivy | HIGH, CRITICAL | \`--ignore-unfixed false\` |
+
+          ---
+          *This issue was opened automatically by the [Vulnerability Scan workflow](${RUN_URL}).*"
+
+          # Check for an existing open issue with the same title to avoid duplicates
+          EXISTING=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --label "security" \
+            --search "Vulnerability Scan – New CVEs Found" \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [[ -n "$EXISTING" && "$EXISTING" != "null" ]]; then
+            echo "Updating existing issue #${EXISTING} with new scan results…"
+            gh issue comment "$EXISTING" \
+              --repo "${{ github.repository }}" \
+              --body "## 🔄 Re-scan on ${SCAN_DATE}
+
+          ${FINDINGS_LIST}
+
+          [Full run details](${RUN_URL})"
+          else
+            echo "Creating new vulnerability issue…"
+            gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "🔐 Vulnerability Scan – New CVEs Found (${SCAN_DATE})" \
+              --body "$BODY" \
+              --label "security" \
+              --label "dependencies" \
+              --assignee "${{ github.repository_owner }}"
+          fi

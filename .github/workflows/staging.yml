@@ -1,0 +1,487 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# staging.yml – Automated staging environment pipeline
+#
+# Triggers:
+#   • Push to main        → full deploy + smoke test
+#   • workflow_dispatch   → manual trigger; set reset=true for a fresh testnet
+#                           account (on-demand staging reset)
+#
+# Acceptance criteria addressed (issue #400):
+#   ✅ Staging deploys automatically on merge to main
+#   ✅ Contract deployed to Stellar testnet via scripts/deploy.sh
+#   ✅ Backend deployed to staging cluster via Helm
+#   ✅ Frontend deployed to staging cluster via Helm
+#   ✅ Smoke tests run against live staging environment
+#   ✅ Automatic rollback on smoke-test failure
+#   ✅ Staging URL posted as PR comment
+#   ✅ On-demand staging reset (fresh testnet keypair)
+#
+# Required repository secrets:
+#   STELLAR_SECRET_KEY      – testnet deployer secret key (starts with S)
+#   KUBECONFIG_STAGING      – base64-encoded kubeconfig for the staging cluster
+#   GH_TOKEN                – fine-grained PAT with Actions-variable write scope
+#
+# Required repository variables (auto-updated by this workflow):
+#   VESTING_CONTRACT        – latest deployed contract ID (written after deploy)
+# ──────────────────────────────────────────────────────────────────────────────
+name: Staging Deployment
+
+on:
+  push:
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "Reset staging (generate fresh testnet keypair)"
+        type: boolean
+        default: false
+        required: false
+
+env:
+  # Helm / Kubernetes
+  HELM_NAMESPACE: staging
+  BACKEND_RELEASE: vesting-backend-staging
+  FRONTEND_RELEASE: vesting-frontend-staging
+  # Staging URLs (update to match your ingress hostnames)
+  BACKEND_URL: https://api.staging.vesting.example.com
+  FRONTEND_URL: https://staging.vesting.example.com
+
+# Only one staging pipeline should run at a time.
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write   # needed for PR comment
+  actions: write         # needed for gh variable set
+
+jobs:
+  # ── 0. Optional: generate a fresh testnet keypair on demand ────────────────
+  reset-keypair:
+    name: Reset testnet keypair
+    runs-on: ubuntu-latest
+    # Run only when the user explicitly requests a reset via workflow_dispatch
+    if: github.event_name == 'workflow_dispatch' && inputs.reset == true
+    outputs:
+      new_secret_key: ${{ steps.gen.outputs.secret_key }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Generate fresh keypair and fund via Friendbot
+        id: gen
+        run: |
+          KEY_NAME="staging-$(date +%s)"
+          stellar keys generate "$KEY_NAME" --network testnet --fund
+          SECRET=$(stellar keys show "$KEY_NAME" --show-secret 2>/dev/null | \
+                   grep -oE 'S[A-Z2-7]{55}')
+          echo "::add-mask::$SECRET"
+          echo "secret_key=$SECRET" >> "$GITHUB_OUTPUT"
+
+      - name: Update STELLAR_SECRET_KEY repository secret
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh secret set STELLAR_SECRET_KEY \
+            --body "${{ steps.gen.outputs.secret_key }}" \
+            --repo "${{ github.repository }}"
+
+  # ── 1. Build WASM ──────────────────────────────────────────────────────────
+  build:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    needs: [reset-keypair]
+    # reset-keypair is skipped on push events; this job must still run then.
+    if: always() && (needs.reset-keypair.result == 'success' || needs.reset-keypair.result == 'skipped')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust + wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm
+          retention-days: 1
+
+  # ── 2. Build and push Docker images ───────────────────────────────────────
+  docker:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+    needs: [reset-keypair]
+    if: always() && (needs.reset-keypair.result == 'success' || needs.reset-keypair.result == 'skipped')
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.meta-backend.outputs.tags }}
+      frontend_image: ${{ steps.meta-frontend.outputs.tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta – backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/vesting-backend
+          tags: |
+            type=sha,prefix=staging-,format=short
+
+      - name: Docker meta – frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/vesting-frontend
+          tags: |
+            type=sha,prefix=staging-,format=short
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3. Deploy Soroban contract to testnet ─────────────────────────────────
+  deploy-contract:
+    name: Deploy contract to testnet
+    runs-on: ubuntu-latest
+    needs: [build]
+    outputs:
+      contract_id: ${{ steps.deploy.outputs.contract_id }}
+      prev_contract_id: ${{ steps.prev.outputs.prev_contract_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: target/wasm32-unknown-unknown/release/
+
+      - name: Install Rust + wasm target (needed for stellar-cli build)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Save previous contract ID
+        id: prev
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          PREV=$(gh variable get VESTING_CONTRACT \
+                   --repo "${{ github.repository }}" 2>/dev/null || echo "")
+          echo "prev_contract_id=${PREV}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure deployer key
+        run: |
+          stellar keys add deployer --secret-key "${{ secrets.STELLAR_SECRET_KEY }}"
+
+      - name: Deploy contract to testnet
+        id: deploy
+        run: |
+          set -euo pipefail
+          DEPLOY_OUTPUT=$(./scripts/deploy.sh deployer 2>&1 | tee deploy.log)
+          echo "$DEPLOY_OUTPUT"
+          CONTRACT_ID=$(echo "$DEPLOY_OUTPUT" | grep -oE 'C[A-Z0-9]{55}' | tail -1)
+          if [[ -z "$CONTRACT_ID" ]]; then
+            echo "ERROR: Could not extract contract ID from deploy output."
+            exit 1
+          fi
+          echo "contract_id=${CONTRACT_ID}" >> "$GITHUB_OUTPUT"
+          echo "VESTING_CONTRACT=${CONTRACT_ID}" >> "$GITHUB_ENV"
+
+      - name: Store contract ID as Actions variable
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh variable set VESTING_CONTRACT \
+            --body "${{ steps.deploy.outputs.contract_id }}" \
+            --repo "${{ github.repository }}"
+
+      - name: Upload deploy log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-log-${{ github.run_id }}
+          path: deploy.log
+          retention-days: 30
+
+  # ── 4. Deploy backend to staging cluster via Helm ─────────────────────────
+  deploy-backend:
+    name: Deploy backend (Helm)
+    runs-on: ubuntu-latest
+    needs: [deploy-contract, docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Helm upgrade/install backend
+        run: |
+          helm upgrade "${{ env.BACKEND_RELEASE }}" helm/vesting-backend \
+            --install \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            --atomic \
+            --set image.tag="staging-$(echo '${{ github.sha }}' | cut -c1-7)" \
+            --set config.contractId="${{ needs.deploy-contract.outputs.contract_id }}" \
+            --set ingress.host="${{ env.BACKEND_URL }}" \
+            --set externalSecret.enabled=false
+
+  # ── 5. Deploy frontend to staging cluster via Helm ────────────────────────
+  deploy-frontend:
+    name: Deploy frontend (Helm)
+    runs-on: ubuntu-latest
+    needs: [deploy-contract, docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Helm upgrade/install frontend
+        run: |
+          helm upgrade "${{ env.FRONTEND_RELEASE }}" helm/vesting-frontend \
+            --install \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            --create-namespace \
+            --wait \
+            --timeout 5m \
+            --atomic \
+            --set image.tag="staging-$(echo '${{ github.sha }}' | cut -c1-7)" \
+            --set config.contractId="${{ needs.deploy-contract.outputs.contract_id }}" \
+            --set ingress.host="${{ env.FRONTEND_URL }}" \
+            --set externalSecret.enabled=false
+
+  # ── 6. Smoke tests ────────────────────────────────────────────────────────
+  smoke-test:
+    name: Smoke tests
+    runs-on: ubuntu-latest
+    needs: [deploy-contract, deploy-backend, deploy-frontend]
+    outputs:
+      smoke_passed: ${{ steps.run.outputs.smoke_passed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Run smoke tests
+        id: run
+        env:
+          VESTING_CONTRACT: ${{ needs.deploy-contract.outputs.contract_id }}
+          BACKEND_URL: ${{ env.BACKEND_URL }}
+          FRONTEND_URL: ${{ env.FRONTEND_URL }}
+          NETWORK: testnet
+        run: |
+          if bash scripts/smoke_test.sh; then
+            echo "smoke_passed=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "smoke_passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+  # ── 7. Post PR comment with staging URL ───────────────────────────────────
+  notify:
+    name: Post staging URL to PR
+    runs-on: ubuntu-latest
+    needs: [smoke-test, deploy-contract]
+    if: always() && needs.smoke-test.result == 'success'
+    steps:
+      - name: Find PR for this commit
+        id: find-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state merged \
+            --base main \
+            --json number,mergeCommit \
+            --jq ".[] | select(.mergeCommit.oid == \"${{ github.sha }}\") | .number" \
+            | head -1)
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        if: steps.find-pr.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ steps.find-pr.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "## ✅ Staging deployment succeeded
+
+          | Resource     | URL / ID |
+          |---|---|
+          | 🌐 Frontend  | ${{ env.FRONTEND_URL }} |
+          | 🔌 Backend   | ${{ env.BACKEND_URL }} |
+          | 📦 Contract  | \`${{ needs.deploy-contract.outputs.contract_id }}\` |
+          | 🔨 Commit    | \`${{ github.sha }}\` |
+          | 🏃 Run       | [View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          Smoke tests passed. Staging is live."
+
+  # ── 8. Automatic rollback on smoke-test failure ───────────────────────────
+  rollback:
+    name: Rollback on failure
+    runs-on: ubuntu-latest
+    needs: [smoke-test, deploy-contract]
+    # Only roll back when smoke tests actually failed (not skipped)
+    if: always() && needs.smoke-test.result == 'failure'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Roll back backend Helm release
+        run: |
+          helm rollback "${{ env.BACKEND_RELEASE }}" 0 \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            --wait \
+            --timeout 2m || true
+
+      - name: Roll back frontend Helm release
+        run: |
+          helm rollback "${{ env.FRONTEND_RELEASE }}" 0 \
+            --namespace "${{ env.HELM_NAMESPACE }}" \
+            --wait \
+            --timeout 2m || true
+
+      - name: Restore previous contract ID variable
+        if: needs.deploy-contract.outputs.prev_contract_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh variable set VESTING_CONTRACT \
+            --body "${{ needs.deploy-contract.outputs.prev_contract_id }}" \
+            --repo "${{ github.repository }}"
+
+      - name: Find PR for this commit
+        id: find-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --state merged \
+            --base main \
+            --json number,mergeCommit \
+            --jq ".[] | select(.mergeCommit.oid == \"${{ github.sha }}\") | .number" \
+            | head -1)
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment rollback notice on PR
+        if: steps.find-pr.outputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment "${{ steps.find-pr.outputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "## ❌ Staging deployment rolled back
+
+          Smoke tests failed. The previous staging revision has been restored automatically.
+
+          | Resource      | Details |
+          |---|---|
+          | 📦 Contract   | Restored to \`${{ needs.deploy-contract.outputs.prev_contract_id }}\` |
+          | 🔨 Failed SHA | \`${{ github.sha }}\` |
+          | 🏃 Run        | [View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+
+          Please review the [smoke test logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) and fix the issue before re-deploying."
