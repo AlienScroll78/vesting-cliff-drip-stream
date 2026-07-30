@@ -299,6 +299,12 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
         );
     });
 
+    // Touch SAC token balance entries so test environment host auto-restores them
+    let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
+    let _ = token_client.balance(&contract_id);
+    let _ = token_client.balance(&sponsor);
+    let _ = token_client.balance(&recipient);
+
     // Cancel removes the entry from storage entirely.
     client.cancel_stream(&sponsor, &recipient);
 
