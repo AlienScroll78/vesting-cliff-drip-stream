@@ -40,7 +40,10 @@ const cache = new Map<string, { expiresAt: number; payload: VestingScheduleRespo
 
 function buildResponse(recipient: string, schedule: ScheduleRecord, currentLedger: number): VestingScheduleResponse {
   const isCliffPassed = currentLedger >= schedule.cliff_ledger;
-  const claimableLedgers = Math.max(0, Math.min(currentLedger, schedule.end_ledger) - schedule.last_claimed_ledger);
+  // Mirror Soroban claimable_amount: returns 0 when cliff not yet reached
+  const claimableLedgers = isCliffPassed
+    ? Math.max(0, Math.min(currentLedger, schedule.end_ledger) - schedule.last_claimed_ledger)
+    : 0;
   const claimableAmount = claimableLedgers * schedule.rate_per_ledger;
 
   return {
