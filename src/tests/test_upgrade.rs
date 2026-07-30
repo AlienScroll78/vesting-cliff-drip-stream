@@ -10,16 +10,25 @@ use crate::{
     tests::setup_env,
 };
 
+fn make_client(env: &soroban_sdk::Env) -> (Address, VestingDripsClient) {
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(env, &contract_id);
+    (contract_id, client)
+}
+
+fn default_treasury(env: &soroban_sdk::Env) -> Address {
+    Address::generate(env)
+}
+
 /// `upgrade` must reject a caller that is not the stored admin.
 #[test]
 fn test_upgrade_rejects_non_admin() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_contract_id, client) = make_client(&env);
 
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &default_treasury(&env));
 
     let mock_hash = BytesN::from_array(&env, &[7u8; 32]);
     let result = client.try_upgrade(&attacker, &mock_hash);
@@ -32,15 +41,11 @@ fn test_upgrade_rejects_non_admin() {
 #[test]
 fn test_upgrade_allows_admin_with_mock_hash() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_contract_id, client) = make_client(&env);
 
     let admin = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &default_treasury(&env));
 
-    // The upload step is skipped here (no real WASM installed at this hash);
-    // this test only proves the admin gate passes and the deployer call is
-    // reached, not that the ledger has real code for this hash.
     let mock_hash = BytesN::from_array(&env, &[7u8; 32]);
     let result = client.try_upgrade(&admin, &mock_hash);
 
@@ -53,29 +58,26 @@ fn test_upgrade_allows_admin_with_mock_hash() {
 #[test]
 fn test_initialize_twice_fails() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_contract_id, client) = make_client(&env);
 
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &default_treasury(&env));
 
-    let result = client.try_initialize(&attacker);
+    let result = client.try_initialize(&attacker, &0u32, &default_treasury(&env));
     let err = result.unwrap_err().unwrap();
     assert_eq!(err, VestingError::AlreadyInitialized);
 }
 
-/// `transfer_admin` moves authority to a new address; the old admin then
-/// loses access and the new admin gains it.
+/// `transfer_admin` moves authority to a new address.
 #[test]
 fn test_transfer_admin() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_contract_id, client) = make_client(&env);
 
     let admin = Address::generate(&env);
     let new_admin = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &default_treasury(&env));
 
     client.transfer_admin(&admin, &new_admin);
 
@@ -85,7 +87,7 @@ fn test_transfer_admin() {
     let old_result = client.try_upgrade(&admin, &mock_hash);
     assert_eq!(old_result.unwrap_err().unwrap(), VestingError::Unauthorized);
 
-    // New admin passes the auth gate (fails later only on the missing WASM upload).
+    // New admin passes the auth gate.
     let new_result = client.try_upgrade(&new_admin, &mock_hash);
-    assert!(new_result.is_err());
+    assert!(new_result.is_err()); // fails only on missing WASM, not auth
 }

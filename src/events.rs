@@ -1,4 +1,4 @@
-use soroban_sdk::{symbol_short, Address, Env, Symbol};
+use soroban_sdk::{symbol_short, Address, Env, String};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -27,10 +27,40 @@ pub fn emit_stream_created(
     );
 }
 
+/// Emitted when a variable-rate vesting stream is created.
+///
+/// Topics: `["vc_vrcreate", recipient]`
+/// Data:   `(sponsor, token, start_ledger, cliff_ledger, end_ledger, total_deposited)`
+pub fn emit_variable_stream_created(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    token: &Address,
+    start_ledger: u32,
+    cliff_ledger: u32,
+    end_ledger: u32,
+    total_deposited: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_vrcreat"), recipient.clone()),
+        (
+            sponsor.clone(),
+            token.clone(),
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            total_deposited,
+        ),
+    );
+}
+
 /// Emitted when a recipient successfully claims vested tokens.
 ///
 /// Topics: `["vc_claim", recipient]`
-/// Data:   `(amount, ledger_claimed_through)`
+/// Data:   `(amount, ledger_claimed_through, dust_collected)`
+///
+/// `dust_collected` is the sub-1-token remainder captured at `end_ledger` to
+/// ensure no tokens are permanently stranded in the contract vault.
 pub fn emit_tokens_claimed(
     env: &Env,
     recipient: &Address,
@@ -39,6 +69,22 @@ pub fn emit_tokens_claimed(
 ) {
     env.events().publish(
         (symbol_short!("vc_claim"), recipient.clone()),
+        (amount, ledger_claimed_through),
+    );
+}
+
+/// Emitted when a recipient successfully claims from a variable-rate stream.
+///
+/// Topics: `["vc_vrclaim", recipient]`
+/// Data:   `(amount, ledger_claimed_through)`
+pub fn emit_variable_tokens_claimed(
+    env: &Env,
+    recipient: &Address,
+    amount: i128,
+    ledger_claimed_through: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_vrclam"), recipient.clone()),
         (amount, ledger_claimed_through),
     );
 }
@@ -71,5 +117,57 @@ pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, a
     env.events().publish(
         (symbol_short!("vc_drain"), recipient.clone()),
         (sponsor.clone(), amount),
+    );
+}
+
+/// Emitted when a permissionless drain removes an expired stream.
+///
+/// Topics: `["vc_exdrain", recipient]`
+/// Data:   `(caller, sponsor, token, amount)`
+pub fn emit_stream_drained(
+    env: &Env,
+    caller: &Address,
+    recipient: &Address,
+    sponsor: &Address,
+    token: &Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_xdrain"), recipient.clone()),
+        (caller.clone(), sponsor.clone(), token.clone(), amount),
+    );
+}
+
+/// Emitted when a compliance clawback removes all remaining tokens.
+///
+/// Topics: `["vc_clawbk", recipient]`
+/// Data:   `(sponsor, token, amount, reason)`
+pub fn emit_stream_clawed_back(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    token: &Address,
+    amount: i128,
+    reason: &String,
+) {
+    env.events().publish(
+        (symbol_short!("vc_clawbk"), recipient.clone()),
+        (sponsor.clone(), token.clone(), amount, reason.clone()),
+    );
+}
+
+/// Emitted once when `initialize` is called successfully.
+///
+/// Topics: `["vc_init"]`
+/// Data:   `(admin, fee_bps, treasury)`
+pub fn emit_contract_initialized(
+    env: &Env,
+    admin: &Address,
+    fee_bps: u32,
+    treasury: &Address,
+) {
+    env.events().publish(
+        (symbol_short!("vc_init"),),
+        (admin.clone(), fee_bps, treasury.clone()),
     );
 }
