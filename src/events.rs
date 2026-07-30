@@ -141,3 +141,18 @@ pub fn emit_stream_resumed(
         (sponsor.clone(), new_end_ledger),
     );
 }
+
+/// Emitted when a recipient transfers their stream to a new address.
+///
+/// Topics: `["vc_trans", current_recipient]`
+/// Data:   `(old_recipient, new_recipient)`
+pub fn emit_recipient_transferred(
+    env: &Env,
+    current_recipient: &Address,
+    new_recipient: &Address,
+) {
+    env.events().publish(
+        (symbol_short!("vc_trans"), current_recipient.clone()),
+        (current_recipient.clone(), new_recipient.clone()),
+    );
+}

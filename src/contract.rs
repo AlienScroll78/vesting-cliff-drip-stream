@@ -373,6 +373,44 @@ impl VestingDrips {
         Ok(())
     }
 
+    /// Reassigns an active vesting stream from `current_recipient` to `new_recipient`.
+    ///
+    /// Callable only by `current_recipient`.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`       – No stream exists for `current_recipient`.
+    /// * `InvalidRecipient`       – `new_recipient == current_recipient` or `new_recipient == sponsor`.
+    /// * `ScheduleAlreadyExists`  – `new_recipient` already has an active stream.
+    pub fn transfer_recipient(
+        env: Env,
+        current_recipient: Address,
+        new_recipient: Address,
+    ) -> Result<(), VestingError> {
+        current_recipient.require_auth();
+
+        if current_recipient == new_recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
+
+        let schedule = storage::get_schedule(&env, &current_recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        if new_recipient == schedule.sponsor {
+            return Err(VestingError::InvalidRecipient);
+        }
+
+        if storage::has_schedule(&env, &new_recipient) {
+            return Err(VestingError::ScheduleAlreadyExists);
+        }
+
+        storage::remove_schedule(&env, &current_recipient);
+        storage::set_schedule(&env, &new_recipient, &schedule);
+
+        events::emit_recipient_transferred(&env, &current_recipient, &new_recipient);
+
+        Ok(())
+    }
+
     /// Compliance clawback: the original sponsor recovers **all** remaining tokens
     /// from the contract vault, bypassing cliff state.
     ///

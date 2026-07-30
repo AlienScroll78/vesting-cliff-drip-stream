@@ -8,6 +8,7 @@ mod test_create;
 mod test_edge_cases;
 mod test_pause_resume;
 mod test_properties;
+mod test_recipient_transfer;
 mod test_views;
 
 pub use soroban_sdk::{
