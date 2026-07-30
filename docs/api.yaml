@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: Vesting Cliff Drip Stream API
+  version: 1.0.0
+paths:
+  /api/v1/schedules/{recipient}:
+    get:
+      summary: Get a vesting schedule by recipient
+      parameters:
+        - in: path
+          name: recipient
+          required: true
+          schema:
+            type: string
+          description: Stellar address for the recipient
+      responses:
+        '200':
+          description: Vesting schedule found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VestingScheduleResponse'
+        '400':
+          description: Invalid Stellar address
+        '404':
+          description: Schedule not found
+        '429':
+          description: Too many requests
+components:
+  schemas:
+    VestingScheduleResponse:
+      type: object
+      properties:
+        recipient:
+          type: string
+        token:
+          type: string
+        rate_per_ledger:
+          type: integer
+        start_ledger:
+          type: integer
+        cliff_ledger:
+          type: integer
+        end_ledger:
+          type: integer
+        last_claimed_ledger:
+          type: integer
+        claimable_amount:
+          type: integer
+        is_cliff_passed:
+          type: boolean

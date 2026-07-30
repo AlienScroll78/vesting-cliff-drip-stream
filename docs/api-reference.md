@@ -8,6 +8,7 @@ Ledger sequences are `u32` values from `env.ledger().sequence()`.
 
 ## Table of Contents
 
+- [HTTP API](#http-api)
 - [Mutating Functions](#mutating-functions)
   - [create_vesting_stream](#create_vesting_stream)
   - [claim_vested](#claim_vested)
@@ -22,6 +23,39 @@ Ledger sequences are `u32` values from `env.ledger().sequence()`.
   - [StreamStatus](#streamstatus)
 - [Error Codes](#error-codes)
 - [Events](#events)
+
+---
+
+## HTTP API
+
+### GET /api/v1/schedules/:recipient
+
+Returns the full vesting schedule for a Stellar recipient address, including computed fields for the current ledger.
+
+**Behavior**
+- Returns `200` with a `VestingScheduleResponse` payload when the schedule exists.
+- Returns `404` when no schedule exists for the recipient.
+- Returns `400` for invalid Stellar addresses.
+- Applies a `60 req/min` rate limit per IP.
+- Caches responses for approximately 3 seconds based on the current ledger time.
+
+**Response shape**
+
+```json
+{
+  "recipient": "G...",
+  "token": "C...",
+  "rate_per_ledger": 10,
+  "start_ledger": 1000,
+  "cliff_ledger": 1100,
+  "end_ledger": 2000,
+  "last_claimed_ledger": 1000,
+  "claimable_amount": 100,
+  "is_cliff_passed": true
+}
+```
+
+The OpenAPI document is available in [docs/api.yaml](docs/api.yaml).
 
 ---
 
