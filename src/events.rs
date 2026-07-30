@@ -1,9 +1,14 @@
-use soroban_sdk::{Address, Env, Symbol, symbol_short};
+use soroban_sdk::{symbol_short, Address, Env};
+
+// ── Stream lifecycle events ───────────────────────────────────────────────────
 
 /// Emitted when a new vesting stream is created.
 ///
-/// Topics: `["vesting_created", recipient]`
-/// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger)`
+/// Topics: `["vc_create", recipient]`
+/// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger, total_deposit)`
+///
+/// The `total_deposit` field allows off-chain indexers to track total value locked
+/// without re-computing `rate * duration`.
 pub fn emit_stream_created(
     env: &Env,
     sponsor: &Address,
@@ -13,6 +18,7 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
+    total_deposit: i128,
 ) {
     env.events().publish(
         (symbol_short!("vc_create"), recipient.clone()),
@@ -23,13 +29,14 @@ pub fn emit_stream_created(
             start_ledger,
             cliff_ledger,
             end_ledger,
+            total_deposit,
         ),
     );
 }
 
 /// Emitted when a recipient successfully claims vested tokens.
 ///
-/// Topics: `["vesting_claim", recipient]`
+/// Topics: `["vc_claim", recipient]`
 /// Data:   `(amount, ledger_claimed_through)`
 pub fn emit_tokens_claimed(
     env: &Env,
@@ -43,9 +50,9 @@ pub fn emit_tokens_claimed(
     );
 }
 
-/// Emitted when a vesting schedule is fully exhausted.
+/// Emitted when a vesting schedule is fully exhausted (all tokens claimed).
 ///
-/// Topics: `["vesting_done", recipient]`
+/// Topics: `["vc_done", recipient]`
 /// Data:   `(token)`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
     env.events().publish(
@@ -56,11 +63,24 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 
 /// Emitted when a sponsor cancels a vesting stream before it completes.
 ///
-/// Topics: `["vesting_cancel", recipient]`
-/// Data:   `(refunded_amount)`
-pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
+/// Topics: `["vc_cancel", recipient]`
+/// Data:   `(sponsor, refunded_to_sponsor, released_to_recipient)`
+///
+/// Including `sponsor` lets off-chain monitors attribute cancellations and track
+/// sponsor-level refund totals without additional lookups.
+pub fn emit_stream_cancelled(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    refunded_to_sponsor: i128,
+    released_to_recipient: i128,
+) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
-        refunded_amount,
+        (
+            sponsor.clone(),
+            refunded_to_sponsor,
+            released_to_recipient,
+        ),
     );
 }
