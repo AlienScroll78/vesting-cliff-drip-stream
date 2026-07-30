@@ -285,6 +285,11 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     // Advance exactly 3_110_399 ledgers — TTL hits 0 (archived state).
     advance_ledger(&env, 3_110_399);
 
+    // Keep token contract instance active when checking cancel_stream
+    env.as_contract(&token_id, || {
+        env.storage().instance().extend_ttl(100, 10_000_000);
+    });
+
     env.as_contract(&contract_id, || {
         assert_eq!(
             env.storage()
