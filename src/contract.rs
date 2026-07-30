@@ -3,8 +3,8 @@ use soroban_sdk::{contract, contractimpl, token, Address, Env};
 use crate::{
     error::VestingError,
     events,
-    storage,
-    types::VestingSchedule,
+    storage::{self, ContractConfig},
+    types::{StreamInfo, VestingSchedule},
 };
 
 #[contract]
@@ -39,12 +39,17 @@ impl VestingDrips {
         total_duration: u32,
     ) -> Result<(), VestingError> {
         // ── Validation ────────────────────────────────────────────────────────
-        if rate <= 0 {
+
+        // Guard against zero, negative values, and i128::MIN (which would pass
+        // a simple `<= 0` check after negation in some overflow scenarios).
+        if rate <= 0 || rate == i128::MIN {
             return Err(VestingError::InvalidRate);
         }
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
         }
+        // Duplicate check before auth so we fail cheaply before any storage read
+        // that could be used to probe schedule existence without paying auth.
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
@@ -92,6 +97,7 @@ impl VestingDrips {
             start_ledger,
             cliff_ledger,
             end_ledger,
+            total_deposit,
         );
 
         Ok(())
@@ -154,7 +160,15 @@ impl VestingDrips {
             );
         }
 
-        events::emit_stream_cancelled(&env, &recipient, sponsor_refund);
+        // Emit enriched cancel event that includes sponsor identity and both
+        // split amounts so off-chain monitors can reconstruct the full picture.
+        events::emit_stream_cancelled(
+            &env,
+            &sponsor,
+            &recipient,
+            sponsor_refund,
+            recipient_share,
+        );
 
         Ok(())
     }
@@ -248,5 +262,61 @@ impl VestingDrips {
             return false;
         };
         env.ledger().sequence() >= schedule.cliff_ledger
+    }
+
+    /// Returns a detailed analytics snapshot for `recipient`'s stream.
+    ///
+    /// Includes total deposit, amount claimed, amount claimable now, remaining
+    /// locked tokens, vested percentage in basis points, and status flags.
+    ///
+    /// Returns `None` if no active schedule exists for `recipient`.
+    pub fn get_stream_info(env: Env, recipient: Address) -> Option<StreamInfo> {
+        let schedule = storage::get_schedule(&env, &recipient)?;
+
+        let current_ledger = env.ledger().sequence();
+        let stream_duration = schedule.end_ledger - schedule.start_ledger;
+        let total_deposit = schedule.rate_per_ledger * stream_duration as i128;
+
+        let claimed_so_far =
+            schedule.rate_per_ledger * (schedule.last_claimed_ledger - schedule.start_ledger) as i128;
+
+        let cliff_reached = current_ledger >= schedule.cliff_ledger;
+        let stream_ended = current_ledger >= schedule.end_ledger;
+
+        let claimable_now = if cliff_reached {
+            let active_end = current_ledger.min(schedule.end_ledger);
+            let ledgers = active_end - schedule.last_claimed_ledger;
+            ledgers as i128 * schedule.rate_per_ledger
+        } else {
+            0
+        };
+
+        let remaining_locked = total_deposit - claimed_so_far - claimable_now;
+
+        // Basis points: (claimed_so_far * 10_000) / total_deposit.
+        // Guard against zero total_deposit (should never happen with valid rate).
+        let percent_vested_bps = if total_deposit > 0 {
+            ((claimed_so_far * 10_000) / total_deposit) as u32
+        } else {
+            0
+        };
+
+        Some(StreamInfo {
+            total_deposit,
+            claimed_so_far,
+            claimable_now,
+            remaining_locked,
+            percent_vested_bps,
+            cliff_reached,
+            stream_ended,
+        })
+    }
+
+    /// Returns the compiled-in contract configuration (TTL thresholds).
+    ///
+    /// Useful for off-chain tooling that needs to know storage expiry parameters
+    /// without reading the source code or WASM binary.
+    pub fn get_config(_env: Env) -> ContractConfig {
+        storage::get_config()
     }
 }

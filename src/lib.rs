@@ -18,6 +18,8 @@ mod storage;
 mod types;
 
 pub use contract::VestingDrips;
+pub use storage::ContractConfig;
+pub use types::{StreamInfo, VestingSchedule};
 
 #[cfg(test)]
 mod tests;
