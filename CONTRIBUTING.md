@@ -105,6 +105,40 @@ Append `!` or add `BREAKING CHANGE:` in the footer for breaking changes.
 
 ---
 
+## Changelog and Release Notes
+
+This repository maintains a structured `CHANGELOG.md` and uses a standardized release notes template in `.github/release-notes-template.md`.
+
+### What goes in each section
+- `Breaking Changes`: incompatible API or behavior changes, required migrations, or removals. Use `BREAKING CHANGE:` in the commit body or `!` in the commit header.
+- `New Features`: new entry points, view functions, UI behavior, or capabilities added in a backwards-compatible way. Use `feat:`.
+- `Bug Fixes`: correctness fixes, stability improvements, and bug resolutions. Use `fix:`.
+- `Security`: vulnerability fixes, hardening, and security-related remediation. Use `security:`.
+- `Deprecations`: deprecated APIs, behaviors, or configuration that will be removed in a future major release. Use `deprecate:` or `feat!:` with a clear deprecation note.
+- `Performance`: measurable performance or efficiency improvements. Use `perf:`.
+- `Miscellaneous`: internal maintenance, tooling, docs, and other non-user-facing work. These are hidden in the changelog when generated automatically.
+
+### Writing changelog entries
+- Use short, imperative phrasing: `Add ...`, `Fix ...`, `Deprecate ...`.
+- Describe the impact for users or operators, not just implementation details.
+- Reference issues and PRs using `#123`, `PR #456`, or `owner/repo#123` when relevant.
+- Prefer `Closes #<issue>` in PR descriptions to link issues automatically.
+- Use backticks for code artifacts: `create_vesting_stream`, `VestingSchedule`, `CliffNotReached`.
+
+### Semantic versioning policy
+- `MAJOR` bump for incompatible API/behavior changes, removals, or any `BREAKING CHANGE:` commit.
+- `MINOR` bump for new features and backwards-compatible improvements.
+- `PATCH` bump for bug fixes, documentation changes, tests, and non-behavioral maintenance.
+- Let release automation infer the release type from commit metadata when possible.
+
+### Release automation
+- This repository uses `release-please` and the configuration in `release-please-config.json`.
+- `release-please` reads commit types and changelog sections from `release-please-config.json` to generate release PRs, tags, and changelog entries.
+- Breaking changes are inferred from `!` in commit headers or `BREAKING CHANGE:` in commit bodies.
+- Keep PR titles, commit messages, and changelog entries aligned with the section conventions above.
+
+---
+
 ## Submitting a Pull Request
 
 1. Fork or create a feature branch: `git checkout -b feat/<short-description>`
