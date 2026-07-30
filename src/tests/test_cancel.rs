@@ -1,11 +1,11 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
+use soroban_sdk::{Address, Env};
 
 use crate::{
     contract::VestingDripsClient,
     error::VestingError,
-    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env, setup_token},
+    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
 };
 
 fn make_stream(env: &Env, client: &VestingDripsClient) -> (Address, Address, Address) {
@@ -14,7 +14,7 @@ fn make_stream(env: &Env, client: &VestingDripsClient) -> (Address, Address, Add
     (sponsor, recipient, token_id)
 }
 
-fn token_client(env: &Env, token_id: &Address) -> soroban_sdk::token::TokenClient {
+fn token_client<'a>(env: &'a Env, token_id: &Address) -> soroban_sdk::token::TokenClient<'a> {
     soroban_sdk::token::TokenClient::new(env, token_id)
 }
 
@@ -26,7 +26,7 @@ fn test_cancel_before_cliff_full_refund() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     assert_eq!(tc.balance(&sponsor), 2_000);
     assert_eq!(tc.balance(&recipient), 0);
@@ -41,7 +41,7 @@ fn test_cancel_after_cliff_splits_tokens() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     assert_eq!(tc.balance(&recipient), 1_000);
     assert_eq!(tc.balance(&sponsor), 1_000);
@@ -54,8 +54,8 @@ fn test_cancel_nonexistent_stream_fails() {
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
 
-    let err = client.cancel_stream(&sponsor, &recipient).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_cancel_stream(&sponsor, &recipient).unwrap_err();
+    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn test_cancel_one_ledger_before_cliff_full_refund() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 49);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     assert_eq!(tc.balance(&sponsor), 2_000);
     assert_eq!(tc.balance(&recipient), 0);
@@ -81,7 +81,7 @@ fn test_cancel_exactly_at_cliff_splits_tokens() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 50);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     assert_eq!(tc.balance(&recipient), 500);
     assert_eq!(tc.balance(&sponsor), 1_500);
@@ -96,7 +96,7 @@ fn test_cancel_one_ledger_after_cliff_splits_tokens() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 51);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     assert_eq!(tc.balance(&recipient), 510);
     assert_eq!(tc.balance(&sponsor), 1_490);

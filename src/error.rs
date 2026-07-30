@@ -81,4 +81,22 @@ pub enum VestingError {
     /// and would produce confusing behaviour in `cancel_stream` (the same
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
+
+    /// **Code 12** — Contract initialization already completed.
+    AlreadyInitialized = 12,
+
+    /// **Code 13** — Caller is not authorized for this operation.
+    Unauthorized = 13,
+
+    /// **Code 14** — Total deposit is below the minimum required deposit.
+    DepositBelowMinimum = 14,
+
+    /// **Code 15** — Token does not support SAC clawback operation.
+    ClawbackNotSupported = 15,
+
+    /// **Code 16** — Stream is already paused.
+    StreamAlreadyPaused = 16,
+
+    /// **Code 17** — Stream is not paused.
+    StreamNotPaused = 17,
 }

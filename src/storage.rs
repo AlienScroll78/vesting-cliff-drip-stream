@@ -77,6 +77,20 @@ pub fn remove_schedule(env: &Env, recipient: &Address) {
         .remove(&DataKey::Schedule(recipient.clone()));
 }
 
+/// Returns the configured admin address, if set.
+pub fn get_admin(env: &Env) -> Option<Address> {
+    env.storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Admin)
+}
+
+/// Stores a new admin address in instance storage.
+pub fn set_admin(env: &Env, admin: &Address) {
+    env.storage()
+        .instance()
+        .set(&DataKey::Admin, admin);
+}
+
 /// Stores a new minimum deposit value in instance storage.
 /// Callable by an admin to configure the threshold.
 pub fn set_min_deposit(env: &Env, min_deposit: i128) {

@@ -54,6 +54,12 @@ pub struct VestingSchedule {
     /// Initialised to `0` on stream creation and incremented on every successful claim.
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
+
+    /// Ledger sequence at which the stream was paused (if currently paused).
+    pub paused_at_ledger: Option<u32>,
+
+    /// Accumulated total ledgers the stream has spent in paused state.
+    pub accumulated_pause_ledgers: u32,
 }
 
 /// Storage key variants used for keying contract data.
@@ -65,6 +71,9 @@ pub enum DataKey {
 
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,
+
+    /// Instance-level configuration: contract admin address.
+    Admin,
 }
 
 /// Human-readable status of a vesting stream.

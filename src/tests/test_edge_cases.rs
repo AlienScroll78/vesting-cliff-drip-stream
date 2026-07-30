@@ -3,9 +3,12 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::{calculate_total_deposit, VestingDripsClient},
+    contract::{calculate_total_deposit, VestingDrips, VestingDripsClient},
     error::VestingError,
-    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env, setup_token},
+    tests::{
+        advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env, setup_token,
+        token_helper::{create_token, mint_to},
+    },
 };
 
 #[test]
@@ -17,7 +20,7 @@ fn test_minimal_cliff_one_ledger() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 1);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -31,16 +34,14 @@ fn test_multiple_independent_streams() {
     let (token_id, tc) = setup_token(&env, &sponsor, 5_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200);
     client
-        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200);
 
     advance_ledger(&env, 70);
 
-    let claimed_a = client.claim_vested(&recipient_a).unwrap();
-    let claimed_b = client.claim_vested(&recipient_b).unwrap();
+    let claimed_a = client.claim_vested(&recipient_a);
+    let claimed_b = client.claim_vested(&recipient_b);
 
     assert_eq!(claimed_a, 700);
     assert_eq!(claimed_b, 1_050);
@@ -56,7 +57,7 @@ fn test_claim_exactly_at_end_removes_schedule() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     assert!(client.get_schedule(&recipient).is_none());
 }
@@ -70,11 +71,11 @@ fn test_incremental_claims_sum_to_total() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 20);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     assert_eq!(tc.balance(&recipient), 500);
 }
@@ -88,7 +89,7 @@ fn test_regression_cliff_equals_total_minus_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 100);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 1_000);
     assert_eq!(tc.balance(&recipient), 1_000);
     assert!(client.get_schedule(&recipient).is_none());
@@ -103,7 +104,7 @@ fn test_regression_rate_of_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -117,7 +118,7 @@ fn test_regression_claim_well_past_end_caps_correctly() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10_000);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 500);
     assert_eq!(tc.balance(&recipient), 500);
 }
@@ -160,7 +161,7 @@ fn test_regression_negative_rate_rejected() {
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &50, &100)
         .unwrap_err();
-    assert_eq!(err, VestingError::InvalidRate.into());
+    assert_eq!(err, Ok(VestingError::InvalidRate));
 }
 
 // ── TTL bump & expiry tests ───────────────────────────────────────────────────
@@ -175,17 +176,10 @@ fn test_ttl_bumped_on_write() {
     use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 1_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
-        .unwrap();
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     // PERSISTENT_BUMP_AMOUNT = 518_400; TTL doesn't include the current ledger,
     // so initial TTL = 518_400 - 1 = 518_399.
@@ -210,17 +204,10 @@ fn test_ttl_bumped_on_read() {
     use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 1_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
-        .unwrap();
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     // Advance 200_000 ledgers without any contract interaction.
     // TTL decays from 518_399 to 318_399.
@@ -261,17 +248,10 @@ fn test_claimable_amount_does_not_bump_ttl() {
     use crate::types::DataKey;
 
     let env = setup_env(); // sequence_number = 100
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 1_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
-        .unwrap();
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     // Advance 200_000 ledgers without any contract interaction.
     // TTL decays from 518_399 to 318_399.
@@ -310,17 +290,10 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     use soroban_sdk::testutils::storage::Persistent;
 
     let env = setup_env(); // sequence_number = 100
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 1_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
-        .unwrap();
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     // Advance exactly 518_399 ledgers — TTL hits 0 (archived state).
     // No reads/writes occur, so the bump is never triggered.
@@ -336,12 +309,12 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     });
 
     // Cancel removes the entry from storage entirely.
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // Subsequent calls now return ScheduleNotFound because the entry was removed.
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err();
+    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 
-    let err2 = client.cancel_stream(&sponsor, &recipient).unwrap_err();
-    assert_eq!(err2, VestingError::ScheduleNotFound.into());
+    let err2 = client.try_cancel_stream(&sponsor, &recipient).unwrap_err();
+    assert_eq!(err2, Ok(VestingError::ScheduleNotFound));
 }

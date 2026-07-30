@@ -39,7 +39,7 @@ fn test_create_stream_zero_rate_fails() {
         .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::InvalidRate.into());
+    assert_eq!(err, Ok(VestingError::InvalidRate));
 }
 
 #[test]
@@ -52,12 +52,12 @@ fn test_create_stream_invalid_duration_fails() {
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200)
         .unwrap_err();
-    assert_eq!(err, VestingError::InvalidDuration.into());
+    assert_eq!(err, Ok(VestingError::InvalidDuration));
 
     let err2 = client
         .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200)
         .unwrap_err();
-    assert_eq!(err2, VestingError::InvalidDuration.into());
+    assert_eq!(err2, Ok(VestingError::InvalidDuration));
 }
 
 #[test]
@@ -68,14 +68,13 @@ fn test_create_duplicate_stream_fails() {
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::ScheduleAlreadyExists.into());
+    assert_eq!(err, Ok(VestingError::ScheduleAlreadyExists));
 }
 
 #[test]
@@ -87,15 +86,13 @@ fn test_two_recipients_claim_independently() {
     let (token_id, token_client) = setup_token(&env, &sponsor, 4_000);
 
     client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200);
     client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &20, &30, &100)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &bob, &token_id, &20, &30, &100);
 
     advance_ledger(&env, 60);
 
-    let alice_claimed = client.claim_vested(&alice).unwrap();
+    let alice_claimed = client.claim_vested(&alice);
     assert_eq!(alice_claimed, 600);
 
     let bob_sched = client.get_schedule(&bob).unwrap();
@@ -112,13 +109,11 @@ fn test_cancel_one_recipient_other_unaffected() {
     let (token_id, token_client) = setup_token(&env, &sponsor, 2_500);
 
     client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200);
     client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100);
 
-    client.cancel_stream(&sponsor, &alice).unwrap();
+    client.cancel_stream(&sponsor, &alice);
 
     assert!(client.get_schedule(&alice).is_none());
 
@@ -127,7 +122,7 @@ fn test_cancel_one_recipient_other_unaffected() {
     assert_eq!(bob_sched.last_claimed_ledger, 100);
 
     advance_ledger(&env, 20);
-    let bob_claimed = client.claim_vested(&bob).unwrap();
+    let bob_claimed = client.claim_vested(&bob);
     assert_eq!(bob_claimed, 100);
     assert_eq!(token_client.balance(&bob), 100);
 }
@@ -141,11 +136,9 @@ fn test_storage_keys_are_per_recipient() {
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
     client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &7, &40, &150)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &alice, &token_id, &7, &40, &150);
     client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &13, &60, &200)
-        .unwrap();
+        .create_vesting_stream(&sponsor, &bob, &token_id, &13, &60, &200);
 
     let alice_sched = client.get_schedule(&alice).unwrap();
     let bob_sched = client.get_schedule(&bob).unwrap();

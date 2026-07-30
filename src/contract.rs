@@ -4,7 +4,7 @@
 // impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env, String};
 
 use crate::{
     error::VestingError,
@@ -162,6 +162,8 @@ impl VestingDrips {
             end_ledger,
             last_claimed_ledger: start_ledger,
             total_claimed: 0,
+            paused_at_ledger: None,
+            accumulated_pause_ledgers: 0,
         };
         storage::set_schedule(&env, &recipient, &schedule);
 
@@ -288,6 +290,85 @@ impl VestingDrips {
         storage::remove_schedule(&env, &recipient);
 
         events::emit_stream_cancelled(&env, &recipient, sponsor_refund);
+
+        Ok(())
+    }
+
+    /// Pauses an active stream, halting token accrual at current ledger.
+    ///
+    /// Callable only by the original sponsor.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
+    /// * `Unauthorized`         – Caller is not the stream's sponsor.
+    /// * `StreamAlreadyPaused`  – Stream is already in paused state.
+    pub fn pause_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::Unauthorized);
+        }
+
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::StreamAlreadyPaused);
+        }
+
+        let current_ledger = env.ledger().sequence();
+        schedule.paused_at_ledger = Some(current_ledger);
+
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_paused(&env, &recipient, &sponsor, current_ledger);
+
+        Ok(())
+    }
+
+    /// Resumes a paused stream, shifting end_ledger and cliff_ledger by the paused duration.
+    ///
+    /// Callable only by the original sponsor.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`  – No stream exists for `recipient`.
+    /// * `Unauthorized`      – Caller is not the stream's sponsor.
+    /// * `StreamNotPaused`   – Stream is not currently paused.
+    pub fn resume_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::Unauthorized);
+        }
+
+        let Some(paused_at) = schedule.paused_at_ledger else {
+            return Err(VestingError::StreamNotPaused);
+        };
+
+        let current_ledger = env.ledger().sequence();
+        let paused_duration = current_ledger.saturating_sub(paused_at);
+
+        schedule.accumulated_pause_ledgers = schedule
+            .accumulated_pause_ledgers
+            .saturating_add(paused_duration);
+        schedule.end_ledger = schedule.end_ledger.saturating_add(paused_duration);
+        schedule.cliff_ledger = schedule.cliff_ledger.saturating_add(paused_duration);
+        schedule.paused_at_ledger = None;
+
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_resumed(&env, &recipient, &sponsor, schedule.end_ledger);
 
         Ok(())
     }
@@ -463,6 +544,10 @@ impl VestingDrips {
         let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::NothingToClaim);
+        }
+
         let current_ledger = env.ledger().sequence();
 
         if current_ledger < schedule.cliff_ledger {
@@ -520,6 +605,9 @@ impl VestingDrips {
         let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
             return 0;
         };
+        if schedule.paused_at_ledger.is_some() {
+            return 0;
+        }
         let current_ledger = env.ledger().sequence();
         if current_ledger < schedule.cliff_ledger {
             return 0;

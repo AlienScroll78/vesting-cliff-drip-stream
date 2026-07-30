@@ -1,4 +1,4 @@
-use soroban_sdk::{symbol_short, Address, Env, Symbol};
+use soroban_sdk::{symbol_short, Address, Env, String};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -71,5 +71,73 @@ pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, a
     env.events().publish(
         (symbol_short!("vc_drain"), recipient.clone()),
         (sponsor.clone(), amount),
+    );
+}
+
+/// Emitted when a sponsor claws back a stream for compliance reasons.
+///
+/// Topics: `["vc_claw", recipient]`
+/// Data:   `(sponsor, token, amount, reason)`
+pub fn emit_stream_clawed_back(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    token: &Address,
+    amount: i128,
+    reason: &String,
+) {
+    env.events().publish(
+        (symbol_short!("vc_claw"), recipient.clone()),
+        (sponsor.clone(), token.clone(), amount, reason.clone()),
+    );
+}
+
+/// Emitted when an expired stream is drained by cleanup caller.
+///
+/// Topics: `["vc_edrain", recipient]`
+/// Data:   `(caller, sponsor, token, amount)`
+pub fn emit_stream_drained(
+    env: &Env,
+    caller: &Address,
+    recipient: &Address,
+    sponsor: &Address,
+    token: &Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_edrain"), recipient.clone()),
+        (caller.clone(), sponsor.clone(), token.clone(), amount),
+    );
+}
+
+/// Emitted when a stream is paused by the sponsor.
+///
+/// Topics: `["vc_pause", recipient]`
+/// Data:   `(sponsor, paused_at_ledger)`
+pub fn emit_stream_paused(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    paused_at_ledger: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_pause"), recipient.clone()),
+        (sponsor.clone(), paused_at_ledger),
+    );
+}
+
+/// Emitted when a stream is resumed by the sponsor.
+///
+/// Topics: `["vc_resume", recipient]`
+/// Data:   `(sponsor, new_end_ledger)`
+pub fn emit_stream_resumed(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    new_end_ledger: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_resume"), recipient.clone()),
+        (sponsor.clone(), new_end_ledger),
     );
 }
