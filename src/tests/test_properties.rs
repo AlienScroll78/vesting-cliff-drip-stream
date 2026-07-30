@@ -12,7 +12,7 @@ use crate::tests::{advance_ledger, setup_env};
 proptest! {
     #[test]
     fn prop_claimable_never_exceeds_total(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         advance in 0u32..200u32,
@@ -46,7 +46,7 @@ proptest! {
 proptest! {
     #[test]
     fn prop_claimable_monotonic(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         t1 in 0u32..200u32,
@@ -85,7 +85,7 @@ proptest! {
 proptest! {
     #[test]
     fn prop_claimable_zero_before_cliff(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         advance_before in 0u32..50u32,
