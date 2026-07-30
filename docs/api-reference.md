@@ -447,3 +447,235 @@ This value reflects the on-chain ledger sequence at the time of the last version
 - Treat `contract_version` as an opaque string for display and debugging purposes only.
 - A change in value between requests does not necessarily indicate a contract upgrade — it reflects ledger progression.
 - The value is not suitable for strict contract version gating; use the contract's Wasm hash for that.
+
+
+---
+
+## Backend REST API (v1)
+
+The backend exposes a REST API under `/api/v1/` for the sponsor dashboard and
+event pipeline. All v1 endpoints require a valid JWT unless noted otherwise.
+
+### Authentication Flow (#288)
+
+Authentication uses wallet-native Stellar keypair signatures, eliminating passwords.
+
+#### `POST /api/v1/auth/challenge`
+
+Issues a one-time nonce tied to the wallet address. The nonce is stored in
+Redis with a 5-minute TTL and is consumed on first use (replay protection).
+
+Rate-limited to **10 requests per minute per IP**.
+
+**Request body:**
+
+```json
+{ "address": "G..." }
+```
+
+**Response 200:**
+
+```json
+{
+  "nonce": "550e8400-e29b-41d4-a716-446655440000",
+  "expires_in": 300,
+  "created_at": 1722312073023,
+  "message_to_sign": "G...:550e8400-...:1722312073023"
+}
+```
+
+**Errors:** `400` invalid address, `429` rate limit exceeded.
+
+---
+
+#### `POST /api/v1/auth/verify`
+
+Verifies the signed challenge and returns a JWT. The JWT contains `sub` (wallet
+address), is signed with **RS256** (or HS256 in dev with `JWT_SECRET`), and
+expires in 1 hour by default (`JWT_EXPIRY` env var).
+
+Rate-limited to **10 requests per minute per IP**.
+
+**Request body:**
+
+```json
+{
+  "address": "G...",
+  "nonce": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": 1722312073023,
+  "signature": "<base64-encoded Ed25519 signature>"
+}
+```
+
+Signature is computed over `{address}:{nonce}:{timestamp}` using the wallet's
+private key (Ed25519).
+
+**Response 200:**
+
+```json
+{
+  "token": "eyJhbGci...",
+  "expires_in": "1h",
+  "wallet_address": "G..."
+}
+```
+
+**Errors:** `400` missing/invalid fields, `401` bad signature, `429` rate limit.
+
+---
+
+#### `POST /api/v1/auth/refresh`
+
+Exchanges a non-expired JWT for a new one with a fresh expiry. Pass the current
+token in the `Authorization: Bearer <token>` header.
+
+**Response 200:**
+
+```json
+{
+  "token": "eyJhbGci...",
+  "expires_in": "1h",
+  "wallet_address": "G..."
+}
+```
+
+**Errors:** `401` missing/invalid/expired token.
+
+---
+
+### `GET /api/v1/schedules` (#289)
+
+Returns all vesting streams created by a given sponsor address, with optional
+filtering, multi-field sorting, offset pagination, and cursor-based pagination.
+Response is cached in Redis for **5 seconds**.
+
+**Auth:** `Authorization: Bearer <token>` (JWT `sub` must match `sponsor` param).
+
+**Query parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `sponsor` | string | ✓ | Stellar G... address of the stream funder |
+| `status` | string | — | Filter: `active` \| `pre_cliff` \| `expired` \| `cancelled` |
+| `sort` | string | — | `cliff_asc` (default) \| `cliff_desc` \| `end_asc` \| `end_desc` \| `claimable_asc` \| `claimable_desc` \| `recipient_asc` \| `recipient_desc` |
+| `page` | integer | — | Page number, 1-based (default: `1`) |
+| `limit` | integer | — | Items per page, max 100 (default: `25`) |
+| `cursor` | string | — | Opaque base64url cursor from a previous response (takes precedence over `page`) |
+
+**Example:**
+
+```
+GET /api/v1/schedules?sponsor=GABC...&status=active&sort=cliff_asc&page=1&limit=25
+Authorization: Bearer eyJhbGci...
+```
+
+**Response 200:**
+
+```json
+{
+  "items": [
+    {
+      "recipient": "GXYZ...",
+      "sponsor": "GABC...",
+      "token": "CTOK...",
+      "rate_per_ledger": "100",
+      "start_ledger": 50000,
+      "cliff_ledger": 67280,
+      "end_ledger": 222800,
+      "status": "active",
+      "cancelled_at": null,
+      "claimable_amount": "12500",
+      "created_at": "2026-07-30T06:00:00.000Z"
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 25,
+  "next_cursor": "eyJwYWdlIjoyLCJvZmZzZXQiOjI1fQ",
+  "prev_cursor": null
+}
+```
+
+**Status values:**
+
+| Value | Meaning |
+|-------|---------|
+| `active` | Cliff passed; tokens dripping |
+| `pre_cliff` | Stream exists; cliff not yet reached |
+| `expired` | `end_ledger` reached; stream complete |
+| `cancelled` | Sponsor cancelled the stream |
+
+**Errors:** `400` invalid params, `401` missing/invalid JWT, `403` JWT address ≠ sponsor, `500` DB error.
+
+---
+
+### `GET /api/v1/worker/status` (#287)
+
+Reports the health and lag of the Horizon event ingestion worker. Useful for
+monitoring dashboards and alerting.
+
+**Auth:** None (internal/ops use; protect with network policy in production).
+
+**Response 200:**
+
+```json
+{
+  "running": true,
+  "lastLedger": 1234560,
+  "chainTip": 1234563,
+  "lagLedgers": 3,
+  "lastPollAt": "2026-07-30T06:21:00.000Z",
+  "backoffMs": 0,
+  "errorCount": 0
+}
+```
+
+A `lagLedgers` value consistently above `HORIZON_FINALITY_DEPTH` (default 3)
+indicates the worker is falling behind and may need investigation.
+
+---
+
+### Database Schema (#286)
+
+#### `stream_events`
+
+Persists decoded contract events for efficient historical queries.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `event_type` | enum | `vc_create` \| `vc_claim` \| `vc_cancel` \| `vc_done` \| `vc_drain` |
+| `recipient` | varchar(56) | Recipient Stellar address |
+| `sponsor` | varchar(56) | Sponsor address (vc_create / vc_drain only) |
+| `token` | varchar(56) | Token contract address |
+| `amount` | bigint | Claimed / refunded amount (vc_claim / vc_cancel) |
+| `ledger_sequence` | integer | Ledger number of the event |
+| `tx_hash` | varchar(64) | Transaction hash (unique — prevents duplicate ingestion) |
+| `created_at` | timestamptz | Row insertion time |
+
+**Indexes:** `(recipient, event_type)`, `sponsor`, `ledger_sequence`, `created_at`.
+
+#### `stream_events_dlq`
+
+Dead-letter queue for events that cannot be decoded after `MAX_DECODE_ATTEMPTS` (3).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `horizon_event_id` | text | Horizon event ID (unique) |
+| `raw_payload` | jsonb | Full raw Horizon event record |
+| `attempt_count` | integer | Number of decode attempts |
+| `last_error` | text | Most recent decode error message |
+
+#### Backfill script (#286)
+
+To populate `stream_events` from Horizon history on first run:
+
+```bash
+DATABASE_URL=postgres://... \
+HORIZON_URL=https://horizon-testnet.stellar.org \
+TESTNET_CONTRACT_ID=C... \
+tsx backend/scripts/backfill_stream_events.ts
+```
+
+Use `BACKFILL_START_CURSOR=<paging_token>` to resume from a checkpoint.
+Use `BACKFILL_DRY_RUN=1` to log without writing.
