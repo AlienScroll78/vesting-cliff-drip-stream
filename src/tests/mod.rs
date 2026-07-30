@@ -6,6 +6,7 @@ mod test_cancel;
 mod test_claim;
 mod test_create;
 mod test_edge_cases;
+mod test_fee_collection;
 mod test_pause_resume;
 mod test_properties;
 mod test_recipient_transfer;

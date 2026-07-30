@@ -107,3 +107,23 @@ pub fn set_min_deposit(env: &Env, min_deposit: i128) {
         .instance()
         .set(&DataKey::MinDeposit, &min_deposit);
 }
+
+/// Returns the configured fee basis points (default 0) and treasury address (if set).
+pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
+    let fee_bps = env
+        .storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::FeeBps)
+        .unwrap_or(0);
+    let treasury = env
+        .storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Treasury);
+    (fee_bps, treasury)
+}
+
+/// Sets configured fee basis points and treasury address in instance storage.
+pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
+    env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
+    env.storage().instance().set(&DataKey::Treasury, treasury);
+}

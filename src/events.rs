@@ -156,3 +156,19 @@ pub fn emit_recipient_transferred(
         (current_recipient.clone(), new_recipient.clone()),
     );
 }
+
+/// Emitted when a protocol fee is collected from sponsor upon stream creation.
+///
+/// Topics: `["vc_fee", sponsor]`
+/// Data:   `(treasury, fee_amount)`
+pub fn emit_fee_collected(
+    env: &Env,
+    sponsor: &Address,
+    treasury: &Address,
+    fee_amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_fee"), sponsor.clone()),
+        (treasury.clone(), fee_amount),
+    );
+}

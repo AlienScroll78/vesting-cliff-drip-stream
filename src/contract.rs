@@ -151,6 +151,27 @@ impl VestingDrips {
             .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
             .map_err(|_| VestingError::TransferFailed)?;
 
+        // ── Collect Protocol Fee (if configured) ──────────────────────────────
+        let (fee_bps, treasury_opt) = storage::get_fee(&env);
+        if fee_bps > 0 {
+            if fee_bps > 500 {
+                return Err(VestingError::InvalidRate);
+            }
+            let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
+            let fee_amount = total_deposit
+                .checked_mul(fee_bps as i128)
+                .ok_or(VestingError::DepositOverflow)?
+                / 10_000;
+
+            if fee_amount > 0 {
+                token_client
+                    .try_transfer(&sponsor, &treasury, &fee_amount)
+                    .map_err(|_| VestingError::TransferFailed)?;
+
+                events::emit_fee_collected(&env, &sponsor, &treasury, fee_amount);
+            }
+        }
+
         // ── Persist schedule ──────────────────────────────────────────────────
         let schedule = VestingSchedule {
             version: 1,
@@ -408,6 +429,34 @@ impl VestingDrips {
 
         events::emit_recipient_transferred(&env, &current_recipient, &new_recipient);
 
+        Ok(())
+    }
+
+    /// Configures protocol fee basis points (0-500) and treasury address.
+    ///
+    /// Callable only by the contract admin.
+    ///
+    /// # Errors
+    /// * `Unauthorized` – Caller is not the configured admin.
+    /// * `InvalidRate`   – `fee_bps` exceeds maximum allowed cap of 500 (5%).
+    pub fn set_fee(
+        env: Env,
+        admin: Address,
+        fee_bps: u32,
+        treasury: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+
+        let stored_admin = storage::get_admin(&env).ok_or(VestingError::Unauthorized)?;
+        if admin != stored_admin {
+            return Err(VestingError::Unauthorized);
+        }
+
+        if fee_bps > 500 {
+            return Err(VestingError::InvalidRate);
+        }
+
+        storage::set_fee(&env, fee_bps, &treasury);
         Ok(())
     }
 
