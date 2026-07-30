@@ -58,6 +58,9 @@ impl VestingDrips {
         total_duration: u32,
     ) -> Result<(), VestingError> {
         // ── Validation ────────────────────────────────────────────────────────
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
         if rate <= 0 {
             return Err(VestingError::InvalidRate);
         }

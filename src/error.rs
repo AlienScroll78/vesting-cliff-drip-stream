@@ -61,4 +61,11 @@ pub enum VestingError {
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
     DrainDelayNotExpired = 9,
+
+    /// **Code 10** — The sponsor and recipient addresses are identical.
+    ///
+    /// A stream where the sponsor and recipient are the same address would allow
+    /// the sponsor to deposit and immediately reclaim tokens by "claiming" them,
+    /// which defeats the purpose of the vesting lock.
+    InvalidRecipient = 10,
 }
