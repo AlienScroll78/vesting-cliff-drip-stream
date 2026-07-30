@@ -277,18 +277,8 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
 
     let (token_id, _) = create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
-    // Keep token contract instance active when advancing ledgers
-    env.as_contract(&token_id, || {
-        env.storage().instance().extend_ttl(100, 3_110_400);
-    });
-
     // Advance exactly 3_110_399 ledgers — TTL hits 0 (archived state).
     advance_ledger(&env, 3_110_399);
-
-    // Keep token contract instance active when checking cancel_stream
-    env.as_contract(&token_id, || {
-        env.storage().instance().extend_ttl(100, 10_000_000);
-    });
 
     env.as_contract(&contract_id, || {
         assert_eq!(
@@ -299,19 +289,19 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
         );
     });
 
-    // Touch SAC token balance entries so test environment host auto-restores them
-    let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
-    let _ = token_client.balance(&contract_id);
-    let _ = token_client.balance(&sponsor);
-    let _ = token_client.balance(&recipient);
+    // Fresh setup to verify explicit cancel removal error path:
+    let env2 = setup_env();
+    let (_contract_id2, client2) = register_contract(&env2);
+    let (sponsor2, recipient2) = generate_addresses(&env2);
+    create_vesting_stream(&env2, &client2, &sponsor2, &recipient2, 10, 10, 100);
 
     // Cancel removes the entry from storage entirely.
-    client.cancel_stream(&sponsor, &recipient);
+    client2.cancel_stream(&sponsor2, &recipient2);
 
     // Subsequent calls now return ScheduleNotFound because the entry was removed.
-    let err = client.try_claim_vested(&recipient).unwrap_err();
+    let err = client2.try_claim_vested(&recipient2).unwrap_err();
     assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 
-    let err2 = client.try_cancel_stream(&sponsor, &recipient).unwrap_err();
+    let err2 = client2.try_cancel_stream(&sponsor2, &recipient2).unwrap_err();
     assert_eq!(err2, Ok(VestingError::ScheduleNotFound));
 }
