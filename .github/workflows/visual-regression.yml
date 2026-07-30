@@ -1,0 +1,65 @@
+name: Visual Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/visual-regression.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/visual-regression.yml"
+
+jobs:
+  visual-regression:
+    name: Playwright screenshot comparison
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium only)
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Start preview server and run visual tests
+        # Start the Vite preview server in the background; Playwright's
+        # webServer config in playwright.visual.config.ts will reuse it.
+        run: |
+          npm run preview &
+          # Give the server a moment to bind before tests start
+          sleep 3
+          BASE_URL=http://localhost:4173 npm run test:visual
+        env:
+          CI: true
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload diff screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-diffs
+          path: frontend/test-results/
+          retention-days: 7

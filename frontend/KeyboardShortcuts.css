@@ -1,0 +1,78 @@
+/* KeyboardShortcuts modal styles */
+
+.ks-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ks-dialog {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  width: min(480px, 90vw);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  outline: none;
+}
+
+.ks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.ks-header h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+.ks-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+.ks-close:hover { background: #f3f4f6; color: #111827; }
+.ks-close:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+
+.ks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.ks-table thead th {
+  text-align: left;
+  color: #6b7280;
+  font-weight: 600;
+  padding: 0 0 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ks-table tbody tr + tr td { border-top: 1px solid #f3f4f6; }
+
+.ks-table td { padding: 0.6rem 0; }
+
+.ks-keys { width: 40%; white-space: nowrap; }
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  color: #374151;
+  box-shadow: 0 1px 0 #d1d5db;
+}
