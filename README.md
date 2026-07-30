@@ -42,6 +42,7 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ├── .cargo-mutants.toml            # Mutation testing exclusions & config
 ├── .gitignore
 ├── docs/
+│   ├── architecture.md            # Full-stack system architecture & Mermaid diagrams
 │   └── mutation/
 │       └── report.md              # Mutation testing results
 ├── scripts/
@@ -69,9 +70,25 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 
 
+## Architecture Overview
+
+A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
+
+```mermaid
+flowchart TD
+    UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
+    Wallet -->|"Submit Transaction"| RPC["Soroban RPC Node"]
+    RPC -->|"Execute Host Call"| Contract["VestingDrips Contract"]
+    Indexer["Backend Event Indexer"] -->|"Poll Events"| Horizon["Horizon API"]
+    Indexer -->|"Persist Activity"| DB[("PostgreSQL DB")]
+    UI -->|"Query Indexed Data"| API["Backend API Server"]
+    API --> DB
+```
+
 ## Architecture Decision Records
 
 Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
 
 ## Security
 
