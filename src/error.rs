@@ -8,24 +8,31 @@ use soroban_sdk::contracterror;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum VestingError {
-    /// The recipient has no active vesting schedule.
+    /// Invalid transition for `claim_vested` or `cancel_stream` when the stream
+    /// is not present in storage (NotFound, Cancelled, Drained, or Expired).
     ScheduleNotFound = 1,
 
-    /// The current ledger has not yet reached the cliff.
+    /// Invalid transition for `claim_vested` while the stream is still in the
+    /// PreCliff state (or a Paused state before the cliff is reached).
     CliffNotReached = 2,
 
-    /// `total_duration` must be greater than `cliff_duration`.
+    /// Invalid transition for `create_vesting_stream` when the requested
+    /// duration is not strictly longer than the cliff window.
     InvalidDuration = 3,
 
-    /// `rate_per_ledger` must be a positive non-zero value.
+    /// Invalid transition for `create_vesting_stream` when the rate is zero or
+    /// negative.
     InvalidRate = 4,
 
-    /// The computed total deposit would overflow an i128.
+    /// Invalid transition for `create_vesting_stream` when the total deposit
+    /// cannot be represented safely in `i128`.
     DepositOverflow = 5,
 
-    /// A vesting schedule already exists for this recipient.
+    /// Invalid transition for `create_vesting_stream` when a stream already
+    /// exists for the recipient in an active lifecycle state.
     ScheduleAlreadyExists = 6,
 
-    /// Nothing available to claim at the current ledger.
+    /// Invalid transition for `claim_vested` when the stream is in an active
+    /// lifecycle state but there is no additional accrual to claim.
     NothingToClaim = 7,
 }
