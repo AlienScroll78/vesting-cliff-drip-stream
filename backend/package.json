@@ -1,0 +1,23 @@
+{
+  "name": "vesting-cliff-drip-stream-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend API server for the Vesting Cliff Drip Stream contract",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test src/**/*.test.js"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^12.3.0",
+    "ioredis": "^5.3.2",
+    "node-fetch": "^3.3.2",
+    "pino": "^9.3.2",
+    "pino-pretty": "^11.2.2",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
