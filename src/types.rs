@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, String};
 
 /// Represents a single vesting schedule stored per recipient.
 ///
@@ -45,6 +45,18 @@ pub struct VestingSchedule {
     /// Initialised to `0` on stream creation and incremented on every successful claim.
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
+
+    /// Optional free-form metadata attached at stream creation (max 256 bytes, UTF-8).
+    ///
+    /// Stored on-chain and returned by `get_schedule`. Immutable after creation.
+    /// Empty string is normalised to `None` at creation time.
+    ///
+    /// ⚠️  Metadata is publicly visible on-chain. Do **not** store sensitive
+    /// or personally-identifiable information here.
+    ///
+    /// Schedules created before this field was introduced will deserialise
+    /// with `metadata = None` (XDR default for a missing `Option`).
+    pub metadata: Option<String>,
 }
 
 /// Storage key variants used for keying contract data.

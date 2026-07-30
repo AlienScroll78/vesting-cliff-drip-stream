@@ -23,7 +23,7 @@ fn test_minimal_cliff_one_ledger() {
     mint_to(&env, &token_id, &sponsor, 100);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &1, &10)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &1, &10, &None)
         .unwrap();
 
     // Cliff is at ledger 101; advance just 1.
@@ -48,11 +48,11 @@ fn test_multiple_independent_streams() {
 
     // A: rate=10, cliff=50, total=200 → deposit=2000
     client
-        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200, &None)
         .unwrap();
     // B: rate=15, cliff=20, total=200 → deposit=3000
     client
-        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200)
+        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200, &None)
         .unwrap();
 
     // Advance to ledger 170 (70 past start; B cliff at 120 passed, A cliff at 150 passed)
@@ -80,7 +80,7 @@ fn test_claim_exactly_at_end_removes_schedule() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     advance_ledger(&env, 100); // exactly end_ledger
@@ -103,7 +103,7 @@ fn test_incremental_claims_sum_to_total() {
     mint_to(&env, &token_id, &sponsor, 500);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &20, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &20, &100, &None)
         .unwrap();
 
     // Claim in three separate windows: cliff, mid, end
@@ -134,7 +134,7 @@ fn test_regression_cliff_equals_total_minus_one() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &99, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &99, &100, &None)
         .unwrap();
 
     // Jump exactly to end_ledger (100 ledgers).
@@ -161,7 +161,7 @@ fn test_regression_rate_of_one() {
     mint_to(&env, &token_id, &sponsor, 100); // rate=1, total=100
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100, &None)
         .unwrap();
 
     advance_ledger(&env, 10); // exactly at cliff
@@ -185,7 +185,7 @@ fn test_regression_claim_well_past_end_caps_correctly() {
     mint_to(&env, &token_id, &sponsor, 500);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &50)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &50, &None)
         .unwrap();
 
     // Advance 10_000 ledgers past the end.
@@ -210,7 +210,7 @@ fn test_regression_claimable_amount_zero_before_cliff() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100, &None)
         .unwrap();
 
     // Before cliff: view must be 0.
@@ -237,7 +237,7 @@ fn test_regression_is_cliff_passed_boundary() {
 
     // cliff_duration=50 → cliff_ledger=150
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &50, &100, &None)
         .unwrap();
 
     advance_ledger(&env, 49); // ledger 149 — one before cliff
@@ -261,7 +261,7 @@ fn test_regression_negative_rate_rejected() {
 
     use crate::error::VestingError;
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &50, &100, &None)
         .unwrap_err();
     assert_eq!(err, VestingError::InvalidRate.into());
 }
@@ -287,7 +287,7 @@ fn test_ttl_bumped_on_write() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // PERSISTENT_BUMP_AMOUNT = 518_400; TTL doesn't include the current ledger,
@@ -321,7 +321,7 @@ fn test_ttl_bumped_on_read() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // Advance 200_000 ledgers without any contract interaction.
@@ -380,7 +380,7 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // Advance exactly 518_399 ledgers — TTL hits 0 (archived state).

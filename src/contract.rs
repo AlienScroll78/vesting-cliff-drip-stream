@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, String};
 
 use crate::{
     error::VestingError,
@@ -41,12 +41,17 @@ impl VestingDrips {
     /// * `rate`           – Tokens released per ledger (must be > 0).
     /// * `cliff_duration` – Ledgers from now until the cliff is reached.
     /// * `total_duration` – Total ledgers the stream runs for (must be > cliff_duration).
+    /// * `metadata`       – Optional free-form label (max 256 UTF-8 bytes). Empty string
+    ///                      is treated as `None`. Immutable after creation.
+    ///                      ⚠️ Stored on-chain and publicly visible — do not include
+    ///                      sensitive or personally-identifiable information.
     ///
     /// # Errors
     /// * `InvalidRate`            – `rate` is zero or negative.
     /// * `InvalidDuration`        – `total_duration` ≤ `cliff_duration`.
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
     /// * `ScheduleAlreadyExists`  – A stream already exists for `recipient`.
+    /// * `MetadataTooLong`        – `metadata` exceeds 256 bytes.
     pub fn create_vesting_stream(
         env: Env,
         sponsor: Address,
@@ -55,6 +60,7 @@ impl VestingDrips {
         rate: i128,
         cliff_duration: u32,
         total_duration: u32,
+        metadata: Option<String>,
     ) -> Result<(), VestingError> {
         // ── Validation ────────────────────────────────────────────────────────
         if rate <= 0 {
@@ -69,6 +75,18 @@ impl VestingDrips {
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
+
+        // ── Normalise and validate metadata ───────────────────────────────────
+        // Treat an empty string the same as None.
+        // Validate byte length (not char count) against the 256-byte cap.
+        const MAX_METADATA_BYTES: u32 = 256;
+        let metadata: Option<String> = match metadata {
+            Some(ref s) if s.len() == 0 => None,
+            Some(ref s) if s.len() > MAX_METADATA_BYTES => {
+                return Err(VestingError::MetadataTooLong);
+            }
+            other => other,
+        };
 
         sponsor.require_auth();
 
@@ -99,6 +117,7 @@ impl VestingDrips {
             end_ledger,
             last_claimed_ledger: start_ledger,
             total_claimed: 0,
+            metadata: metadata.clone(),
         };
         storage::set_schedule(&env, &recipient, &schedule);
 
@@ -111,6 +130,7 @@ impl VestingDrips {
             start_ledger,
             cliff_ledger,
             end_ledger,
+            &metadata,
         );
 
         Ok(())

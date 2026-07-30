@@ -22,7 +22,7 @@ fn test_cancel_before_cliff_full_refund() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Cancel before cliff at ledger 120
@@ -48,7 +48,7 @@ fn test_cancel_after_cliff_splits_tokens() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Cancel at ledger 200 (100 ledgers past start, cliff passed at 150)
@@ -92,7 +92,7 @@ fn test_cancel_one_ledger_before_cliff_full_refund() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance to ledger 149 (cliff_ledger - 1).
@@ -121,7 +121,7 @@ fn test_cancel_exactly_at_cliff_splits_tokens() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance exactly to cliff_ledger (50 ledgers → ledger 150).
@@ -150,7 +150,7 @@ fn test_cancel_one_ledger_after_cliff_splits_tokens() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance to cliff_ledger + 1 (51 ledgers → ledger 151).

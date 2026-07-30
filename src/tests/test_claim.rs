@@ -41,6 +41,7 @@ fn setup_stream(
             &rate,
             &cliff_duration,
             &total_duration,
+            &None,
         )
         .unwrap();
 
@@ -59,7 +60,7 @@ fn test_claim_before_cliff_fails() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Try to claim at ledger 120 (cliff is 150)
@@ -82,7 +83,7 @@ fn test_first_claim_at_cliff_includes_all_accrued() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Jump exactly to the cliff (ledger 150).
@@ -106,7 +107,7 @@ fn test_partial_claim_mid_stream() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // First claim at cliff+50 (ledger 200)
@@ -134,7 +135,7 @@ fn test_claim_past_end_caps_at_end_ledger() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Jump way past the end ledger (300)
@@ -160,7 +161,7 @@ fn test_double_claim_same_ledger_returns_nothing_to_claim() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     advance_ledger(&env, 100);
