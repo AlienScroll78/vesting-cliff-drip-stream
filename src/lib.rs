@@ -18,7 +18,7 @@ mod events;
 mod storage;
 mod types;
 
-pub use contract::{StreamStats, VestingDrips};
+pub use contract::{calculate_total_deposit, compute_variable_claimable, StreamStats, VestingDrips};
 pub use error::VestingError;
 pub use events::StreamCreatedData;
 pub use types::{StreamStatus, VestingSchedule};

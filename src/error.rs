@@ -70,7 +70,7 @@ pub enum VestingError {
     /// level restriction). No state has been mutated when this error is returned.
     TransferFailed = 9,
 
-    /// **Code 11** — The emergency-drain delay period has not yet elapsed.
+    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
     ///
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
@@ -83,17 +83,10 @@ pub enum VestingError {
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
 
-    /// **Code 15** — The schedule's `version` counter has reached `u32::MAX`
-    /// and cannot be incremented further.
+    /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     ///
-    /// In practice this requires 4 294 967 295 mutations on a single stream,
-    /// so it should never occur in normal operation.
-    VersionOverflow = 15,
-
-    /// **Code 16** — The supplied token contract is not on the allowlist.
-    ///
-    /// Add the token with `add_allowed_token` before creating a stream that
-    /// uses it.  If the allowlist is empty (permissive mode) all tokens are
-    /// accepted.
-    TokenNotAllowed = 16,
+    /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
+    /// value before retrying. Do not store sensitive data in metadata as it
+    /// is persisted on-chain and publicly visible.
+    MetadataTooLong = 20,
 }

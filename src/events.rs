@@ -1,27 +1,4 @@
-use soroban_sdk::{contracttype, symbol_short, Address, Env, Symbol};
-
-/// Data payload for the `StreamCreated` event.
-///
-/// Encoded as a single `contracttype` struct so off-chain indexers can
-/// reconstruct the complete stream state from the event alone without
-/// needing any storage reads.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(missing_docs)]
-pub struct StreamCreatedData {
-    /// The SAC token contract being streamed.
-    pub token: Address,
-    /// Tokens released per ledger.
-    pub rate: i128,
-    /// Ledger sequence at which the stream was created.
-    pub start_ledger: u32,
-    /// Ledger sequence at which the cliff is reached.
-    pub cliff_ledger: u32,
-    /// Ledger sequence at which the stream ends.
-    pub end_ledger: u32,
-    /// Full deposit transferred from sponsor at creation (`rate × total_duration`).
-    pub total_deposit: i128,
-}
+use soroban_sdk::{symbol_short, Address, Env, String, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -36,7 +13,7 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
-    total_deposit: i128,
+    metadata: &Option<String>,
 ) {
     let data = StreamCreatedData {
         token: token.clone(),
@@ -50,7 +27,40 @@ pub fn emit_stream_created(
         (
             Symbol::new(env, "StreamCreated"),
             sponsor.clone(),
-            recipient.clone(),
+            token.clone(),
+            rate_per_ledger,
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            metadata.clone(),
+        ),
+        data,
+    );
+}
+
+/// Emitted when a variable-rate vesting stream is created.
+///
+/// Topics: `["vc_vrcreate", recipient]`
+/// Data:   `(sponsor, token, start_ledger, cliff_ledger, end_ledger, total_deposited)`
+pub fn emit_variable_stream_created(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    token: &Address,
+    start_ledger: u32,
+    cliff_ledger: u32,
+    end_ledger: u32,
+    total_deposited: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_vrcreat"), recipient.clone()),
+        (
+            sponsor.clone(),
+            token.clone(),
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            total_deposited,
         ),
         data,
     );
@@ -59,7 +69,10 @@ pub fn emit_stream_created(
 /// Emitted when a recipient successfully claims vested tokens.
 ///
 /// Topics: `["vc_claim", recipient]`
-/// Data:   `(amount, ledger_claimed_through)`
+/// Data:   `(amount, ledger_claimed_through, dust_collected)`
+///
+/// `dust_collected` is the sub-1-token remainder captured at `end_ledger` to
+/// ensure no tokens are permanently stranded in the contract vault.
 pub fn emit_tokens_claimed(
     env: &Env,
     recipient: &Address,
@@ -68,6 +81,22 @@ pub fn emit_tokens_claimed(
 ) {
     env.events().publish(
         (symbol_short!("vc_claim"), recipient.clone()),
+        (amount, ledger_claimed_through),
+    );
+}
+
+/// Emitted when a recipient successfully claims from a variable-rate stream.
+///
+/// Topics: `["vc_vrclaim", recipient]`
+/// Data:   `(amount, ledger_claimed_through)`
+pub fn emit_variable_tokens_claimed(
+    env: &Env,
+    recipient: &Address,
+    amount: i128,
+    ledger_claimed_through: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_vrclam"), recipient.clone()),
         (amount, ledger_claimed_through),
     );
 }
@@ -88,7 +117,11 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
-        refunded_amount,
+        (
+            sponsor.clone(),
+            refunded_to_sponsor,
+            released_to_recipient,
+        ),
     );
 }
 

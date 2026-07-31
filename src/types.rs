@@ -3,7 +3,7 @@
 // attribute-macro-generated sibling impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, Vec};
 
 /// Represents a single vesting schedule stored per recipient.
 ///
@@ -53,28 +53,113 @@ pub struct VestingSchedule {
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
 
-    /// Mutation counter — incremented atomically on every state-changing operation.
+    /// Optional free-form metadata attached at stream creation (max 256 bytes, UTF-8).
     ///
-    /// | Value | Meaning                              |
-    /// |-------|--------------------------------------|
-    /// | `0`   | Legacy entry written before versioning was added; upgrade with `migrate_schedule` |
-    /// | `1`   | Created (initial value)              |
-    /// | `n>1` | Modified `n-1` times since creation  |
+    /// Stored on-chain and returned by `get_schedule`. Immutable after creation.
+    /// Empty string is normalised to `None` at creation time.
     ///
-    /// Placed last so that old XDR-encoded entries (which lack this field)
-    /// decode with an implicit XDR default of `0`.
-    pub version: u32,
+    /// ⚠️  Metadata is publicly visible on-chain. Do **not** store sensitive
+    /// or personally-identifiable information here.
+    ///
+    /// Schedules created before this field was introduced will deserialise
+    /// with `metadata = None` (XDR default for a missing `Option`).
+    pub metadata: Option<String>,
 }
 
-impl VestingSchedule {
-    /// Increments the version counter, returning `VersionOverflow` at `u32::MAX`.
-    pub fn increment_version(&mut self) -> Result<(), crate::error::VestingError> {
-        self.version = self
-            .version
-            .checked_add(1)
-            .ok_or(crate::error::VestingError::VersionOverflow)?;
-        Ok(())
-    }
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
+    pub total_deposit: i128,
+
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
+    pub claimed_so_far: i128,
+
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    /// Example: `5000` = 50.00 %.
+    pub percent_vested_bps: u32,
+
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
+}
+
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
+    pub total_deposit: i128,
+
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
+    pub claimed_so_far: i128,
+
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    /// Example: `5000` = 50.00 %.
+    pub percent_vested_bps: u32,
+
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
+}
+
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
+    pub total_deposit: i128,
+
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
+    pub claimed_so_far: i128,
+
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    /// Example: `5000` = 50.00 %.
+    pub percent_vested_bps: u32,
+
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
 }
 
 /// Storage key variants used for keying contract data.
@@ -82,11 +167,23 @@ impl VestingSchedule {
 #[derive(Clone)]
 #[allow(missing_docs)]
 pub enum DataKey {
-    /// Per-recipient vesting schedule.
+    /// Per-recipient vesting schedule (fixed rate).
     Schedule(Address),
+
+    /// Per-recipient variable-rate vesting schedule.
+    VariableSchedule(Address),
 
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,
+
+    /// Storage key for configured contract admin address.
+    Admin,
+
+    /// Storage key for configured fee basis points (0-500).
+    FeeBps,
+
+    /// Storage key for configured protocol treasury address.
+    Treasury,
 }
 
 /// Human-readable status of a vesting stream.
