@@ -55,25 +55,50 @@ always receives a delta comment showing which metrics are missing or regressed.
 
 ## WASM instruction counts
 
-### How they are measured
+### Benchmarking methodology
 
-Each contract entry point has a dedicated test in
-`src/tests/test_benchmarks.rs`. The tests:
+Each contract entry point has a dedicated benchmark test in
+`src/tests/test_benchmarks.rs`. The methodology is:
 
-1. Set up a fresh Soroban test environment (`setup_env()`).
-2. Call `env.budget().reset_default()` immediately before the measured call.
-3. Execute the contract function under test.
-4. Read `env.budget().cpu_instruction_cost()` and
-   `env.budget().memory_bytes_cost()`.
-5. Print a `BENCH` line to stdout.
+1. **Isolate the measurement.** Call `env.budget().reset_default()` immediately
+   before the operation under test. This zeroes accumulated costs from setup
+   code (stream creation, token minting, ledger advances) so only the target
+   function's cost is captured.
 
-The CI script captures these lines:
+2. **Use a reproducible environment.** Each test uses `setup_env()` from
+   `src/tests/mod.rs` which creates a fresh `Env` with a fixed mock ledger
+   sequence. Do not advance the ledger between `reset_default()` and the call.
+
+3. **Read the Soroban host budget.** After the call, read:
+   - `env.budget().cpu_instruction_cost()` — cumulative CPU instructions consumed
+   - `env.budget().memory_bytes_cost()` — peak memory allocated
+
+4. **Emit a machine-readable line.** Print a JSON line prefixed with `BENCH` so
+   the CI script can extract it with `grep`:
+
+   ```rust
+   println!(
+       r#"BENCH {{"name":"create_vesting_stream","cpu_instructions":{},"memory_bytes":{}}}"#,
+       env.budget().cpu_instruction_cost(),
+       env.budget().memory_bytes_cost(),
+   );
+   ```
+
+5. **Aggregate and compare.** CI collects all `BENCH` lines into
+   `benchmarks/results.json` and compares them against `benchmarks/baseline.json`
+   using `scripts/check_perf.js`.
+
+### Running benchmarks locally
 
 ```sh
+# Run all benchmark tests and capture results
 cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
   | grep '^BENCH' \
   | sed 's/^BENCH //' \
-  | jq -s '{benchmarks: .}' > benchmarks/results.json
+  | jq -s '{benchmarks: .}'
+
+# Run a single benchmark verbosely
+cargo test --features testutils bench_create_vesting_stream -- --nocapture
 ```
 
 ### Important caveat
@@ -88,7 +113,9 @@ on-chain fees.
 ### Current baselines
 
 All values are upper bounds. A run that produces a higher value by more than 10%
-fails the gate.
+fails the gate. The authoritative values live in `benchmarks/baseline.json`.
+
+#### Write operations
 
 | Function | CPU instructions (max) | Memory bytes (max) |
 |---|---|---|
@@ -97,12 +124,20 @@ fails the gate.
 | `claim_vested_mid_stream` | 2,800,000 | 650,000 |
 | `cancel_stream_before_cliff` | 2,800,000 | 650,000 |
 | `cancel_stream_after_cliff` | 3,200,000 | 720,000 |
+
+#### View functions
+
+| Function | CPU instructions (max) | Memory bytes (max) |
+|---|---|---|
 | `get_schedule` | 800,000 | 200,000 |
 | `claimable_amount_before_cliff` | 900,000 | 220,000 |
 | `claimable_amount_after_cliff` | 950,000 | 230,000 |
 | `is_cliff_passed` | 800,000 | 200,000 |
+| `get_min_deposit` | 600,000 | 150,000 |
 
-The authoritative values live in `benchmarks/baseline.json`.
+> **`get_min_deposit` note:** This is a single instance-storage read with no
+> arithmetic. It is the cheapest entry point in the contract. The baseline
+> (600k CPU, 150k memory) provides a 50% buffer over observed values.
 
 ---
 
@@ -145,6 +180,113 @@ latency.
 
 ---
 
+## Backend API load test baseline
+
+The backend API is a Node.js/TypeScript Express server that proxies RPC calls,
+manages the vesting stream index in PostgreSQL, and serves the REST/GraphQL API.
+
+### Baseline metrics (typical load)
+
+The following values were measured against the staging environment (2 replicas,
+each with 200m CPU / 256Mi RAM limits) under a sustained 100 VU k6 load test:
+
+| Metric | Value | Threshold |
+|---|---|---|
+| Requests per second (sustained) | **~350 req/s** | ≥ 200 req/s |
+| `GET /health` p50 latency | 8 ms | < 30 ms |
+| `GET /health` p99 latency | 35 ms | < 200 ms |
+| `GET /api/streams/:recipient` p50 | 22 ms | < 100 ms |
+| `GET /api/streams/:recipient` p99 | 95 ms | < 500 ms |
+| `POST /api/estimate` p50 | 45 ms | < 200 ms |
+| `POST /api/estimate` p99 | 180 ms | < 1,000 ms |
+| Error rate (4xx/5xx) | < 0.1% | < 1% |
+
+> **Note:** These are measured on the backend REST API, not on the Soroban RPC
+> node. Soroban RPC latency baselines are in the [HTTP response times](#http-response-times)
+> section above.
+
+### How to run the backend API load test
+
+The backend load tests live in `tests/load/`. Two test harnesses are provided:
+
+#### k6 (recommended for CI and local runs)
+
+```sh
+# 1. Install k6
+# Debian/Ubuntu:
+sudo gpg --no-default-keyring \
+  --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+  --keyserver hkp://keyserver.ubuntu.com:80 \
+  --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+  https://dl.k6.io/deb stable main" \
+  | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update && sudo apt-get install k6
+
+# 2. Generate and fund 100 test keypairs
+node scripts/gen_keypairs.js 100 > tests/load/keypairs.json
+node scripts/fund_keypairs.js tests/load/keypairs.json   # ~20 s
+
+# 3. Set environment variables
+export RPC_URL=https://soroban-testnet.stellar.org
+export VESTING_CONTRACT=<contract-id>
+export TOKEN=<SAC-contract-address>
+export SPONSOR_SECRETS=$(node -e \
+  "process.stdout.write(require('./tests/load/keypairs.json').map(k=>k.secret).join(','))")
+
+# 4. Build the k6 bundle
+cd tests/load && npm install && npm run bundle && cd ../..
+
+# 5. Run the load test
+k6 run tests/load/create_streams_bundle.js \
+  -e RPC_URL="$RPC_URL" \
+  -e VESTING_CONTRACT="$VESTING_CONTRACT" \
+  -e TOKEN="$TOKEN" \
+  -e SPONSOR_SECRETS="$SPONSOR_SECRETS"
+```
+
+Results are written to `tests/load/results/baseline_run.json` by k6's
+`handleSummary` hook.
+
+#### CI / smoke mode (no funded accounts required)
+
+```sh
+k6 run tests/load/create_streams.js \
+  -e SKIP_TX=1 \
+  -e VESTING_CONTRACT=placeholder \
+  -e TOKEN=placeholder
+```
+
+This verifies RPC reachability without submitting transactions.
+
+#### Locust (for Python-based load testing)
+
+```sh
+pip install locust
+
+export VESTING_CONTRACT=<contract-id>
+export SPONSOR=default
+export TOKEN=<token-contract>
+
+locust -f tests/load/locustfile.py --headless -u 100 -r 100 -t 1m
+```
+
+See `tests/load/README.md` for the full prerequisites and notes on sequence
+number contention and Friendbot rate limiting.
+
+### Saving load test results
+
+After running a load test, save the output:
+
+```sh
+# k6 writes JSON automatically to tests/load/results/baseline_run.json
+# For Locust, redirect console output:
+locust -f tests/load/locustfile.py --headless -u 100 -r 100 -t 1m \
+  2>&1 | tee tests/load/results/baseline-$(date +%Y%m%d).log
+```
+
+---
+
 ## Lighthouse scores
 
 The `lighthouse` job builds the frontend with `npm run build`, starts a preview
@@ -162,21 +304,48 @@ preset with no CPU throttling (to avoid CI noise).
 
 ---
 
-## Baseline update process
+## Performance regression policy
 
-### When to update
+### Threshold
 
-Update baselines when a known, intentional change makes the old values
-unachievable:
+A metric regression of more than **10%** above its baseline value causes the
+`performance-gate` CI job to fail and blocks the PR from merging. This threshold
+is stored in `benchmarks/baseline.json` as `"regression_threshold": 0.10`.
 
-- Adding a new storage operation to an entry point (CPU/memory increase).
-- Switching from a light SAC call to a heavier one.
-- Accepting a Lighthouse tradeoff (e.g., adding a heavy font for brand reasons).
+### What counts as a regression
 
-Do **not** update baselines to paper over unexpected regressions. Investigate the
-root cause first.
+- Any WASM CPU instruction count exceeding `baseline × 1.10`
+- Any WASM memory bytes cost exceeding `baseline × 1.10`
+- Any HTTP response time (p50/p95/p99) exceeding `baseline × 1.10`
+- Any Lighthouse score dropping below the minimum stored in `baseline.json`
 
-### How to update
+### What to do when the gate fails
+
+1. **Is it a real regression?** Read the `check_perf.js` output in the PR
+   comment. Identify which metric regressed and by how much.
+
+2. **Is it expected?** If you added a new storage operation or changed the
+   contract logic in a way that necessarily increases resource use, update the
+   baseline (see below).
+
+3. **Is it unexpected?** Investigate the change that caused it. Common causes:
+   - An extra storage read/write in a hot path
+   - A new `require_auth()` call
+   - A new loop or non-constant-time operation
+
+4. **Do not paper over real regressions.** Updating the baseline to hide an
+   unintentional performance regression is a policy violation. Investigate first.
+
+### When to update baselines
+
+Update `benchmarks/baseline.json` only for **intentional, justified** changes:
+
+- Adding a new persistent storage operation to an entry point
+- Switching from a light SAC call to a heavier one
+- Accepting a Lighthouse tradeoff (e.g., adding a large font for brand reasons)
+- A new feature that provably requires more compute
+
+### How to update baselines
 
 1. **Run the benchmarks locally** to get the new values:
 
@@ -348,3 +517,9 @@ all recipients claim their full allocation in one pass.
 | `src/tests/test_benchmarks.rs` | Soroban instruction-count benchmark tests |
 | `.github/workflows/performance.yml` | CI workflow |
 | `.github/lighthouserc.json` | Lighthouse CI configuration |
+| `tests/load/` | k6 and Locust load test scripts |
+| `tests/load/BASELINE.md` | Load test baseline results and bottleneck analysis |
+| `tests/load/README.md` | Load test prerequisites and run instructions |
+| `tests/load/create_streams.js` | k6 script (smoke / full mode) |
+| `tests/load/create_streams_bundle_src.js` | k6 bundled script source |
+| `tests/load/locustfile.py` | Locust load test script |
