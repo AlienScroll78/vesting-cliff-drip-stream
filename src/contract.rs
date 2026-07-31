@@ -914,6 +914,9 @@ impl VestingDrips {
         // Increment version before state mutation (Issue #318).
         schedule.increment_version()?;
 
+        // Increment version before state mutation (Issue #318).
+        schedule.increment_version()?;
+
         // Transfer tokens to recipient before mutating storage so that a
         // transfer failure leaves the schedule intact.
         let token_client = token::Client::new(&env, &schedule.token);

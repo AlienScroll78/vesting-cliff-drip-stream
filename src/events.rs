@@ -62,6 +62,7 @@ pub fn emit_variable_stream_created(
             end_ledger,
             total_deposited,
         ),
+        data,
     );
 }
 
