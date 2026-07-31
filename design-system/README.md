@@ -148,6 +148,58 @@ Sizes: *(default)* · `btn--sm` · `btn--lg`
 </div>
 ```
 
+### Select
+
+```html
+<select class="select">
+  <option>USDC</option>
+  <option>XLM</option>
+</select>
+<select class="select select--error"><option>Invalid token</option></select>
+```
+
+### Badge
+
+```html
+<span class="ds-badge ds-badge--success">Active</span>
+<span class="ds-badge ds-badge--warning">Pre-cliff</span>
+<span class="ds-badge ds-badge--danger">Cancelled</span>
+<span class="ds-badge ds-badge--neutral">Completed</span>
+```
+
+### Tooltip
+
+```html
+<span class="ds-tooltip" tabindex="0">
+  Hover or focus me
+  <span class="ds-tooltip__content" role="tooltip">Cliff catch-up amount</span>
+</span>
+```
+
+### Modal
+
+```html
+<div class="ds-modal-backdrop">
+  <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="ds-modal__header" id="m-title">Cancel stream?</div>
+    <div class="ds-modal__body">Accrued tokens remain claimable by the recipient.</div>
+    <div class="ds-modal__footer">
+      <button class="btn btn--secondary btn--sm">Keep stream</button>
+      <button class="btn btn--danger btn--sm">Cancel stream</button>
+    </div>
+  </div>
+</div>
+```
+
+### Toast
+
+```html
+<div class="ds-toast-region">
+  <div class="ds-toast ds-toast--success" role="status">Claim confirmed on-chain.</div>
+  <div class="ds-toast ds-toast--danger" role="alert">Transaction failed. Try again.</div>
+</div>
+```
+
 ## Deploying Storybook
 
 A Storybook integration would consume these tokens and components. To set up:
