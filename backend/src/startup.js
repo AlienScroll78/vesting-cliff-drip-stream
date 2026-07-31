@@ -8,6 +8,8 @@
  * not start in a silently broken state.
  */
 
+const { logger } = require("./logger");
+
 const REQUIRED = [
   "HORIZON_URL",
   "NETWORK_PASSPHRASE",
@@ -18,9 +20,9 @@ function validateEnv() {
   const missing = REQUIRED.filter((k) => !process.env[k]);
   if (missing.length === 0) return;
 
-  console.error(
-    `Error: Missing required environment variables: ${missing.join(", ")}.\n` +
-      "See docs/config.md for details.",
+  logger.error(
+    { event: "startup_validation_failed", missing },
+    `Missing required environment variables: ${missing.join(", ")}. See docs/config.md for details.`,
   );
   process.exit(1);
 }
