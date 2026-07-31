@@ -76,6 +76,15 @@ pub enum DataKey {
 
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,
+
+    /// Storage key for configured contract admin address.
+    Admin,
+
+    /// Storage key for configured fee basis points (0-500).
+    FeeBps,
+
+    /// Storage key for configured protocol treasury address.
+    Treasury,
 }
 
 /// Human-readable status of a vesting stream.

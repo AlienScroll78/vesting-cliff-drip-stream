@@ -53,12 +53,12 @@ fn test_create_stream_invalid_duration_fails() {
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200)
         .unwrap_err();
-    assert_eq!(err, VestingError::InvalidDuration.into());
+    assert_eq!(err, Ok(VestingError::InvalidDuration));
 
     let err2 = client
         .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200)
         .unwrap_err();
-    assert_eq!(err2, VestingError::InvalidDuration.into());
+    assert_eq!(err2, Ok(VestingError::InvalidDuration));
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn test_two_recipients_claim_independently() {
 
     advance_ledger(&env, 60);
 
-    let alice_claimed = client.claim_vested(&alice).unwrap();
+    let alice_claimed = client.claim_vested(&alice);
     assert_eq!(alice_claimed, 600);
 
     let bob_sched = client.get_schedule(&bob).unwrap();
@@ -119,7 +119,7 @@ fn test_cancel_one_recipient_other_unaffected() {
         .create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100, &None)
         .unwrap();
 
-    client.cancel_stream(&sponsor, &alice).unwrap();
+    client.cancel_stream(&sponsor, &alice);
 
     assert!(client.get_schedule(&alice).is_none());
 
@@ -128,7 +128,7 @@ fn test_cancel_one_recipient_other_unaffected() {
     assert_eq!(bob_sched.last_claimed_ledger, 100);
 
     advance_ledger(&env, 20);
-    let bob_claimed = client.claim_vested(&bob).unwrap();
+    let bob_claimed = client.claim_vested(&bob);
     assert_eq!(bob_claimed, 100);
     assert_eq!(token_client.balance(&bob), 100);
 }

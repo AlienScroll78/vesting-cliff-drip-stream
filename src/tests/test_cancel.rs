@@ -1,11 +1,11 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
+use soroban_sdk::{Address, Env};
 
 use crate::{
     contract::VestingDripsClient,
     error::VestingError,
-    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env, setup_token},
+    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
 };
 
 fn make_stream(env: &Env, client: &VestingDripsClient) -> (Address, Address, Address) {
@@ -14,7 +14,7 @@ fn make_stream(env: &Env, client: &VestingDripsClient) -> (Address, Address, Add
     (sponsor, recipient, token_id)
 }
 
-fn token_client(env: &Env, token_id: &Address) -> soroban_sdk::token::TokenClient {
+fn token_client<'a>(env: &'a Env, token_id: &Address) -> soroban_sdk::token::TokenClient<'a> {
     soroban_sdk::token::TokenClient::new(env, token_id)
 }
 

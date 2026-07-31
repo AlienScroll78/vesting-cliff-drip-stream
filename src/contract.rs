@@ -4,7 +4,7 @@
 // impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env, String};
 
 use crate::{
     error::VestingError,
@@ -233,6 +233,27 @@ impl VestingDrips {
             .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
             .map_err(|_| VestingError::TransferFailed)?;
 
+        // ── Collect Protocol Fee (if configured) ──────────────────────────────
+        let (fee_bps, treasury_opt) = storage::get_fee(&env);
+        if fee_bps > 0 {
+            if fee_bps > 500 {
+                return Err(VestingError::InvalidRate);
+            }
+            let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
+            let fee_amount = total_deposit
+                .checked_mul(fee_bps as i128)
+                .ok_or(VestingError::DepositOverflow)?
+                / 10_000;
+
+            if fee_amount > 0 {
+                token_client
+                    .try_transfer(&sponsor, &treasury, &fee_amount)
+                    .map_err(|_| VestingError::TransferFailed)?;
+
+                events::emit_fee_collected(&env, &sponsor, &treasury, fee_amount);
+            }
+        }
+
         // ── Persist schedule ──────────────────────────────────────────────────
         // `version` starts at 1 (Issue #318) and is placed last in the struct
         // for XDR forward-compatibility.
@@ -373,6 +394,151 @@ impl VestingDrips {
 
         events::emit_stream_cancelled(&env, &recipient, sponsor_refund);
 
+        Ok(())
+    }
+
+    /// Pauses an active stream, halting token accrual at current ledger.
+    ///
+    /// Callable only by the original sponsor.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
+    /// * `Unauthorized`         – Caller is not the stream's sponsor.
+    /// * `StreamAlreadyPaused`  – Stream is already in paused state.
+    pub fn pause_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::Unauthorized);
+        }
+
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::StreamAlreadyPaused);
+        }
+
+        let current_ledger = env.ledger().sequence();
+        schedule.paused_at_ledger = Some(current_ledger);
+
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_paused(&env, &recipient, &sponsor, current_ledger);
+
+        Ok(())
+    }
+
+    /// Resumes a paused stream, shifting end_ledger and cliff_ledger by the paused duration.
+    ///
+    /// Callable only by the original sponsor.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`  – No stream exists for `recipient`.
+    /// * `Unauthorized`      – Caller is not the stream's sponsor.
+    /// * `StreamNotPaused`   – Stream is not currently paused.
+    pub fn resume_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::Unauthorized);
+        }
+
+        let Some(paused_at) = schedule.paused_at_ledger else {
+            return Err(VestingError::StreamNotPaused);
+        };
+
+        let current_ledger = env.ledger().sequence();
+        let paused_duration = current_ledger.saturating_sub(paused_at);
+
+        schedule.accumulated_pause_ledgers = schedule
+            .accumulated_pause_ledgers
+            .saturating_add(paused_duration);
+        schedule.end_ledger = schedule.end_ledger.saturating_add(paused_duration);
+        schedule.cliff_ledger = schedule.cliff_ledger.saturating_add(paused_duration);
+        schedule.paused_at_ledger = None;
+
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_resumed(&env, &recipient, &sponsor, schedule.end_ledger);
+
+        Ok(())
+    }
+
+    /// Reassigns an active vesting stream from `current_recipient` to `new_recipient`.
+    ///
+    /// Callable only by `current_recipient`.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound`       – No stream exists for `current_recipient`.
+    /// * `InvalidRecipient`       – `new_recipient == current_recipient` or `new_recipient == sponsor`.
+    /// * `ScheduleAlreadyExists`  – `new_recipient` already has an active stream.
+    pub fn transfer_recipient(
+        env: Env,
+        current_recipient: Address,
+        new_recipient: Address,
+    ) -> Result<(), VestingError> {
+        current_recipient.require_auth();
+
+        if current_recipient == new_recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
+
+        let schedule = storage::get_schedule(&env, &current_recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        if new_recipient == schedule.sponsor {
+            return Err(VestingError::InvalidRecipient);
+        }
+
+        if storage::has_schedule(&env, &new_recipient) {
+            return Err(VestingError::ScheduleAlreadyExists);
+        }
+
+        storage::remove_schedule(&env, &current_recipient);
+        storage::set_schedule(&env, &new_recipient, &schedule);
+
+        events::emit_recipient_transferred(&env, &current_recipient, &new_recipient);
+
+        Ok(())
+    }
+
+    /// Configures protocol fee basis points (0-500) and treasury address.
+    ///
+    /// Callable only by the contract admin.
+    ///
+    /// # Errors
+    /// * `Unauthorized` – Caller is not the configured admin.
+    /// * `InvalidRate`   – `fee_bps` exceeds maximum allowed cap of 500 (5%).
+    pub fn set_fee(
+        env: Env,
+        admin: Address,
+        fee_bps: u32,
+        treasury: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+
+        let stored_admin = storage::get_admin(&env).ok_or(VestingError::Unauthorized)?;
+        if admin != stored_admin {
+            return Err(VestingError::Unauthorized);
+        }
+
+        if fee_bps > 500 {
+            return Err(VestingError::InvalidRate);
+        }
+
+        storage::set_fee(&env, fee_bps, &treasury);
         Ok(())
     }
 
@@ -555,6 +721,10 @@ impl VestingDrips {
         let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::NothingToClaim);
+        }
+
         let current_ledger = env.ledger().sequence();
 
         if current_ledger < schedule.cliff_ledger {
@@ -615,6 +785,9 @@ impl VestingDrips {
         let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
             return 0;
         };
+        if schedule.paused_at_ledger.is_some() {
+            return 0;
+        }
         let current_ledger = env.ledger().sequence();
         if current_ledger < schedule.cliff_ledger {
             return 0;
