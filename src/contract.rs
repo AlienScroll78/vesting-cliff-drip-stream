@@ -137,6 +137,8 @@ impl VestingDrips {
 
     /// Upgrades the contract to the WASM referenced by `new_wasm_hash`.
     ///
+    /// Emits a `ContractUpgraded` event with the admin and new hash.
+    ///
     /// # Errors
     /// * `Unauthorized` – `admin` is not the address set during `initialize`.
     pub fn upgrade(
@@ -145,9 +147,12 @@ impl VestingDrips {
         new_wasm_hash: BytesN<32>,
     ) -> Result<(), VestingError> {
         admin.require_auth();
-        if storage::get_admin(&env) != Some(admin) {
+        if storage::get_admin(&env) != Some(admin.clone()) {
             return Err(VestingError::Unauthorized);
         }
+        // Emit upgrade event before replacing the WASM so the event is
+        // captured under the current contract version.
+        events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         Ok(())
     }
@@ -719,15 +724,6 @@ impl VestingDrips {
     /// Compliance clawback: the original sponsor recovers **all** remaining tokens
     /// from the contract vault, bypassing cliff state.
     ///
-    /// This uses the SAC `clawback` operation to pull tokens back from the
-    /// contract's own balance.  The token must have the clawback flag enabled;
-    /// otherwise the call fails with `ClawbackNotSupported`.
-    ///
-    /// # Arguments
-    /// * `sponsor`   – Original stream funder; must authorise this call.
-    /// * `recipient` – Stream beneficiary whose schedule is being clawed back.
-    /// * `reason`    – Compliance reason string (max 256 chars), stored in event.
-    ///
     /// # Errors
     /// * `ScheduleNotFound`     – No stream exists for `recipient`.
     /// * `ClawbackNotSupported` – Token does not support SAC clawback.
@@ -777,9 +773,9 @@ impl VestingDrips {
     /// Callable by **anyone** once `end_ledger + DRAIN_DELAY_LEDGERS` has elapsed.
     ///
     /// # Errors
-    /// * `ScheduleNotFound`      – No stream exists for `recipient`.
-    /// * `StreamNotExpired`      – `end_ledger` has not yet been reached.
-    /// * `DrainDelayNotExpired`  – Drain delay (1 year) has not elapsed since `end_ledger`.
+    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
+    /// * `StreamNotExpired`     – `end_ledger` has not yet been reached.
+    /// * `DrainDelayNotExpired` – Drain delay has not elapsed since `end_ledger`.
     pub fn drain_expired_stream(
         env: Env,
         caller: Address,
@@ -881,8 +877,6 @@ impl VestingDrips {
     /// Claims all vested tokens accrued since the last claim.
     ///
     /// The cliff must have been reached before any tokens can be withdrawn.
-    /// On first claim after the cliff, all tokens accrued from `start_ledger`
-    /// are released in a single transfer, then streaming continues linearly.
     ///
     /// The schedule's `version` counter is incremented on every successful claim.
     ///
@@ -917,8 +911,6 @@ impl VestingDrips {
         // Increment version before state mutation (Issue #318).
         schedule.increment_version()?;
 
-        // Transfer tokens to recipient before mutating storage so that a
-        // transfer failure leaves the schedule intact.
         let token_client = token::Client::new(&env, &schedule.token);
         token_client
             .try_transfer(
@@ -928,7 +920,6 @@ impl VestingDrips {
             )
             .map_err(|_| VestingError::TransferFailed)?;
 
-        // Update or remove the schedule only after the transfer succeeds.
         schedule.last_claimed_ledger = active_end;
         schedule.total_claimed += claimable_amount;
         let stream_finished = active_end == schedule.end_ledger;
@@ -984,7 +975,7 @@ impl VestingDrips {
         } else if current < schedule.end_ledger {
             StreamStatus::Active
         } else {
-            StreamStatus::Completed
+            StreamStatus::Expired
         };
         Some(status)
     }

@@ -12,6 +12,11 @@
 #![no_std]
 #![cfg_attr(not(test), deny(missing_docs))]
 
+// proptest and other test utilities require std macros (format!, vec!, etc.)
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 mod contract;
 mod error;
 mod events;
