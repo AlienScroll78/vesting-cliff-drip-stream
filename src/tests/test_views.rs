@@ -50,7 +50,7 @@ fn test_get_schedule_returns_none_after_completion() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     assert!(client.get_schedule(&recipient).is_none());
 }

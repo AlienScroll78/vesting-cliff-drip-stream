@@ -17,20 +17,18 @@ An off-chain keeper introduces an operational dependency: if the bot fails, stre
 
 ## Decision
 
-Extend TTL **passively on every read and write** in `storage.rs`. The threshold and bump constants are:
+Extend TTL **passively on every read and write** via a centralized `ensure_ttl` guard in `storage.rs`. The threshold and bump constants are:
 
 ```rust
-const PERSISTENT_LEDGER_THRESHOLD: u32 = 259_200; // ~30 days at 5 s/ledger
-const PERSISTENT_BUMP_AMOUNT: u32      = 518_400; // ~60 days
+pub const PERSISTENT_LEDGER_THRESHOLD: u32 = 259_200;   // ~30 days threshold
+pub const PERSISTENT_BUMP_AMOUNT: u32      = 3_110_400; // ~1 year (Soroban maximum)
 ```
 
-`extend_ttl` is called in `get_schedule` (after a successful read) and `set_schedule` (after every write). This means any transaction that touches a stream — claim, cancel, or a read-only view call — resets the window to ~60 days.
-
-A stream that has no on-chain activity for 60 days may expire. This is an acceptable trade-off for streams with active participants; a future upgrade could add an explicit `bump` entry-point for truly dormant streams.
+`ensure_ttl` is called in `get_schedule`, `get_schedule_readonly`, and `set_schedule`. This means any transaction or view query that touches a stream — claim, cancel, pause, resume, transfer, or read-only view call — resets the persistent storage entry and instance storage TTL to the maximum ~1 year window.
 
 ## Consequences
 
 - No external keeper is required for normal operation.
-- Each storage access incurs one additional `extend_ttl` call (~small fixed fee).
-- A stream with zero on-chain interaction for >60 days will expire. Recipients of long-term streams should claim or check-in at least once every 60 days, or a keeper should be run.
+- Each storage access auto-renews storage TTL to the maximum Soroban window (3,110,400 ledgers).
+- Active streams are fully protected against accidental storage expiry.
 - The constants are defined in one place (`storage.rs`) and can be adjusted without touching business logic.
