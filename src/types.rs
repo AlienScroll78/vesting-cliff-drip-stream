@@ -53,28 +53,17 @@ pub struct VestingSchedule {
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
 
-    /// Mutation counter — incremented atomically on every state-changing operation.
+    /// Optional free-form metadata attached at stream creation (max 256 bytes, UTF-8).
     ///
-    /// | Value | Meaning                              |
-    /// |-------|--------------------------------------|
-    /// | `0`   | Legacy entry written before versioning was added; upgrade with `migrate_schedule` |
-    /// | `1`   | Created (initial value)              |
-    /// | `n>1` | Modified `n-1` times since creation  |
+    /// Stored on-chain and returned by `get_schedule`. Immutable after creation.
+    /// Empty string is normalised to `None` at creation time.
     ///
-    /// Placed last so that old XDR-encoded entries (which lack this field)
-    /// decode with an implicit XDR default of `0`.
-    pub version: u32,
-}
-
-impl VestingSchedule {
-    /// Increments the version counter, returning `VersionOverflow` at `u32::MAX`.
-    pub fn increment_version(&mut self) -> Result<(), crate::error::VestingError> {
-        self.version = self
-            .version
-            .checked_add(1)
-            .ok_or(crate::error::VestingError::VersionOverflow)?;
-        Ok(())
-    }
+    /// ⚠️  Metadata is publicly visible on-chain. Do **not** store sensitive
+    /// or personally-identifiable information here.
+    ///
+    /// Schedules created before this field was introduced will deserialise
+    /// with `metadata = None` (XDR default for a missing `Option`).
+    pub metadata: Option<String>,
 }
 
 /// Storage key variants used for keying contract data.

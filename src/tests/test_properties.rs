@@ -30,7 +30,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // advance ledger by `advance` but cap at total_duration (we only care up to end)
         let adv = advance.min(total_duration);
@@ -64,7 +64,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // choose times relative to start; ensure t1 <= t2 by swapping when necessary
         let (a, b) = if t1 <= t2 { (t1.min(total_duration), t2.min(total_duration)) } else { (t2.min(total_duration), t1.min(total_duration)) };
@@ -102,7 +102,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // ensure we advance to somewhere strictly before the cliff
         let adv = advance_before.min(cliff.saturating_sub(1));

@@ -1,0 +1,8 @@
+target
+
+# Ignore generated corpus but track seed files
+corpus/*
+!corpus/*/
+
+artifacts
+coverage
