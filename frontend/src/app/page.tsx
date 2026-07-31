@@ -11,6 +11,7 @@ import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CopyButton } from "@/components/CopyButton";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
@@ -183,7 +184,7 @@ function StreamList() {
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
-                  {abbreviateAmount(s.claimableAmount)} {s.token}
+                  <AnimatedNumber value={s.claimableAmount} format={abbreviateAmount} /> {s.token}
                 </div>
                 <div style={{ display: "flex", gap: "0.4rem" }}>
                   {s.startLedger && s.cliffLedger && s.endLedger && (
@@ -203,7 +204,7 @@ function StreamList() {
                     // so focus can be restored when the sheet closes
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className={`btn btn-primary${s.claimableAmount > 0 ? " btn-pulse" : ""}`}
                       style={{ padding: "0.35rem 1rem" }}
                       ref={(el) => {
                         if (claimTarget?.id === s.id || (!claimTarget && activeCardId === s.id)) {

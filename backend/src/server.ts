@@ -7,6 +7,10 @@ import { scheduleCleanupJob } from "./jobs/streamCleanup.js";
 import { startAdminServer } from "./admin/server.js";
 import { healthHandler, readyHandler } from "./routes/health.js";
 import { sponsorAnalyticsHandler } from "./routes/analytics.js";
+import { vestingRouter } from "./routes/vesting.js";
+import { schedulesExportRouter } from "./routes/schedules-export.js";
+import { attachWebSocketServer } from "./ws.js";
+import { startIndexer } from "./indexer.js";
 
 const app = express();
 app.use(express.json());
@@ -24,8 +28,27 @@ app.get("/ready", readyHandler);
 // Analytics (#34)
 app.get("/analytics/sponsor/:address", sponsorAnalyticsHandler);
 
+// Issue #297 — CSV / JSON export endpoints
+app.use("/api/v1", schedulesExportRouter);
+
 // Issue #26 — REST API for vesting schedule queries
 app.use("/api", vestingRouter);
+
+// #288 — Auth v1: challenge / verify / refresh
+app.use("/api/v1/auth", authRouterV1);
+
+// #289 — Paginated sponsor schedules (protected by JWT)
+app.use("/api/v1/schedules", schedulesRouter);
+
+// #287 — Worker health: reports lag (ledgers behind chain tip)
+app.get("/api/v1/worker/status", (_req, res) => {
+  const worker = getHorizonWorker();
+  if (!worker) {
+    res.status(503).json({ error: "horizon worker not running" });
+    return;
+  }
+  res.json(worker.getStatus());
+});
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 const httpServer = http.createServer(app);
@@ -49,4 +72,12 @@ if (process.env.DATABASE_URL) {
   startIndexer();
 } else {
   console.warn("[indexer] DATABASE_URL not set — indexer disabled");
+}
+
+// #287 — Start Horizon event ingestion worker
+if (process.env.DATABASE_URL) {
+  startHorizonWorker();
+  console.log("[server] Horizon worker started");
+} else {
+  console.warn("[horizon-worker] DATABASE_URL not set — worker disabled");
 }
