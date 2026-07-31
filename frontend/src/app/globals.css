@@ -69,6 +69,24 @@ body {
 .btn-ghost    { background: transparent; color: var(--color-text); }
 .btn-full     { width: 100%; margin-top: 0.75rem; }
 
+/* ── Claim button pulse (claimable > 0) — compositor-only (transform/opacity) ── */
+.btn-pulse { position: relative; }
+.btn-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--color-active);
+  opacity: 0;
+  animation: btn-pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  pointer-events: none;
+}
+@keyframes btn-pulse-ring {
+  0%   { transform: scale(0.92); opacity: 0.55; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
 /* ── Wallet ── */
 .wallet-connected { display: flex; align-items: center; gap: 0.75rem; }
 .wallet-address   { font-family: monospace; font-size: 0.875rem; }
@@ -99,6 +117,11 @@ body {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); padding: 1rem;
   display: flex; flex-direction: column; gap: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 100ms ease;
+}
+.stream-card:hover {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.15), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Card inner row: recipient+badge on left, amount+button on right */
