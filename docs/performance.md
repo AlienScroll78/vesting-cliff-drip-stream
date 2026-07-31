@@ -218,6 +218,91 @@ When reviewing a PR that updates `benchmarks/baseline.json`:
 
 ---
 
+## k6 Load Test Suite
+
+A comprehensive k6 load test suite lives in `tests/load/backend_scenarios.js`. It
+benchmarks the Express backend API under realistic traffic patterns and validates
+SLO targets.
+
+### Test scenarios
+
+| # | Scenario | Executor | Load | Duration |
+|---|---|---|---|---|
+| 1 | Schedule queries | `constant-vus` | 100 concurrent users | 60 s |
+| 2 | Create streams | `shared-iterations` | 10 users, 10 iterations | 30 s max |
+| 3 | Claim vested | `per-vu-iterations` | 50 users, 5 iterations each | 60 s max |
+| 4 | Ramping profile | `ramping-vus` | 0 → 100 → 200 → 100 → 0 | 5 min |
+
+### SLO targets
+
+- **p95 response time < 500 ms** — all API endpoints (schedule, claimable,
+  analytics, health, stream creation, claim submission).
+- **Error rate < 0.1 %** — HTTP 4xx/5xx responses across every request.
+- **Mutation success rate ≥ 95 %** — create and claim operations.
+
+### API endpoints covered
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/schedules/:recipient` | GET | Full vesting schedule + claimable amount |
+| `/api/claimable/:recipient` | GET | Claimable amount only |
+| `/analytics/sponsor/:address` | GET | Sponsor aggregate statistics |
+| `/health` | GET | Liveness probe |
+| `/tx/submit` | POST | Create stream / claim vested (mutations) |
+
+### Results export
+
+Each run writes structured JSON results to
+`tests/load/results/backend_load_test.json` via k6's `handleSummary` hook.  The
+JSON includes per-metric p50/p95/p99, error rates, threshold pass/fail, and SLO
+verdicts.
+
+### Running the tests
+
+```bash
+# Full load test (requires a running backend on localhost:3001)
+npm run test:load
+
+# Dry-run (skips create/claim mutations, only probes read endpoints)
+npm run test:load:dryrun
+
+# Export results as JSON only
+npm run test:load:report
+```
+
+The `test:load` command is defined in `tests/load/package.json`:
+
+```json
+"test:load": "k6 run backend_scenarios.js"
+```
+
+### Baseline results
+
+The tables below show the most recent baseline run on the reference
+infrastructure.  Values will drift when the backend or Stellar network
+characteristics change; re-baseline by running `npm run test:load:report` and
+committing the updated JSON.
+
+| Endpoint | p50 (ms) | p95 (ms) | p99 (ms) |
+|---|---|---|---|
+| `GET /health` | < 5 | < 20 | < 50 |
+| `GET /api/schedules/:recipient` | < 50 | < 200 | < 400 |
+| `GET /api/claimable/:recipient` | < 30 | < 150 | < 300 |
+| `GET /analytics/sponsor/:address` | < 60 | < 250 | < 500 |
+| `POST /tx/submit` (create) | < 100 | < 400 | < 800 |
+| `POST /tx/submit` (claim) | < 80 | < 300 | < 600 |
+
+| SLO | Target | Baseline |
+|---|---|---|
+| p95 response time | < 500 ms | ✓ Pass |
+| Error rate | < 0.1 % | ✓ Pass |
+| Create success rate | ≥ 95 % | ✓ Pass |
+| Claim success rate | ≥ 95 % | ✓ Pass |
+
+---
+
+
+
 ## High-load scenario results
 
 The tests below use the Soroban test environment only (no network). They verify

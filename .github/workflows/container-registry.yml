@@ -1,0 +1,288 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# container-registry.yml
+#
+# Builds, scans, pushes, signs, and attests the Docker image on every release.
+#
+# Acceptance criteria satisfied:
+#   ✓ Images pushed to GitHub Container Registry (ghcr.io)
+#   ✓ Tags: latest, semantic version (v1.2.3), commit SHA
+#   ✓ Images signed with cosign (keyless, OIDC-based)
+#   ✓ SLSA provenance attestation generated per build
+#   ✓ Vulnerability scan (trivy) BEFORE push — exits 1 on HIGH/CRITICAL
+#   ✓ Multi-arch builds: linux/amd64 and linux/arm64
+#   ✓ Image digest output consumed by K8s manifest pinning workflow
+# ─────────────────────────────────────────────────────────────────────────────
+name: Container Registry
+
+on:
+  # Trigger on a release created by release-please or any manual release tag
+  release:
+    types: [published]
+  # Also run on main for latest/SHA tags (non-release pushes)
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "Push the image to GHCR?"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+# Needed for:
+#   - OIDC token → cosign keyless signing
+#   - Pushing to GHCR (packages: write)
+#   - Creating provenance attestations (attestations: write)
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  security-events: write   # upload Trivy SARIF to Security tab
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1. Build image locally (no push) → run Trivy scan → fail fast on findings
+  # ───────────────────────────────────────────────────────────────────────────
+  scan:
+    name: Trivy vulnerability scan (pre-push)
+    runs-on: ubuntu-latest
+    outputs:
+      build_date: ${{ steps.meta.outputs.build_date }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute build metadata
+        id: meta
+        run: |
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      # Build for the native arch only during the scan phase — faster feedback
+      - name: Build image for scanning (amd64 only, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: scan-target:${{ github.sha }}
+          build-args: |
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+            GIT_REVISION=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scan (table — fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: scan-target:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Run Trivy — upload SARIF report to GitHub Security tab
+        if: always()   # upload even when the table scan step failed
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: scan-target:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2. Multi-arch build, push, sign, attest
+  # ───────────────────────────────────────────────────────────────────────────
+  build-push:
+    name: Build, push, sign & attest
+    needs: scan
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      image_ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+      tags: ${{ steps.docker_meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generate tags & OCI labels with docker/metadata-action
+      # Tags produced:
+      #   • ghcr.io/<org>/<repo>:latest          (on default branch)
+      #   • ghcr.io/<org>/<repo>:v1.2.3          (on semver tag / release)
+      #   • ghcr.io/<org>/<repo>:1.2.3           (short semver)
+      #   • ghcr.io/<org>/<repo>:<sha>           (always)
+      - name: Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=long,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=vesting-cliff-drip-stream
+            org.opencontainers.image.description=Soroban cliff-vesting WASM served via nginx
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      # Multi-arch build and push; captures the manifest digest
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'workflow_dispatch' || inputs.push == 'true' }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ needs.scan.outputs.build_date }}
+            GIT_REVISION=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false   # we generate SLSA provenance ourselves below
+
+      # ── Persist digest for downstream workflows (verify-image, pin-digest) ──
+      - name: Write digest artifact
+        run: |
+          mkdir -p /tmp/digest-artifact
+          echo "${{ steps.build.outputs.digest }}" > /tmp/digest-artifact/digest.txt
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digest
+          path: /tmp/digest-artifact/digest.txt
+          retention-days: 7
+
+      # ── cosign keyless signing (OIDC; no long-lived key material) ──────────
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless OIDC)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+
+      # ── GitHub SLSA provenance attestation ─────────────────────────────────
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # ── cosign attestation (in-toto SLSA predicate via slsa-github-generator)
+      # Runs as a separate job below to satisfy SLSA L3 build isolation.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. SLSA provenance attestation (slsa-github-generator, L3 isolation)
+  # ───────────────────────────────────────────────────────────────────────────
+  provenance:
+    name: SLSA provenance (slsa-github-generator)
+    needs: build-push
+    # slsa-github-generator requires permissions to be set at the job level
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+      attestations: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: ghcr.io/${{ github.repository }}
+      digest: ${{ needs.build-push.outputs.image_digest }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4. Pin digest in K8s manifests (on release only)
+  # ───────────────────────────────────────────────────────────────────────────
+  pin-digest:
+    name: Pin image digest in K8s manifests
+    needs: [build-push, provenance]
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update K8s deployment image digest
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-push.outputs.image_digest }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          bash scripts/pin-image-digest.sh \
+            "$IMAGE_REF" \
+            "$TAG" \
+            "${{ needs.build-push.outputs.image_digest }}"
+
+      - name: Create pull request with pinned digest
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(k8s): pin image digest to ${{ github.ref_name }}"
+          title: "chore(k8s): pin image digest to ${{ github.ref_name }}"
+          body: |
+            Automated digest pinning after release `${{ github.ref_name }}`.
+
+            | Field | Value |
+            |-------|-------|
+            | Image | `ghcr.io/${{ github.repository }}` |
+            | Tag   | `${{ github.ref_name }}` |
+            | Digest | `${{ needs.build-push.outputs.image_digest }}` |
+
+            Signed with cosign (keyless OIDC) and attested via SLSA L3.
+          branch: chore/pin-digest-${{ github.ref_name }}
+          delete-branch: true
