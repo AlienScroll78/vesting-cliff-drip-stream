@@ -4,6 +4,8 @@ import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
 import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 import { VestingStream } from "@/types";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 
 /** Convert a ledger count to a human-readable duration string (~5 s/ledger). */
 function ledgersToHuman(ledgers: number): string {
@@ -34,6 +36,7 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
   const { claimableAmount, token: tokenSymbol, status } = stream;
   const [loading, setLoading] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  const [justSucceeded, setJustSucceeded] = useState(false);
   const [optimisticAmount, setOptimisticAmount] = useState(claimableAmount);
   const [fee, setFee] = useState<FeeEstimate | null | "loading">("loading");
   const [txError, setTxError] = useState<string | null>(null);
@@ -162,6 +165,7 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
     try {
       await onClaim();
       triggerHaptic("success");
+      setJustSucceeded(true);
     } catch (err) {
       setOptimisticAmount(claimableAmount);
       setClaimed(false);
@@ -180,6 +184,8 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
 
   return (
     <>
+      <ConfettiBurst active={justSucceeded} onDone={() => setJustSucceeded(false)} />
+
       {/* Backdrop — not the dialog, just the overlay */}
       <div
         className="bottom-sheet-backdrop"
@@ -286,7 +292,7 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
               aria-label={`Claimable amount: ${formatAmount(optimisticAmount)} ${tokenSymbol}`}
               style={{ color: isPreCliff ? "#9ca3af" : "var(--color-active)" }}
             >
-              {abbreviateAmount(optimisticAmount)}
+              <AnimatedNumber value={optimisticAmount} format={abbreviateAmount} />
             </span>
             <span className="amount-token">{tokenSymbol}</span>
           </div>

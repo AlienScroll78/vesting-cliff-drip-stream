@@ -13,6 +13,7 @@
     "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.5.7",
     "@stellar/freighter-api": "^6.0.1",
     "framer-motion": "^12.42.0",
     "i18next": "^26.3.2",
@@ -21,8 +22,10 @@
     "posthog-js": "^1.393.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-hook-form": "^7.83.0",
     "react-i18next": "^17.0.8",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

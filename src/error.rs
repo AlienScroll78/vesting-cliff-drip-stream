@@ -14,6 +14,7 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
+#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ///
@@ -82,35 +83,10 @@ pub enum VestingError {
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
 
-    /// **Code 12** — The provided milestone array is invalid.
+    /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     ///
-    /// Milestones are invalid when:
-    /// - The array is empty or exceeds 20 entries.
-    /// - The basis-point values do not sum to exactly 10000 (100%).
-    /// - Ledger values are not in strictly ascending order.
-    InvalidMilestones = 12,
-
-    /// **Code 13** — The contract has already been initialized.
-    ///
-    /// `initialize` can only be called once to set the admin address.
-    /// Subsequent calls are rejected to prevent admin hijacking.
-    AlreadyInitialized = 13,
-
-    /// **Code 14** — The caller is not the authorized admin.
-    ///
-    /// Returned by `upgrade` and `transfer_admin` when the provided address
-    /// does not match the admin stored during `initialize`.
-    Unauthorized = 14,
-
-    /// **Code 15** — The total deposit is below the configured minimum.
-    ///
-    /// Increase `rate` or `total_duration` so that `rate × total_duration`
-    /// meets or exceeds the threshold set by `set_min_deposit`.
-    DepositBelowMinimum = 15,
-
-    /// **Code 16** — The token does not support SAC clawback.
-    ///
-    /// `clawback_stream` is only available for tokens that have the SAC
-    /// clawback flag enabled. Use `cancel_stream` for standard tokens.
-    ClawbackNotSupported = 16,
+    /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
+    /// value before retrying. Do not store sensitive data in metadata as it
+    /// is persisted on-chain and publicly visible.
+    MetadataTooLong = 20,
 }

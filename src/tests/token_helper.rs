@@ -1,7 +1,5 @@
 //! Lightweight helpers for creating and minting a mock SAC token in tests.
 
-#![cfg(test)]
-
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
 // The soroban test framework ships a built-in token contract.
