@@ -10,29 +10,40 @@ use crate::{
     tests::setup_env,
 };
 
+fn make_client(env: &soroban_sdk::Env) -> VestingDripsClient {
+    let contract_id = env.register(VestingDrips, ());
+    VestingDripsClient::new(env, &contract_id)
+}
+
+fn treasury(env: &soroban_sdk::Env) -> Address {
+    Address::generate(env)
+}
+
 /// `initialize` stores the admin so `upgrade` can gate against it.
 #[test]
 fn test_initialize_sets_admin() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
+    // No assertion needed — would panic on error.
 }
 
 /// `initialize` cannot be called twice (prevents admin hijack).
 #[test]
 fn test_initialize_twice_rejected() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
 
-    let err = client.try_initialize(&attacker).unwrap_err().unwrap();
+    let err = client
+        .try_initialize(&attacker, &0u32, &treasury(&env))
+        .unwrap_err()
+        .unwrap();
     assert_eq!(err, VestingError::AlreadyInitialized);
 }
 
@@ -40,33 +51,31 @@ fn test_initialize_twice_rejected() {
 #[test]
 fn test_upgrade_rejects_non_admin() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
 
     let mock_hash = BytesN::from_array(&env, &[7u8; 32]);
     let err = client.try_upgrade(&attacker, &mock_hash).unwrap_err().unwrap();
     assert_eq!(err, VestingError::Unauthorized);
 }
 
-/// `upgrade` passes the admin gate (the host then rejects the unknown WASM hash).
+/// `upgrade` passes the admin gate (host rejects only on missing WASM).
 #[test]
 fn test_upgrade_allows_admin_through_auth_gate() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
 
     let mock_hash = BytesN::from_array(&env, &[7u8; 32]);
     let result = client.try_upgrade(&admin, &mock_hash);
 
     match result {
-        Ok(_) => { /* host accepted — fine */ }
+        Ok(_) => {}
         Err(e) => {
             if let Ok(err) = e {
                 assert_ne!(err, VestingError::Unauthorized);
@@ -79,12 +88,11 @@ fn test_upgrade_allows_admin_through_auth_gate() {
 #[test]
 fn test_transfer_admin_changes_authority() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
     let new_admin = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
 
     client.transfer_admin(&admin, &new_admin);
 
@@ -110,12 +118,11 @@ fn test_transfer_admin_changes_authority() {
 #[test]
 fn test_transfer_admin_rejects_non_admin() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_client(&env);
 
     let admin = Address::generate(&env);
     let attacker = Address::generate(&env);
-    client.initialize(&admin);
+    client.initialize(&admin, &0u32, &treasury(&env));
 
     let err = client
         .try_transfer_admin(&attacker, &attacker)

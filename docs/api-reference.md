@@ -1574,7 +1574,7 @@ try {
 
 Events are emitted via `env.events().publish()`. Topics and data are XDR-encoded `SCVal` sequences.
 
-### `vc_create` — Stream created
+### `StreamCreated` — Stream created
 
 Emitted by `create_vesting_stream`.
 
@@ -1582,14 +1582,15 @@ Emitted by `create_vesting_stream`.
 
 | Field | Type | Value |
 |---|---|---|
-| Topic[0] | `SCVal::Symbol` | `"vc_create"` |
-| Topic[1] | `SCVal::Address` | `recipient` |
-| Data[0] | `SCVal::Address` | `sponsor` |
-| Data[1] | `SCVal::Address` | `token` |
-| Data[2] | `SCVal::I128` | `rate_per_ledger` |
-| Data[3] | `SCVal::U32` | `start_ledger` |
-| Data[4] | `SCVal::U32` | `cliff_ledger` |
-| Data[5] | `SCVal::U32` | `end_ledger` |
+| Topic[0] | `SCVal::Symbol` | `"StreamCreated"` |
+| Topic[1] | `SCVal::Address` | `sponsor` |
+| Topic[2] | `SCVal::Address` | `recipient` |
+| Data.token | `SCVal::Address` | `token` |
+| Data.rate | `SCVal::I128` | `rate` |
+| Data.start_ledger | `SCVal::U32` | `start_ledger` |
+| Data.cliff_ledger | `SCVal::U32` | `cliff_ledger` |
+| Data.end_ledger | `SCVal::U32` | `end_ledger` |
+| Data.total_deposit | `SCVal::I128` | `total_deposit` |
 
 #### Example (JSON representation)
 
