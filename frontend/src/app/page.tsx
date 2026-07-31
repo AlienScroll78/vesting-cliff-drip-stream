@@ -169,7 +169,7 @@ function StreamList() {
                   {s.status === "active" && (
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className={`btn btn-primary${s.claimableAmount > 0 ? " btn-pulse" : ""}`}
                       style={{ padding: "0.35rem 1rem" }}
                       onClick={() => setClaimTarget(s)}
                       data-testid={`claim-btn-${s.id}`}

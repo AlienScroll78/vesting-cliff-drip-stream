@@ -17,8 +17,8 @@ fn test_claim_before_cliff_fails() {
 
     advance_ledger(&env, 20);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::CliffNotReached.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::CliffNotReached);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_first_claim_at_cliff_includes_all_accrued() {
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 50);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 500);
     assert_eq!(token_client.balance(&recipient), 500);
 }
@@ -45,11 +45,11 @@ fn test_partial_claim_mid_stream() {
 
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 100);
-    let claimed1 = client.claim_vested(&recipient).unwrap();
+    let claimed1 = client.claim_vested(&recipient);
     assert_eq!(claimed1, 1_000);
 
     advance_ledger(&env, 50);
-    let claimed2 = client.claim_vested(&recipient).unwrap();
+    let claimed2 = client.claim_vested(&recipient);
     assert_eq!(claimed2, 500);
 
     assert_eq!(token_client.balance(&recipient), 1_500);
@@ -65,7 +65,7 @@ fn test_claim_past_end_caps_at_end_ledger() {
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 500);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 2_000);
     assert_eq!(token_client.balance(&recipient), 2_000);
     assert!(client.get_schedule(&recipient).is_none());
@@ -79,10 +79,10 @@ fn test_double_claim_same_ledger_returns_nothing_to_claim() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::NothingToClaim.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err();
+    assert_eq!(err, Ok(VestingError::NothingToClaim));
 }
 
 #[test]
@@ -91,8 +91,8 @@ fn test_claim_nonexistent_schedule_fails() {
     let (_contract_id, client) = register_contract(&env);
     let random = Address::generate(&env);
 
-    let err = client.claim_vested(&random).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_claim_vested(&random).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     advance_ledger(&env, 500);
 
@@ -130,9 +130,9 @@ fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
+    let err = client.try_claim_vested(&recipient).unwrap_err();
+    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 }
 

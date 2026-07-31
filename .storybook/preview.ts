@@ -1,6 +1,8 @@
 import type { Preview } from "@storybook/react";
 import "../ui/styles.css";
 import "../design-system/tokens/tokens.css";
+import "../design-system/tokens/typography.css";
+import "../design-system/components/components.css";
 
 const preview: Preview = {
   parameters: {
@@ -41,7 +43,7 @@ const preview: Preview = {
     (Story, context) => {
       const scheme = context.globals.colorScheme as string;
       return (
-        <div data-color-scheme={scheme} style={{ colorScheme: scheme }}>
+        <div data-color-scheme={scheme} data-theme={scheme} style={{ colorScheme: scheme }}>
           <Story />
         </div>
       );
