@@ -3,7 +3,7 @@
 // attribute-macro-generated sibling impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, Vec};
 
 /// Represents a single vesting schedule stored per recipient.
 ///
@@ -71,8 +71,11 @@ pub struct VestingSchedule {
 #[derive(Clone)]
 #[allow(missing_docs)]
 pub enum DataKey {
-    /// Per-recipient vesting schedule.
+    /// Per-recipient vesting schedule (fixed rate).
     Schedule(Address),
+
+    /// Per-recipient variable-rate vesting schedule.
+    VariableSchedule(Address),
 
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,

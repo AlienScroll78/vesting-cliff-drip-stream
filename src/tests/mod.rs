@@ -11,6 +11,9 @@ mod test_allowlist;
 mod test_properties;
 mod test_versioning;
 mod test_views;
+mod test_dust;
+mod test_variable_rate;
+mod test_initialize;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
@@ -61,6 +64,19 @@ pub fn advance_ledger(env: &Env, n: u32) {
 pub fn register_contract<'a>(env: &'a Env) -> (Address, VestingDripsClient<'a>) {
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(env, &contract_id);
+    // Auto-initialize with zero fee and a dummy treasury so all stream tests work.
+    let admin = Address::generate(env);
+    let treasury = Address::generate(env);
+    client.initialize(&admin, &0u32, &treasury);
+    (contract_id, client)
+}
+
+/// Registers the VestingDrips contract **without** calling `initialize`.
+///
+/// Use this only in tests that specifically test `initialize` behaviour.
+pub fn register_contract_raw(env: &Env) -> (Address, VestingDripsClient) {
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(env, &contract_id);
     (contract_id, client)
 }
 
@@ -105,8 +121,6 @@ pub fn create_vesting_stream<'a>(
 }
 
 /// Advances the ledger to the cliff height specified in `schedule`.
-///
-/// After this call `env.ledger().sequence() >= schedule.cliff_ledger`.
 pub fn advance_to_cliff(env: &Env, schedule: &VestingSchedule) {
     let current = env.ledger().sequence();
     if current < schedule.cliff_ledger {
@@ -115,8 +129,6 @@ pub fn advance_to_cliff(env: &Env, schedule: &VestingSchedule) {
 }
 
 /// Advances the ledger to the end height specified in `schedule`.
-///
-/// After this call `env.ledger().sequence() >= schedule.end_ledger`.
 pub fn advance_to_end(env: &Env, schedule: &VestingSchedule) {
     let current = env.ledger().sequence();
     if current < schedule.end_ledger {

@@ -1,6 +1,6 @@
 use soroban_sdk::{Address, Env, Map, Vec};
 
-use crate::types::{DataKey, VestingSchedule};
+use crate::types::{DataKey, VariableRateSchedule, VestingSchedule};
 
 /// Threshold to trigger TTL auto-renewal (within 3,000,000 ledgers of max).
 pub const PERSISTENT_LEDGER_THRESHOLD: u32 = 3_000_000;
@@ -54,32 +54,21 @@ pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSc
     Some(schedule)
 }
 
-/// Returns `true` if a schedule already exists for `recipient`.
+/// Returns `true` if a fixed-rate schedule exists for `recipient`.
 pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::Schedule(recipient.clone()))
 }
 
-/// Returns the configured minimum deposit, falling back to `DEFAULT_MIN_DEPOSIT`.
-pub fn get_min_deposit(env: &Env) -> i128 {
-    env.storage()
-        .instance()
-        .get::<DataKey, i128>(&DataKey::MinDeposit)
-        .unwrap_or(DEFAULT_MIN_DEPOSIT)
-}
-
-// ── Write ─────────────────────────────────────────────────────────────────────
-
-/// Persists `schedule` for `recipient` and bumps its TTL.
+/// Persists `schedule` for `recipient` and bumps TTL.
 pub fn set_schedule(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
     let key = DataKey::Schedule(recipient.clone());
     env.storage().persistent().set(&key, schedule);
     ensure_ttl(env, recipient);
 }
 
-/// Removes the schedule for `recipient` (called after full stream exhaustion
-/// or cancellation).
+/// Removes the fixed-rate schedule for `recipient`.
 pub fn remove_schedule(env: &Env, recipient: &Address) {
     env.storage()
         .persistent()
@@ -101,7 +90,6 @@ pub fn set_admin(env: &Env, admin: &Address) {
 }
 
 /// Stores a new minimum deposit value in instance storage.
-/// Callable by an admin to configure the threshold.
 pub fn set_min_deposit(env: &Env, min_deposit: i128) {
     env.storage()
         .instance()

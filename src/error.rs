@@ -70,7 +70,7 @@ pub enum VestingError {
     /// level restriction). No state has been mutated when this error is returned.
     TransferFailed = 9,
 
-    /// **Code 11** — The emergency-drain delay period has not yet elapsed.
+    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
     ///
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
