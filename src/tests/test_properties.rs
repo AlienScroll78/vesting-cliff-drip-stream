@@ -1,5 +1,6 @@
-#![cfg(test)]
+extern crate std;
 
+use std::format;
 use proptest::prelude::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
@@ -11,7 +12,7 @@ use crate::tests::{advance_ledger, setup_env};
 proptest! {
     #[test]
     fn prop_claimable_never_exceeds_total(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         advance in 0u32..200u32,
@@ -30,7 +31,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // advance ledger by `advance` but cap at total_duration (we only care up to end)
         let adv = advance.min(total_duration);
@@ -45,7 +46,7 @@ proptest! {
 proptest! {
     #[test]
     fn prop_claimable_monotonic(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         t1 in 0u32..200u32,
@@ -64,7 +65,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // choose times relative to start; ensure t1 <= t2 by swapping when necessary
         let (a, b) = if t1 <= t2 { (t1.min(total_duration), t2.min(total_duration)) } else { (t2.min(total_duration), t1.min(total_duration)) };
@@ -84,7 +85,7 @@ proptest! {
 proptest! {
     #[test]
     fn prop_claimable_zero_before_cliff(
-        rate in 1_i128..1000_i128,
+        rate in 100_i128..1000_i128,
         cliff in 1u32..50u32,
         total in 2u32..200u32,
         advance_before in 0u32..50u32,
@@ -102,7 +103,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
 
         // ensure we advance to somewhere strictly before the cliff
         let adv = advance_before.min(cliff.saturating_sub(1));

@@ -1,27 +1,4 @@
-use soroban_sdk::{contracttype, symbol_short, Address, Env, Symbol};
-
-/// Data payload for the `StreamCreated` event.
-///
-/// Encoded as a single `contracttype` struct so off-chain indexers can
-/// reconstruct the complete stream state from the event alone without
-/// needing any storage reads.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(missing_docs)]
-pub struct StreamCreatedData {
-    /// The SAC token contract being streamed.
-    pub token: Address,
-    /// Tokens released per ledger.
-    pub rate: i128,
-    /// Ledger sequence at which the stream was created.
-    pub start_ledger: u32,
-    /// Ledger sequence at which the cliff is reached.
-    pub cliff_ledger: u32,
-    /// Ledger sequence at which the stream ends.
-    pub end_ledger: u32,
-    /// Full deposit transferred from sponsor at creation (`rate × total_duration`).
-    pub total_deposit: i128,
-}
+use soroban_sdk::{symbol_short, Address, Env, String, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -36,7 +13,7 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
-    total_deposit: i128,
+    metadata: &Option<String>,
 ) {
     let data = StreamCreatedData {
         token: token.clone(),
@@ -50,7 +27,12 @@ pub fn emit_stream_created(
         (
             Symbol::new(env, "StreamCreated"),
             sponsor.clone(),
-            recipient.clone(),
+            token.clone(),
+            rate_per_ledger,
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            metadata.clone(),
         ),
         data,
     );
