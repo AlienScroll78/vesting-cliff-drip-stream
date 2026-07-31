@@ -14,6 +14,8 @@ A production-ready Soroban smart contract that combines a **time-locked cliff** 
 
 Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
 
+For the formal lifecycle model, transition table, and error-to-state mapping, see [docs/flows.md](docs/flows.md).
+
 ```
 Token Flow
 ──────────────────────────────────────────────────────────────────────
