@@ -1,0 +1,247 @@
+name: SBOM
+
+on:
+  push:
+    branches: [main]
+  # Also allow manual dispatch for ad-hoc SBOM generation
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to attach SBOM to (leave empty for main)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Detect whether this push produced a release
+  # ──────────────────────────────────────────────────────────────
+  check-release:
+    name: Check for release
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name || inputs.tag_name }}
+    steps:
+      # We only peek at the release-please outputs; actual release creation is
+      # handled by release.yml. We re-run the action in output-only mode here.
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          release-type: rust
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # skip-github-release prevents duplicate releases; outputs are still populated
+          skip-github-release: true
+
+  # ──────────────────────────────────────────────────────────────
+  # Generate SPDX SBOM and attach to the GitHub Release
+  # ──────────────────────────────────────────────────────────────
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: check-release
+    # Run on a release OR on manual dispatch with a tag
+    if: needs.check-release.outputs.release_created == 'true' || github.event.inputs.tag_name != ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check-release.outputs.tag_name }}
+
+      # ── Rust SBOM via syft ──────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-sbom-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-sbom-
+
+      - name: Build WASM (needed for accurate SBOM)
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Generate Rust SBOM (SPDX JSON)
+        uses: anchore/syft-action@v6
+        with:
+          path: "."
+          format: "spdx-json"
+          output-file: sbom-rust.spdx.json
+          config: .syft.yaml
+          # Constrain syft to Cargo to avoid double-counting Node.js packages
+          # that will get their own SBOM; overrides are in .syft.yaml
+          artifact-name: ""  # disable automatic upload; we do it below
+
+      # ── Node.js SBOM via syft ───────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install root Node.js dependencies
+        run: npm ci
+
+      - name: Install frontend Node.js dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Generate root Node.js SBOM (SPDX JSON)
+        uses: anchore/syft-action@v6
+        with:
+          path: "."
+          format: "spdx-json"
+          output-file: sbom-node-root.spdx.json
+          artifact-name: ""
+
+      - name: Generate frontend Node.js SBOM (SPDX JSON)
+        uses: anchore/syft-action@v6
+        with:
+          path: "frontend"
+          format: "spdx-json"
+          output-file: sbom-node-frontend.spdx.json
+          artifact-name: ""
+
+      # ── Merge SBOMs into one consolidated file ──────────────
+      - name: Merge SBOMs into combined SPDX JSON
+        run: |
+          python3 - <<'PYEOF'
+          import json, datetime, hashlib, os
+
+          def load(path):
+              with open(path) as f:
+                  return json.load(f)
+
+          rust   = load("sbom-rust.spdx.json")
+          node_r = load("sbom-node-root.spdx.json")
+          node_f = load("sbom-node-frontend.spdx.json")
+
+          # Merge packages, deduplicate by SPDXID
+          def merge_packages(documents):
+              seen = {}
+              for doc in documents:
+                  for pkg in doc.get("packages", []):
+                      seen[pkg["SPDXID"]] = pkg
+              return list(seen.values())
+
+          def merge_relationships(documents):
+              seen = set()
+              rels = []
+              for doc in documents:
+                  for rel in doc.get("relationships", []):
+                      key = (rel["spdxElementId"], rel["relationshipType"], rel["relatedSpdxElement"])
+                      if key not in seen:
+                          seen.add(key)
+                          rels.append(rel)
+              return rels
+
+          tag = os.environ.get("TAG_NAME", "unknown")
+          now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          combined = {
+              "SPDXID": "SPDXRef-DOCUMENT",
+              "spdxVersion": "SPDX-2.3",
+              "creationInfo": {
+                  "created": now,
+                  "creators": [
+                      "Tool: syft",
+                      "Tool: github-actions/sbom.yml",
+                  ],
+                  "licenseListVersion": "3.22",
+              },
+              "name": f"vesting-cliff-drip-stream-{tag}",
+              "dataLicense": "CC0-1.0",
+              "documentNamespace": f"https://github.com/your-org/vesting-cliff-drip-stream/sbom/{tag}",
+              "packages": merge_packages([rust, node_r, node_f]),
+              "relationships": merge_relationships([rust, node_r, node_f]),
+          }
+
+          with open("sbom.spdx.json", "w") as f:
+              json.dump(combined, f, indent=2)
+
+          pkg_count = len(combined["packages"])
+          print(f"Combined SBOM contains {pkg_count} packages.")
+          PYEOF
+        env:
+          TAG_NAME: ${{ needs.check-release.outputs.tag_name }}
+
+      # ── Generate human-readable license summary ─────────────
+      - name: Generate license summary
+        id: summary
+        run: |
+          python3 - <<'PYEOF'
+          import json, collections, os
+
+          with open("sbom.spdx.json") as f:
+              sbom = json.load(f)
+
+          packages = sbom.get("packages", [])
+          total = len(packages)
+
+          # Count by declared license
+          by_license = collections.Counter()
+          no_license = 0
+          for pkg in packages:
+              lic = pkg.get("licenseDeclared") or pkg.get("licenseConcluded") or ""
+              if not lic or lic in ("NOASSERTION", "NONE"):
+                  no_license += 1
+              else:
+                  by_license[lic] += 1
+
+          lines = [f"## Dependency & License Summary", ""]
+          lines.append(f"**Total packages in SBOM:** {total}")
+          if no_license:
+              lines.append(f"**Packages without declared license:** {no_license}")
+          lines.append("")
+          lines.append("### License distribution")
+          lines.append("")
+          lines.append("| License | Count |")
+          lines.append("|---------|-------|")
+          for lic, count in sorted(by_license.items(), key=lambda x: -x[1]):
+              lines.append(f"| `{lic}` | {count} |")
+
+          lines.append("")
+          lines.append("_Full SBOM (SPDX 2.3 JSON) attached to this release as `sbom.spdx.json`._")
+
+          summary = "\n".join(lines)
+          print(summary)
+
+          # Write to step summary for GitHub UI
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null")
+          with open(summary_path, "a") as f:
+              f.write(summary + "\n")
+
+          # Write to a file for release notes update
+          with open("license-summary.md", "w") as f:
+              f.write(summary + "\n")
+          PYEOF
+
+      # ── Attach SBOM artifacts to the GitHub Release ─────────
+      - name: Upload SBOM files to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-release.outputs.tag_name }}
+          files: |
+            sbom.spdx.json
+            sbom-rust.spdx.json
+            sbom-node-root.spdx.json
+            sbom-node-frontend.spdx.json
+
+      # ── Upload as workflow artifacts (available even without a release) ──
+      - name: Upload SBOM as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ needs.check-release.outputs.tag_name || github.sha }}
+          path: |
+            sbom.spdx.json
+            sbom-rust.spdx.json
+            sbom-node-root.spdx.json
+            sbom-node-frontend.spdx.json
+            license-summary.md
+          retention-days: 90

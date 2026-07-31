@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import {
   isConnected,
   getAddress,
@@ -13,6 +13,7 @@ const STORAGE_KEY = "vesting_wallet_address";
 
 interface WalletCtx {
   address: string | null;
+  freighterInstalled: boolean | null;
   balances: WalletBalance[];
   balancesLoading: boolean;
   connect: () => Promise<void>;
@@ -21,6 +22,7 @@ interface WalletCtx {
 
 export const WalletContext = createContext<WalletCtx>({
   address: null,
+  freighterInstalled: null,
   balances: [],
   balancesLoading: false,
   connect: async () => {},
@@ -29,6 +31,7 @@ export const WalletContext = createContext<WalletCtx>({
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [freighterInstalled, setFreighterInstalled] = useState<boolean | null>(null);
   const { balances, loading: balancesLoading } = useWalletBalances(address);
 
   const connect = useCallback(async () => {
@@ -55,7 +58,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <WalletContext.Provider value={{ address, balances, balancesLoading, connect, disconnect }}>
+    <WalletContext.Provider value={{ address, freighterInstalled, balances, balancesLoading, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   );

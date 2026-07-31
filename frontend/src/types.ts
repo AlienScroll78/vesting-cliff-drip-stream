@@ -17,6 +17,12 @@ export interface VestingStream {
   rate: number;
   claimableAmount: number;
   status: StreamStatus;
+  // Optional schedule details (populated from contract reads)
+  startLedger?: number;
+  cliffLedger?: number;
+  endLedger?: number;
+  totalDeposit?: number;
+  totalVested?: number;
 }
 
 export type TxType = "claim" | "create" | "cancel";

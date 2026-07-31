@@ -105,6 +105,40 @@ Append `!` or add `BREAKING CHANGE:` in the footer for breaking changes.
 
 ---
 
+## Changelog and Release Notes
+
+This repository maintains a structured `CHANGELOG.md` and uses a standardized release notes template in `.github/release-notes-template.md`.
+
+### What goes in each section
+- `Breaking Changes`: incompatible API or behavior changes, required migrations, or removals. Use `BREAKING CHANGE:` in the commit body or `!` in the commit header.
+- `New Features`: new entry points, view functions, UI behavior, or capabilities added in a backwards-compatible way. Use `feat:`.
+- `Bug Fixes`: correctness fixes, stability improvements, and bug resolutions. Use `fix:`.
+- `Security`: vulnerability fixes, hardening, and security-related remediation. Use `security:`.
+- `Deprecations`: deprecated APIs, behaviors, or configuration that will be removed in a future major release. Use `deprecate:` or `feat!:` with a clear deprecation note.
+- `Performance`: measurable performance or efficiency improvements. Use `perf:`.
+- `Miscellaneous`: internal maintenance, tooling, docs, and other non-user-facing work. These are hidden in the changelog when generated automatically.
+
+### Writing changelog entries
+- Use short, imperative phrasing: `Add ...`, `Fix ...`, `Deprecate ...`.
+- Describe the impact for users or operators, not just implementation details.
+- Reference issues and PRs using `#123`, `PR #456`, or `owner/repo#123` when relevant.
+- Prefer `Closes #<issue>` in PR descriptions to link issues automatically.
+- Use backticks for code artifacts: `create_vesting_stream`, `VestingSchedule`, `CliffNotReached`.
+
+### Semantic versioning policy
+- `MAJOR` bump for incompatible API/behavior changes, removals, or any `BREAKING CHANGE:` commit.
+- `MINOR` bump for new features and backwards-compatible improvements.
+- `PATCH` bump for bug fixes, documentation changes, tests, and non-behavioral maintenance.
+- Let release automation infer the release type from commit metadata when possible.
+
+### Release automation
+- This repository uses `release-please` and the configuration in `release-please-config.json`.
+- `release-please` reads commit types and changelog sections from `release-please-config.json` to generate release PRs, tags, and changelog entries.
+- Breaking changes are inferred from `!` in commit headers or `BREAKING CHANGE:` in commit bodies.
+- Keep PR titles, commit messages, and changelog entries aligned with the section conventions above.
+
+---
+
 ## Submitting a Pull Request
 
 1. Fork or create a feature branch: `git checkout -b feat/<short-description>`
@@ -146,6 +180,47 @@ Admins can merge without a review in exceptional circumstances (incident hotfix,
 2. **Document the reason** in the PR using the `## Emergency Merge` section.
 3. Follow up within 24 hours with a normal PR that adds or confirms tests.
 4. Post a note in `#eng-oncall` linking the PR.
+
+---
+
+## Stellar Wave Program
+
+This repository participates in the **[Stellar Wave Program](docs/stellar-wave.md)** — a monthly one-week contribution sprint run by the [Stellar Development Foundation](https://stellar.org/foundation) via [Drips Wave](https://drips.network/wave). Contributors earn a share of a reward pool for resolving labelled issues.
+
+### Finding Wave issues
+
+Issues in scope for the current Wave carry the **`Stellar Wave`** label. Browse them directly:
+
+```
+https://github.com/AlienScroll78/vesting-cliff-drip-stream/labels/Stellar%20Wave
+```
+
+Or discover issues across all participating repos on the [Drips Wave Explore page](https://drips.network/wave).
+
+### Quick-start for contributors
+
+1. Complete **KYC** in [Settings → Profile](https://drips.network/wave) on the Drips Wave app (required before applying).
+2. Find an issue with the `Stellar Wave` label and click **Apply** in the app with a short message.
+3. Wait to be assigned — do not start coding until the maintainer assigns you.
+4. Open a PR against `main` following the standard workflow above.
+5. Include `Closes #<issue-number>` in your PR description — this is how Points are allocated.
+6. After the Wave ends, withdraw your rewards from the Drips Wave app.
+
+### Points and rewards
+
+| Complexity | Points |
+|------------|--------|
+| Trivial    | 100    |
+| Medium     | 150    |
+| High       | 200    |
+
+Your payout = `(your points / total points in wave) × reward budget`.
+
+### The `Stellar Wave` label
+
+The label is applied by **maintainers only**, either through the Drips Wave app or directly on GitHub. Do not add or remove it yourself.
+
+For the full details — qualifying criteria, submission requirements, application limits, and FAQ — see **[docs/stellar-wave.md](docs/stellar-wave.md)**.
 
 ---
 
