@@ -17,8 +17,8 @@ fn test_claim_before_cliff_fails() {
 
     advance_ledger(&env, 20);
 
-    let err = client.try_claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, Ok(VestingError::CliffNotReached));
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::CliffNotReached);
 }
 
 #[test]
@@ -91,8 +91,8 @@ fn test_claim_nonexistent_schedule_fails() {
     let (_contract_id, client) = register_contract(&env);
     let random = Address::generate(&env);
 
-    let err = client.try_claim_vested(&random).unwrap_err();
-    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
+    let err = client.try_claim_vested(&random).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }
 
 #[test]

@@ -54,8 +54,8 @@ fn test_cancel_nonexistent_stream_fails() {
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
 
-    let err = client.try_cancel_stream(&sponsor, &recipient).unwrap_err();
-    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
+    let err = client.try_cancel_stream(&sponsor, &recipient).unwrap_err().unwrap();
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }
 
 #[test]

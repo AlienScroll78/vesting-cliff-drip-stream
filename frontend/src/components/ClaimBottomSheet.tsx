@@ -4,6 +4,7 @@ import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
 import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 import { VestingStream } from "@/types";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 /** Convert a ledger count to a human-readable duration string (~5 s/ledger). */
 function ledgersToHuman(ledgers: number): string {
@@ -286,7 +287,7 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
               aria-label={`Claimable amount: ${formatAmount(optimisticAmount)} ${tokenSymbol}`}
               style={{ color: isPreCliff ? "#9ca3af" : "var(--color-active)" }}
             >
-              {abbreviateAmount(optimisticAmount)}
+              <AnimatedNumber value={optimisticAmount} format={abbreviateAmount} />
             </span>
             <span className="amount-token">{tokenSymbol}</span>
           </div>

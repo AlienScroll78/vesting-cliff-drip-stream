@@ -14,6 +14,7 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
+#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ///
@@ -82,21 +83,10 @@ pub enum VestingError {
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
 
-    /// **Code 12** — Contract initialization already completed.
-    AlreadyInitialized = 12,
-
-    /// **Code 13** — Caller is not authorized for this operation.
-    Unauthorized = 13,
-
-    /// **Code 14** — Total deposit is below the minimum required deposit.
-    DepositBelowMinimum = 14,
-
-    /// **Code 15** — Token does not support SAC clawback operation.
-    ClawbackNotSupported = 15,
-
-    /// **Code 16** — Stream is already paused.
-    StreamAlreadyPaused = 16,
-
-    /// **Code 17** — Stream is not paused.
-    StreamNotPaused = 17,
+    /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
+    ///
+    /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
+    /// value before retrying. Do not store sensitive data in metadata as it
+    /// is persisted on-chain and publicly visible.
+    MetadataTooLong = 20,
 }

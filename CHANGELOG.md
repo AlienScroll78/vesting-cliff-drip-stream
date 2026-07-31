@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `StreamCreated` events now carry the full schedule payload (`token`, `rate`, `start_ledger`, `cliff_ledger`, `end_ledger`, `total_deposit`) so off-chain indexers can reconstruct stream state from events alone.
+- Admin-controlled token allowlisting for `create_vesting_stream` with `add_allowed_token`, `remove_allowed_token`, `get_allowed_tokens`, and `TokenNotAllowed` error handling.
+- Schedule versioning with a monotonically increasing `version` counter stored in `VestingSchedule` and surfaced via `get_schedule`.
+
+### Changed
+
+- The `StreamCreated` event topics remain minimal at three values: `"StreamCreated"`, `sponsor`, and `recipient` for efficient filtering.
+
 ## [1.0.0] - 2026-06-26
 
 ### Added

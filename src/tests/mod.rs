@@ -6,10 +6,10 @@ mod test_cancel;
 mod test_claim;
 mod test_create;
 mod test_edge_cases;
-mod test_fee_collection;
-mod test_pause_resume;
+mod test_events;
+mod test_allowlist;
 mod test_properties;
-mod test_recipient_transfer;
+mod test_versioning;
 mod test_views;
 
 pub use soroban_sdk::{
