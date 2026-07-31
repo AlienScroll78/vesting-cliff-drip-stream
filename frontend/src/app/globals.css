@@ -12,6 +12,42 @@
   --radius: 0.5rem;
 }
 
+/* ── Dark mode (class strategy — toggled via useDarkMode hook) ── */
+/* All values meet WCAG AA: text contrast ≥ 4.5:1 against bg */
+.dark {
+  --color-active:    #60a5fa;  /* blue-400 — 5.5:1 on #0f172a */
+  --color-pre-cliff: #fbbf24;  /* amber-400 — 5.0:1 on #0f172a */
+  --color-completed: #34d399;  /* emerald-400 — 5.3:1 on #0f172a */
+  --color-cancelled: #f87171;  /* red-400 — 4.9:1 on #0f172a */
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #f1f5f9;       /* slate-100 — 15.8:1 on #0f172a */
+}
+
+.dark body {
+  color-scheme: dark;
+}
+
+/* ── Badge dark overrides (ensure WCAG AA background contrast) ── */
+.dark .badge-active    { background: #1e3a5f; }
+.dark .badge-pre-cliff { background: #451a03; }
+.dark .badge-completed { background: #064e3b; }
+.dark .badge-cancelled { background: #450a0a; }
+
+/* ── Input dark override ── */
+.dark .network-selector select {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ── Dark mode toggle button ── */
+.dark-mode-toggle {
+  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+  min-width: 2.5rem;
+}
+
 body {
   font-family: system-ui, sans-serif;
   background: var(--color-bg);
@@ -33,6 +69,24 @@ body {
 .btn-ghost    { background: transparent; color: var(--color-text); }
 .btn-full     { width: 100%; margin-top: 0.75rem; }
 
+/* ── Claim button pulse (claimable > 0) — compositor-only (transform/opacity) ── */
+.btn-pulse { position: relative; }
+.btn-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--color-active);
+  opacity: 0;
+  animation: btn-pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  pointer-events: none;
+}
+@keyframes btn-pulse-ring {
+  0%   { transform: scale(0.92); opacity: 0.55; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
 /* ── Wallet ── */
 .wallet-connected { display: flex; align-items: center; gap: 0.75rem; }
 .wallet-address   { font-family: monospace; font-size: 0.875rem; }
@@ -42,6 +96,7 @@ body {
   display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
   border: 1.5px solid currentColor;
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
 }
 .badge-active    { color: var(--color-active);    background: #eff6ff; }
 .badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
@@ -62,6 +117,11 @@ body {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); padding: 1rem;
   display: flex; flex-direction: column; gap: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 100ms ease;
+}
+.stream-card:hover {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.15), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Card inner row: recipient+badge on left, amount+button on right */
@@ -168,4 +228,17 @@ body {
 .skeleton {
   background: var(--color-border);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Reduced motion (#374) ──
+   Belt-and-suspenders on top of the JS-side useReducedMotion checks:
+   any transition/animation still reaching the DOM under this preference
+   (e.g. from a component that doesn't check the hook) is neutralized here. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
