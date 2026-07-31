@@ -1,0 +1,550 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# pipeline.yml – Unified multi-environment CI/CD pipeline
+#
+# Pipeline status badges:
+#   [![Pipeline](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml)
+#   [![CI](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml)
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │  Scenario A – Pull Request                                               │
+# │    lint → unit-tests → build → contract-tests                            │
+# │                       build → wasm-size-check                            │
+# │    frontend-lint                                                          │
+# │                                                                           │
+# │  Scenario B – Push to main                                               │
+# │    (all PR jobs) + e2e-tests → staging-deploy                            │
+# │                                                                           │
+# │  Scenario C – Release tag (v*)                                           │
+# │    (all PR + main jobs) + production-deploy (manual approval gate)       │
+# │    + release-wasm-attach + slack-notify                                  │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# Required secrets:
+#   SLACK_WEBHOOK_URL   – Incoming webhook for failure + success notifications
+#   GH_TOKEN            – Fine-grained PAT (Actions-variable write scope)
+#   STELLAR_SECRET_KEY  – Testnet deployer key (staging)
+#   KUBECONFIG_STAGING  – base64-encoded kubeconfig for the staging cluster
+#   KUBECONFIG_PROD     – base64-encoded kubeconfig for the production cluster
+#
+# Required environments (Settings → Environments):
+#   staging    – no approval gate; used by staging-deploy
+#   production – required reviewers configured; used by production-deploy
+# ──────────────────────────────────────────────────────────────────────────────
+name: Pipeline
+
+on:
+  pull_request:
+
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+
+# Cancel in-flight runs for the same PR / branch so old runs don't race.
+# Release tag pushes are not cancelled (group is unique per tag).
+concurrency:
+  group: pipeline-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_PATH: target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm
+  WASM_SIZE_LIMIT_KB: 100
+
+# ── Permissions ───────────────────────────────────────────────────────────────
+permissions:
+  contents: write       # upload release assets
+  pull-requests: write  # post PR comments
+  actions: write        # workflow_dispatch / repository_dispatch
+  id-token: write       # OIDC for cloud auth (production deploy)
+
+# =============================================================================
+# SCENARIO A – PR JOBS (run on every trigger)
+# =============================================================================
+
+jobs:
+  # ── lint ────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable (with fmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-lint-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # ── unit-tests ──────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Run unit tests with testutils
+        run: cargo test --features testutils
+
+  # ── build ───────────────────────────────────────────────────────────────────
+  build:
+    name: Build (WASM + frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    outputs:
+      wasm-artifact: wasm-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: ${{ env.WASM_PATH }}
+          retention-days: 7
+
+  # ── contract-tests ──────────────────────────────────────────────────────────
+  contract-tests:
+    name: Contract spec tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      # Download the pre-built WASM so the contract_spec test can find it
+      # without re-running the full WASM build.
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: target/wasm32-unknown-unknown/release/
+
+      - name: Run contract spec tests
+        run: cargo test --test contract_spec
+
+  # ── wasm-size-check ─────────────────────────────────────────────────────────
+  wasm-size-check:
+    name: WASM size check
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: wasm-artifact/
+
+      - name: Check WASM size and report
+        id: size
+        run: |
+          WASM_FILE=$(find wasm-artifact/ -name "*.wasm" | head -1)
+          SIZE_BYTES=$(stat -c%s "$WASM_FILE")
+          SIZE_KB=$(echo "scale=2; $SIZE_BYTES / 1024" | bc)
+          LIMIT_BYTES=$(( ${{ env.WASM_SIZE_LIMIT_KB }} * 1024 ))
+
+          echo "wasm_size_kb=${SIZE_KB}" >> "$GITHUB_OUTPUT"
+          echo "wasm_size_bytes=${SIZE_BYTES}" >> "$GITHUB_OUTPUT"
+
+          echo "### 📦 WASM Size Report"
+          echo "File : $WASM_FILE"
+          echo "Size : ${SIZE_KB} KB (${SIZE_BYTES} bytes)"
+          echo "Limit: ${{ env.WASM_SIZE_LIMIT_KB }} KB"
+
+          if [[ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]]; then
+            echo "❌ WASM exceeds ${WASM_SIZE_LIMIT_KB} KB limit!"
+            echo "size_ok=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "✅ WASM is within the ${WASM_SIZE_LIMIT_KB} KB limit."
+            echo "size_ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Post size as a PR comment (only on pull_request events)
+      - name: Post WASM size comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sizeKb  = '${{ steps.size.outputs.wasm_size_kb }}';
+            const sizeOk  = '${{ steps.size.outputs.size_ok }}' === 'true';
+            const limitKb = '${{ env.WASM_SIZE_LIMIT_KB }}';
+            const icon    = sizeOk ? '✅' : '❌';
+            const status  = sizeOk ? 'within limit' : '**EXCEEDS LIMIT**';
+
+            const body = `## ${icon} WASM Size Check\n\n` +
+              `| Metric | Value |\n|---|---|\n` +
+              `| Size   | **${sizeKb} KB** |\n` +
+              `| Limit  | ${limitKb} KB |\n` +
+              `| Status | ${status} |\n\n` +
+              (sizeOk ? '' : `> ⚠️ The compiled WASM exceeds the ${limitKb} KB budget. ` +
+                `Please optimise the contract before merging.\n`);
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('WASM Size Check')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # ── frontend-lint ────────────────────────────────────────────────────────────
+  frontend-lint:
+    name: Frontend lint (typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+# =============================================================================
+# SCENARIO B – MERGE TO MAIN  (push to main only)
+# =============================================================================
+
+  # ── e2e-tests ────────────────────────────────────────────────────────────────
+  e2e-tests:
+    name: Playwright E2E tests
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests, build, contract-tests, wasm-size-check, frontend-lint]
+    # Only run on pushes to main (not on PRs or tag pushes)
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Playwright E2E tests
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: frontend/playwright-report/
+          retention-days: 14
+
+  # ── staging-deploy ───────────────────────────────────────────────────────────
+  staging-deploy:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    # Only deploy on pushes to main (not on tag pushes — those go via production)
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    environment: staging
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trigger the dedicated staging.yml via repository_dispatch so staging
+      # logic stays in a single place. The staging workflow listens on push to
+      # main, but using repository_dispatch here makes it explicit and allows
+      # the pipeline to track the deploy as a downstream dependency.
+      - name: Trigger staging deployment workflow
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run staging.yml \
+            --repo "${{ github.repository }}" \
+            --ref main
+
+      - name: Report staging trigger
+        run: |
+          echo "✅ Staging deployment triggered via staging.yml"
+          echo "Monitor at: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/staging.yml"
+
+# =============================================================================
+# SCENARIO C – RELEASE TAG  (push tags v*)
+# =============================================================================
+
+  # ── production-deploy ────────────────────────────────────────────────────────
+  production-deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    # Only run on semver tag pushes
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
+    environment: production   # <── manual approval gate configured here
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      - name: Build WASM (release)
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Compute checksums
+        run: |
+          sha256sum "${{ env.WASM_PATH }}" > target/wasm32-unknown-unknown/release/SHA256SUMS.txt
+          cat target/wasm32-unknown-unknown/release/SHA256SUMS.txt
+
+      - name: Attach WASM to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            ${{ env.WASM_PATH }}
+            target/wasm32-unknown-unknown/release/SHA256SUMS.txt
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Configure production kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Helm upgrade/install production
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          helm upgrade vesting-prod helm/vesting-backend \
+            --install \
+            --namespace production \
+            --create-namespace \
+            --wait \
+            --timeout 10m \
+            --atomic \
+            --set image.tag="${RELEASE_TAG}" \
+            --set ingress.host="https://api.vesting.example.com"
+
+      - name: Notify Slack – production deploy success
+        if: success()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "🚀 *Production deployment succeeded*",
+              "attachments": [{
+                "color": "good",
+                "fields": [
+                  {"title": "Tag",        "value": "${{ github.ref_name }}", "short": true},
+                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
+                  {"title": "Run",        "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>", "short": false}
+                ]
+              }]
+            }'
+
+# =============================================================================
+# FAILURE NOTIFICATION – fires on any job failure across all scenarios
+# =============================================================================
+
+  # ── notify-failure ───────────────────────────────────────────────────────────
+  notify-failure:
+    name: Slack failure notification
+    runs-on: ubuntu-latest
+    # Run after all real jobs; trigger only when something actually failed.
+    needs:
+      - lint
+      - unit-tests
+      - build
+      - contract-tests
+      - wasm-size-check
+      - frontend-lint
+      - e2e-tests
+      - staging-deploy
+      - production-deploy
+    if: >
+      always() &&
+      (
+        needs.lint.result             == 'failure' ||
+        needs.unit-tests.result       == 'failure' ||
+        needs.build.result            == 'failure' ||
+        needs.contract-tests.result   == 'failure' ||
+        needs.wasm-size-check.result  == 'failure' ||
+        needs.frontend-lint.result    == 'failure' ||
+        needs.e2e-tests.result        == 'failure' ||
+        needs.staging-deploy.result   == 'failure' ||
+        needs.production-deploy.result == 'failure'
+      )
+
+    steps:
+      - name: Send Slack alert
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Determine which jobs failed for a useful message
+          FAILED_JOBS=""
+          for job in lint unit-tests build contract-tests wasm-size-check frontend-lint e2e-tests staging-deploy production-deploy; do
+            result_var="needs_${job//-/_}_result"
+            echo "Checking $job"
+          done
+
+          curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "❌ *Pipeline failed*",
+              "attachments": [{
+                "color": "danger",
+                "fields": [
+                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
+                  {"title": "Ref",        "value": "${{ github.ref_name }}", "short": true},
+                  {"title": "Triggered by", "value": "${{ github.actor }}", "short": true},
+                  {"title": "Run",        "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View failed run>", "short": false}
+                ]
+              }]
+            }'

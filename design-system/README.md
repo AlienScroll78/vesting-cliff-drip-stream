@@ -29,17 +29,32 @@ Import `tokens/tokens.css` first in your stylesheet or entry point.
 
 ### Colour palette
 
+Each of `primary`, `secondary`, `success`, `warning`, `error`, and `neutral` is a
+full 10-shade scale (`50`…`900`), e.g. `--color-primary-50` … `--color-primary-900`.
+Reach for a specific shade when a component needs a lighter/darker step than the
+semantic default (hover, disabled, subtle backgrounds, …).
+
+Semantic aliases (used by `components.css`, resolve to the shade noted):
+
 | Token | Value | Usage |
 |---|---|---|
-| `--color-brand-primary` | `#7C3AED` | Primary actions, focus rings |
-| `--color-brand-secondary` | `#4F46E5` | Hover states |
+| `--color-brand-primary` | `--color-primary-600` (`#7C3AED`) | Primary actions, focus rings |
+| `--color-brand-secondary` | `--color-secondary-600` (`#4F46E5`) | Hover states |
 | `--color-accent` | `#06B6D4` | Highlights, badges |
-| `--color-success` | `#10B981` | Positive status |
-| `--color-warning` | `#F59E0B` | Warning alerts |
-| `--color-danger` | `#EF4444` | Errors, destructive actions |
-| `--color-bg-base` | `#0F172A` | Page background |
-| `--color-bg-surface` | `#1E293B` | Cards, modals |
-| `--color-bg-elevated` | `#334155` | Dropdowns, hover layers |
+| `--color-success` | `--color-success-500` (`#10B981`) | Positive status |
+| `--color-warning` | `--color-warning-500` (`#F59E0B`) | Warning alerts |
+| `--color-danger` | `--color-error-500` (`#EF4444`) | Errors, destructive actions |
+| `--color-bg-base` | `--color-neutral-900` (`#0F172A`) | Page background |
+| `--color-bg-surface` | `--color-neutral-800` (`#1E293B`) | Cards, modals |
+| `--color-bg-elevated` | `--color-neutral-700` (`#334155`) | Dropdowns, hover layers |
+
+### Dark / light theme
+
+Dark is the default (`:root`) palette. Add `data-theme="light"` to `<html>` or
+any ancestor element to flip the semantic bg/text/border aliases and shadow
+opacities to the light variant — the 10-shade colour scales themselves don't
+change between themes, only which alias points at which shade. This maps onto
+the existing `useDarkMode` toggle in `frontend/src/hooks/useDarkMode.ts`.
 
 ### Typography scale
 
@@ -80,6 +95,25 @@ Weights: `normal` 400 · `medium` 500 · `semibold` 600 · `bold` 700 · `extrab
 
 `--space-1` (4px) through `--space-16` (64px).
 
+### Border radius
+
+| Token | Value |
+|---|---|
+| `--radius-none` | `0` |
+| `--radius-sm` | `0.25rem` |
+| `--radius-base` | `0.5rem` |
+| `--radius-lg` | `0.75rem` |
+| `--radius-full` | `9999px` |
+
+### Shadows
+
+| Token | Usage |
+|---|---|
+| `--shadow-sm` | Subtle depth (inputs, badges) |
+| `--shadow-md` | Cards, dropdowns |
+| `--shadow-lg` | Modals, popovers |
+| `--shadow-xl` | Toasts, high-elevation overlays |
+
 ## Components
 
 ### Button
@@ -111,6 +145,58 @@ Sizes: *(default)* · `btn--sm` · `btn--lg`
     <button class="btn btn--secondary btn--sm">Details</button>
     <button class="btn btn--primary btn--sm">Claim</button>
   </div>
+</div>
+```
+
+### Select
+
+```html
+<select class="select">
+  <option>USDC</option>
+  <option>XLM</option>
+</select>
+<select class="select select--error"><option>Invalid token</option></select>
+```
+
+### Badge
+
+```html
+<span class="ds-badge ds-badge--success">Active</span>
+<span class="ds-badge ds-badge--warning">Pre-cliff</span>
+<span class="ds-badge ds-badge--danger">Cancelled</span>
+<span class="ds-badge ds-badge--neutral">Completed</span>
+```
+
+### Tooltip
+
+```html
+<span class="ds-tooltip" tabindex="0">
+  Hover or focus me
+  <span class="ds-tooltip__content" role="tooltip">Cliff catch-up amount</span>
+</span>
+```
+
+### Modal
+
+```html
+<div class="ds-modal-backdrop">
+  <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="ds-modal__header" id="m-title">Cancel stream?</div>
+    <div class="ds-modal__body">Accrued tokens remain claimable by the recipient.</div>
+    <div class="ds-modal__footer">
+      <button class="btn btn--secondary btn--sm">Keep stream</button>
+      <button class="btn btn--danger btn--sm">Cancel stream</button>
+    </div>
+  </div>
+</div>
+```
+
+### Toast
+
+```html
+<div class="ds-toast-region">
+  <div class="ds-toast ds-toast--success" role="status">Claim confirmed on-chain.</div>
+  <div class="ds-toast ds-toast--danger" role="alert">Transaction failed. Try again.</div>
 </div>
 ```
 
