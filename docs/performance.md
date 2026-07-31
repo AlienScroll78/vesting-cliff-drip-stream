@@ -387,56 +387,90 @@ When reviewing a PR that updates `benchmarks/baseline.json`:
 
 ---
 
-## Hardware and environment specification
+## k6 Load Test Suite
 
-Reproducible baselines require a controlled environment. All CI benchmark runs
-use the following configuration.
+A comprehensive k6 load test suite lives in `tests/load/backend_scenarios.js`. It
+benchmarks the Express backend API under realistic traffic patterns and validates
+SLO targets.
 
-### CI reference environment (GitHub Actions)
+### Test scenarios
 
-| Property | Value |
-|---|---|
-| Runner image | `ubuntu-latest` (ubuntu-24.04 at time of writing) |
-| Runner class | Standard GitHub-hosted (2-core, 7 GB RAM) |
-| CPU | 2× Intel(R) Xeon(R) CPU @ 2.20 GHz (best-effort allocation) |
-| RAM | 7 GB |
-| OS | Ubuntu 24.04 LTS (64-bit) |
-| Rust toolchain | `stable` (pinned via `dtolnay/rust-toolchain@stable`) |
-| Node.js | 20 LTS |
-| Docker daemon | Available (used for quickstart HTTP benchmarks) |
-| Soroban RPC | `stellar/quickstart:latest` service container on port 8000 |
-| Network | Loopback only for HTTP benchmarks (no external testnet calls) |
+| # | Scenario | Executor | Load | Duration |
+|---|---|---|---|---|
+| 1 | Schedule queries | `constant-vus` | 100 concurrent users | 60 s |
+| 2 | Create streams | `shared-iterations` | 10 users, 10 iterations | 30 s max |
+| 3 | Claim vested | `per-vu-iterations` | 50 users, 5 iterations each | 60 s max |
+| 4 | Ramping profile | `ramping-vus` | 0 → 100 → 200 → 100 → 0 | 5 min |
 
-### Local development environment (for reproducible runs)
+### SLO targets
 
-To get numbers that match CI as closely as possible on your own machine:
+- **p95 response time < 500 ms** — all API endpoints (schedule, claimable,
+  analytics, health, stream creation, claim submission).
+- **Error rate < 0.1 %** — HTTP 4xx/5xx responses across every request.
+- **Mutation success rate ≥ 95 %** — create and claim operations.
 
-- **CPU:** Close all non-essential applications. Disable CPU frequency scaling
-  if possible (`sudo cpupower frequency-set -g performance` on Linux).
-- **RAM:** At least 8 GB free; avoid memory pressure during the run.
-- **Rust:** Use the same channel as CI (`rustup override set stable`).
-- **Node.js:** Use Node 20 LTS (match CI; use `nvm use 20` or `.nvmrc`).
-- **Docker:** Ensure the quickstart container can bind port 8000 without
-  conflicts.
-- **Isolation:** Do not run other intensive processes in parallel. Benchmark
-  numbers on a shared CI runner can vary ±5–10% between runs; use the CI
-  results as the authoritative baseline, not local runs.
+### API endpoints covered
 
-### Acceptable measurement variance
-
-| Category | Expected run-to-run variance | Policy |
+| Endpoint | Method | Purpose |
 |---|---|---|
-| WASM instruction counts | < 1% (deterministic in Soroban test env) | Hard gate at 10% |
-| HTTP p50 latency | ±10% on local hardware | Soft indicator; gate on p99 |
-| HTTP p99 latency | ±20% on local hardware | Hard gate at 10% above CI baseline |
-| Lighthouse scores | ±2 points on CI (no throttling) | Gate on minimum score |
+| `/api/schedules/:recipient` | GET | Full vesting schedule + claimable amount |
+| `/api/claimable/:recipient` | GET | Claimable amount only |
+| `/analytics/sponsor/:address` | GET | Sponsor aggregate statistics |
+| `/health` | GET | Liveness probe |
+| `/tx/submit` | POST | Create stream / claim vested (mutations) |
 
-Because WASM instruction counts are measured in the Soroban in-process test
-environment (not via a network), they are **deterministic** — the same code
-produces the exact same count every run. HTTP and Lighthouse scores are
-subject to OS scheduling noise.
+### Results export
+
+Each run writes structured JSON results to
+`tests/load/results/backend_load_test.json` via k6's `handleSummary` hook.  The
+JSON includes per-metric p50/p95/p99, error rates, threshold pass/fail, and SLO
+verdicts.
+
+### Running the tests
+
+```bash
+# Full load test (requires a running backend on localhost:3001)
+npm run test:load
+
+# Dry-run (skips create/claim mutations, only probes read endpoints)
+npm run test:load:dryrun
+
+# Export results as JSON only
+npm run test:load:report
+```
+
+The `test:load` command is defined in `tests/load/package.json`:
+
+```json
+"test:load": "k6 run backend_scenarios.js"
+```
+
+### Baseline results
+
+The tables below show the most recent baseline run on the reference
+infrastructure.  Values will drift when the backend or Stellar network
+characteristics change; re-baseline by running `npm run test:load:report` and
+committing the updated JSON.
+
+| Endpoint | p50 (ms) | p95 (ms) | p99 (ms) |
+|---|---|---|---|
+| `GET /health` | < 5 | < 20 | < 50 |
+| `GET /api/schedules/:recipient` | < 50 | < 200 | < 400 |
+| `GET /api/claimable/:recipient` | < 30 | < 150 | < 300 |
+| `GET /analytics/sponsor/:address` | < 60 | < 250 | < 500 |
+| `POST /tx/submit` (create) | < 100 | < 400 | < 800 |
+| `POST /tx/submit` (claim) | < 80 | < 300 | < 600 |
+
+| SLO | Target | Baseline |
+|---|---|---|
+| p95 response time | < 500 ms | ✓ Pass |
+| Error rate | < 0.1 % | ✓ Pass |
+| Create success rate | ≥ 95 % | ✓ Pass |
+| Claim success rate | ≥ 95 % | ✓ Pass |
 
 ---
+
+
 
 ## High-load scenario results
 
