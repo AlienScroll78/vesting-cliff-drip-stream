@@ -880,6 +880,8 @@ impl VestingDrips {
     ///
     /// The schedule's `version` counter is incremented on every successful claim.
     ///
+    /// The schedule's `version` counter is incremented on every successful claim.
+    ///
     /// # Errors
     /// * `ScheduleNotFound` – No stream exists for `recipient`.
     /// * `CliffNotReached`  – Current ledger < `cliff_ledger`.

@@ -86,6 +86,7 @@ pub fn emit_milestone_stream_created(
             total_deposited,
             end_ledger,
         ),
+        data,
     );
 }
 
