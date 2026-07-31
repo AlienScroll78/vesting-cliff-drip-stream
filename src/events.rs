@@ -9,15 +9,23 @@ pub fn emit_stream_created(
     sponsor: &Address,
     recipient: &Address,
     token: &Address,
-    rate_per_ledger: i128,
+    rate: i128,
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
     metadata: &Option<String>,
 ) {
+    let data = StreamCreatedData {
+        token: token.clone(),
+        rate,
+        start_ledger,
+        cliff_ledger,
+        end_ledger,
+        total_deposit,
+    };
     env.events().publish(
-        (symbol_short!("vc_create"), recipient.clone()),
         (
+            Symbol::new(env, "StreamCreated"),
             sponsor.clone(),
             token.clone(),
             rate_per_ledger,
@@ -26,6 +34,7 @@ pub fn emit_stream_created(
             end_ledger,
             metadata.clone(),
         ),
+        data,
     );
 }
 
@@ -73,5 +82,16 @@ pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, a
     env.events().publish(
         (symbol_short!("vc_drain"), recipient.clone()),
         (sponsor.clone(), amount),
+    );
+}
+
+/// Emitted when the token allowlist is updated (token added or removed).
+///
+/// Topics: `["AllowlistUpdated", admin]`
+/// Data:   `(token, added)` — `added` is `true` for add, `false` for remove
+pub fn emit_allowlist_updated(env: &Env, admin: &Address, token: &Address, added: bool) {
+    env.events().publish(
+        (Symbol::new(env, "AllowlistUpdated"), admin.clone()),
+        (token.clone(), added),
     );
 }

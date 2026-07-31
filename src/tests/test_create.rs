@@ -40,7 +40,7 @@ fn test_create_stream_zero_rate_fails() {
         .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::InvalidRate.into());
+    assert_eq!(err, VestingError::InvalidRate);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn test_create_duplicate_stream_fails() {
         .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::ScheduleAlreadyExists.into());
+    assert_eq!(err, VestingError::ScheduleAlreadyExists);
 }
 
 #[test]

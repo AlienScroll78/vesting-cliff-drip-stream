@@ -14,6 +14,7 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
+#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ///

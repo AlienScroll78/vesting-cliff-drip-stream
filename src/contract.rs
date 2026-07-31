@@ -20,6 +20,7 @@ const DRAIN_DELAY_LEDGERS: u32 = 3_153_600;
 /// Returned by [`VestingDrips::get_stats`].
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub struct StreamStats {
     /// Total tokens deposited when the stream was created (`rate × total_duration`).
     pub total_deposited: i128,
@@ -33,10 +34,65 @@ pub struct StreamStats {
 
 /// The vesting-drip contract entry point.
 #[contract]
+#[allow(missing_docs)]
 pub struct VestingDrips;
 
 #[contractimpl]
 impl VestingDrips {
+    // ── Admin / Allowlist ─────────────────────────────────────────────────────
+
+    /// Adds `token` to the allowlist of accepted SAC token contracts.
+    ///
+    /// When the allowlist is non-empty, only listed tokens can be used in
+    /// `create_vesting_stream`. An empty allowlist enables permissive mode
+    /// (all tokens accepted) for backward compatibility.
+    ///
+    /// # Arguments
+    /// * `admin` – Must authorise this call.
+    /// * `token` – SAC token address to add.
+    ///
+    /// # Events
+    /// Emits `AllowlistUpdated { token, added: true }`.
+    pub fn add_allowed_token(
+        env: Env,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        storage::add_allowed_token(&env, &token);
+        events::emit_allowlist_updated(&env, &admin, &token, true);
+        Ok(())
+    }
+
+    /// Removes `token` from the allowlist.
+    ///
+    /// If the resulting allowlist is empty the contract reverts to permissive
+    /// mode, accepting all tokens.
+    ///
+    /// # Arguments
+    /// * `admin` – Must authorise this call.
+    /// * `token` – SAC token address to remove.
+    ///
+    /// # Events
+    /// Emits `AllowlistUpdated { token, added: false }`.
+    pub fn remove_allowed_token(
+        env: Env,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        storage::remove_allowed_token(&env, &token);
+        events::emit_allowlist_updated(&env, &admin, &token, false);
+        Ok(())
+    }
+
+    /// Returns all currently allowed token addresses.
+    ///
+    /// An empty `Vec` means permissive mode (all tokens accepted).
+    pub fn get_allowed_tokens(env: Env) -> soroban_sdk::Vec<Address> {
+        storage::get_allowed_tokens(&env)
+    }
+
     // ── Admin / Sponsor ───────────────────────────────────────────────────────
 
     /// Sets `admin` as the contract's admin. Must be called once, before any
@@ -118,6 +174,11 @@ impl VestingDrips {
         total_duration: u32,
         metadata: Option<String>,
     ) -> Result<(), VestingError> {
+        // Bump instance storage TTL on every interaction.
+        env.storage()
+            .instance()
+            .extend_ttl(259_200, 518_400);
+
         // ── Validation ────────────────────────────────────────────────────────
         if sponsor == recipient {
             return Err(VestingError::InvalidRecipient);
@@ -173,8 +234,9 @@ impl VestingDrips {
             .map_err(|_| VestingError::TransferFailed)?;
 
         // ── Persist schedule ──────────────────────────────────────────────────
+        // `version` starts at 1 (Issue #318) and is placed last in the struct
+        // for XDR forward-compatibility.
         let schedule = VestingSchedule {
-            version: 1,
             token: token.clone(),
             sponsor: sponsor.clone(),
             rate_per_ledger: rate,
@@ -218,11 +280,10 @@ impl VestingDrips {
     /// * `recipient` – The recipient whose schedule should be migrated.
     ///
     /// # Errors
-    /// * `Unauthorized`     – Caller is not the designated admin.
     /// * `ScheduleNotFound` – No schedule exists for `recipient`.
     ///
     /// # Idempotency
-    /// Calling this on a schedule that already has `version = 1` is a no-op
+    /// Calling this on a schedule that already has `version >= 1` is a no-op
     /// (returns `Ok(())` without writing to storage).
     pub fn migrate_schedule(
         env: Env,
@@ -230,13 +291,6 @@ impl VestingDrips {
         recipient: Address,
     ) -> Result<(), VestingError> {
         admin.require_auth();
-
-        // Only the contract's own address is accepted as admin.
-        // Callers that are not the contract itself are rejected.
-        if admin != env.current_contract_address() {
-            // Allow any authorised admin in tests (mock_all_auths strips this).
-            // In production, replace with a stored admin key check if needed.
-        }
 
         let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
@@ -258,8 +312,12 @@ impl VestingDrips {
     /// by `recipient` only if the cliff has been passed; otherwise the
     /// entire deposit is refunded to `sponsor`.
     ///
+    /// The schedule's `version` counter is incremented before removal so
+    /// that off-chain indexers can detect that a mutation occurred.
+    ///
     /// # Errors
     /// * `ScheduleNotFound` – No stream exists for `recipient`.
+    /// * `VersionOverflow`  – `version` counter is already at `u32::MAX`.
     pub fn cancel_stream(
         env: Env,
         sponsor: Address,
@@ -267,8 +325,11 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule =
+        let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        // Increment version before any state mutation (Issue #318).
+        schedule.increment_version()?;
 
         let current_ledger = env.ledger().sequence();
         let token_client = token::Client::new(&env, &schedule.token);
@@ -476,12 +537,20 @@ impl VestingDrips {
     /// On first claim after the cliff, all tokens accrued from `start_ledger`
     /// are released in a single transfer, then streaming continues linearly.
     ///
+    /// The schedule's `version` counter is incremented on every successful claim.
+    ///
     /// # Errors
     /// * `ScheduleNotFound` – No stream exists for `recipient`.
     /// * `CliffNotReached`  – Current ledger < `cliff_ledger`.
     /// * `NothingToClaim`   – Claimable amount is zero.
+    /// * `VersionOverflow`  – `version` counter is already at `u32::MAX`.
     pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
         recipient.require_auth();
+
+        // Bump instance storage TTL on every interaction.
+        env.storage()
+            .instance()
+            .extend_ttl(259_200, 518_400);
 
         let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
@@ -500,6 +569,9 @@ impl VestingDrips {
         if claimable_amount == 0 {
             return Err(VestingError::NothingToClaim);
         }
+
+        // Increment version before state mutation (Issue #318).
+        schedule.increment_version()?;
 
         // Transfer tokens to recipient before mutating storage so that a
         // transfer failure leaves the schedule intact.
@@ -670,6 +742,7 @@ impl VestingDrips {
         })
     }
 }
+
 /// Computes the full deposit for a stream.
 ///
 /// The exact safe boundary is `rate <= i128::MAX / total_duration`; the
