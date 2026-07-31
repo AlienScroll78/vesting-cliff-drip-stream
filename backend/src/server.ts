@@ -7,6 +7,9 @@ import { scheduleCleanupJob } from "./jobs/streamCleanup.js";
 import { startAdminServer } from "./admin/server.js";
 import { healthHandler, readyHandler } from "./routes/health.js";
 import { sponsorAnalyticsHandler } from "./routes/analytics.js";
+import { vestingRouter } from "./routes/vesting.js";
+import { attachWebSocketServer } from "./ws.js";
+import { startIndexer } from "./indexer.js";
 
 const app = express();
 app.use(express.json());

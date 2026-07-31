@@ -1,0 +1,22 @@
+{{- if .Values.canary.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "vesting-backend.fullname" . }}-error-rate
+  labels:
+    {{- include "vesting-backend.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: http-5xx-error-rate
+      interval: 1m
+      count: 5
+      failureLimit: 1
+      successCondition: result[0] <= {{ .Values.canary.analysis.maxErrorRate }}
+      provider:
+        prometheus:
+          address: {{ required "canary.analysis.prometheusAddress is required when canary is enabled" .Values.canary.analysis.prometheusAddress | quote }}
+          query: |
+            sum(rate(http_requests_total{app_kubernetes_io_name="{{ include "vesting-backend.name" . }}",status=~"5.."}[2m]))
+            /
+            clamp_min(sum(rate(http_requests_total{app_kubernetes_io_name="{{ include "vesting-backend.name" . }}"}[2m])), 1)
+{{- end }}

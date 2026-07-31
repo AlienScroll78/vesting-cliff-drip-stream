@@ -1,3 +1,9 @@
+// `#[contracterror]` emits an inherent `impl VestingError { spec_xdr() }` with
+// no doc comment of its own; rustc doesn't propagate item-level `#[allow]`
+// onto attribute-macro-generated sibling impls, so the allow has to be
+// module-scoped here.
+#![allow(missing_docs)]
+
 use soroban_sdk::contracterror;
 
 /// All error codes returned by the VestingDrips contract.
@@ -56,16 +62,23 @@ pub enum VestingError {
     /// drain delay begins. Call this only after `end_ledger` has passed.
     StreamNotExpired = 8,
 
-    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    /// **Code 9** — A token transfer call failed.
+    ///
+    /// The underlying SAC `transfer` invocation was rejected by the token
+    /// contract (e.g. frozen account, insufficient balance, or other token-
+    /// level restriction). No state has been mutated when this error is returned.
+    TransferFailed = 9,
+
+    /// **Code 11** — The emergency-drain delay period has not yet elapsed.
     ///
     /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
     /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
-    DrainDelayNotExpired = 9,
+    DrainDelayNotExpired = 10,
 
-    /// **Code 10** — The sponsor and recipient addresses are identical.
+    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
     ///
-    /// A stream where the sponsor and recipient are the same address would allow
-    /// the sponsor to deposit and immediately reclaim tokens by "claiming" them,
-    /// which defeats the purpose of the vesting lock.
-    InvalidRecipient = 10,
+    /// A sponsor creating a stream to themselves is almost certainly a mistake
+    /// and would produce confusing behaviour in `cancel_stream` (the same
+    /// address would be both the refund target and the earned-tokens target).
+    InvalidRecipient = 11,
 }

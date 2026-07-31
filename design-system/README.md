@@ -7,9 +7,20 @@ A lightweight design system for any frontend built on top of this contract.
 ```
 design-system/
 ├── tokens/
-│   └── tokens.css          # All design tokens (CSS custom properties)
+│   ├── tokens.css          # All design tokens (CSS custom properties)
+│   └── typography.css      # Fluid type scale using clamp() — issue #384
 └── components/
     └── components.css      # Component styles consuming the tokens
+```
+
+## Import order
+
+Always import in this order so components can resolve all token references:
+
+```css
+@import 'design-system/tokens/tokens.css';
+@import 'design-system/tokens/typography.css';
+@import 'design-system/components/components.css';
 ```
 
 ## Tokens
@@ -32,9 +43,38 @@ Import `tokens/tokens.css` first in your stylesheet or entry point.
 
 ### Typography scale
 
-Sizes: `xs` (12) · `sm` (14) · `base` (16) · `lg` (18) · `xl` (20) · `2xl` (24) · `3xl` (30)
+Sizes (fluid — all use `clamp()`, no media queries):
 
-Weights: `normal` 400 · `medium` 500 · `semibold` 600 · `bold` 700
+| Token | Min | Max | Usage |
+|---|---|---|---|
+| `--font-size-fluid-xs` | 11px | 12px | Labels, captions |
+| `--font-size-fluid-sm` | 13px | 14px | Secondary text, badges |
+| `--font-size-fluid-base` | 16px | 18px | Body text |
+| `--font-size-fluid-lg` | 18px | 20px | Sub-headings, card titles |
+| `--font-size-fluid-xl` | 20px | 24px | Section headings (h4) |
+| `--font-size-fluid-2xl` | 24px | 30px | Page sub-headings (h3) |
+| `--font-size-fluid-3xl` | 30px | 38px | Page headings (h2) |
+| `--font-size-fluid-4xl` | 36px | 48px | Hero / display (h1) |
+
+Convenience aliases in `tokens.css`:
+
+| Alias | Maps to | Notes |
+|---|---|---|
+| `--font-size-body` | `fluid-base` | 16→18px; use for all body text |
+| `--font-size-body-lg` | `fluid-lg` | 18→20px; card headers |
+| `--font-size-label` | `fluid-sm` | 13→14px; form labels |
+| `--font-size-caption` | `fluid-xs` | 11→12px; helper text |
+
+Body text line-height: `1.6` (`--line-height-base`).  
+Maximum line length: `72ch` (`--measure-body`).
+
+Font stacks:
+- **Body:** `-apple-system, BlinkMacSystemFont, 'Segoe UI', …` — system font, zero latency
+- **Mono:** `'JetBrains Mono', 'Fira Code', …` — for addresses, ledger numbers, tx hashes
+
+Numeric rendering: `font-variant-numeric: tabular-nums` on all amount/address elements.
+
+Weights: `normal` 400 · `medium` 500 · `semibold` 600 · `bold` 700 · `extrabold` 800
 
 ### Spacing (4-point grid)
 

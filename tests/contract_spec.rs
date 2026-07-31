@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use stellar_xdr::curr::{ReadXdr, ScSpecEntry, ScSpecTypeDef, Limits};
+use stellar_xdr::curr::{Limits, ReadXdr, ScSpecEntry, ScSpecTypeDef};
 use wasmparser::{Parser, Payload};
 
 // ── WASM path ────────────────────────────────────────────────────────────────
@@ -35,7 +35,14 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
     m.insert(
         "create_vesting_stream",
         Expect {
-            inputs: &["sponsor", "recipient", "token", "rate", "cliff_duration", "total_duration"],
+            inputs: &[
+                "sponsor",
+                "recipient",
+                "token",
+                "rate",
+                "cliff_duration",
+                "total_duration",
+            ],
             has_output: true,
         },
     );
@@ -125,7 +132,10 @@ fn function_entries() -> HashMap<String, stellar_xdr::curr::ScSpecFunctionV0> {
 fn all_expected_functions_are_present() {
     let fns = function_entries();
     for name in expected_schema().keys() {
-        assert!(fns.contains_key(*name), "missing function in contract spec: `{name}`");
+        assert!(
+            fns.contains_key(*name),
+            "missing function in contract spec: `{name}`"
+        );
     }
 }
 
@@ -147,7 +157,9 @@ fn function_input_params_match() {
     let fns = function_entries();
 
     for (name, expect) in &schema {
-        let f = fns.get(*name).unwrap_or_else(|| panic!("function `{name}` not in spec"));
+        let f = fns
+            .get(*name)
+            .unwrap_or_else(|| panic!("function `{name}` not in spec"));
 
         // Check parameter count.
         assert_eq!(
@@ -160,8 +172,8 @@ fn function_input_params_match() {
 
         // Check parameter names in order.
         for (i, &expected_name) in expect.inputs.iter().enumerate() {
-            let actual = String::from_utf8(f.inputs[i].name.0.to_vec())
-                .expect("non-UTF8 param name");
+            let actual =
+                String::from_utf8(f.inputs[i].name.0.to_vec()).expect("non-UTF8 param name");
             assert_eq!(
                 actual, expected_name,
                 "function `{name}` param[{i}]: expected `{expected_name}`, got `{actual}`"
@@ -176,7 +188,9 @@ fn function_outputs_match() {
     let fns = function_entries();
 
     for (name, expect) in &schema {
-        let f = fns.get(*name).unwrap_or_else(|| panic!("function `{name}` not in spec"));
+        let f = fns
+            .get(*name)
+            .unwrap_or_else(|| panic!("function `{name}` not in spec"));
 
         if expect.has_output {
             assert!(
