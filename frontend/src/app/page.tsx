@@ -11,10 +11,12 @@ import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CopyButton } from "@/components/CopyButton";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { VestingTimeline } from "@/components/VestingTimeline";
+import { StreamComparisonView } from "@/components/StreamComparisonView";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { formatAmount, abbreviateAmount } from "@/utils/formatAmount";
@@ -149,7 +151,7 @@ function StreamList() {
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
-                  {abbreviateAmount(s.claimableAmount)} {s.token}
+                  <AnimatedNumber value={s.claimableAmount} format={abbreviateAmount} /> {s.token}
                 </div>
                 <div style={{ display: "flex", gap: "0.4rem" }}>
                   {s.startLedger && s.cliffLedger && s.endLedger && (
@@ -167,7 +169,7 @@ function StreamList() {
                   {s.status === "active" && (
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className={`btn btn-primary${s.claimableAmount > 0 ? " btn-pulse" : ""}`}
                       style={{ padding: "0.35rem 1rem" }}
                       onClick={() => setClaimTarget(s)}
                       data-testid={`claim-btn-${s.id}`}
@@ -176,16 +178,6 @@ function StreamList() {
                     </button>
                   )}
                 </div>
-                {s.status === "active" && (
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: "0.4rem" }}
-                    onClick={() => setClaimTarget(s)}
-                    data-testid={`claim-btn-${s.id}`}
-                  >
-                    {t("claim")}
-                  </button>
-                )}
               </div>
             </div>
 
@@ -240,6 +232,7 @@ function StreamList() {
 export default function Home() {
   const { t } = useTranslation();
   const { showCreate, setShowCreate } = useSponsorDashboard();
+  const [showCompare, setShowCompare] = useState(false);
 
   return (
     <TxProvider>
@@ -257,17 +250,37 @@ export default function Home() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
           <StatusLegend />
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ whiteSpace: "nowrap" }}
-            onClick={() => setShowCreate((v) => !v)}
-            aria-expanded={showCreate}
-            data-testid="toggle-create-form"
-          >
-            {showCreate ? "✕ Cancel" : "+ New Stream"}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ whiteSpace: "nowrap", fontSize: "0.875rem" }}
+              onClick={() => setShowCompare(true)}
+              data-testid="open-compare"
+              aria-label="Compare streams side by side"
+            >
+              ⇄ Compare Streams
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ whiteSpace: "nowrap" }}
+              onClick={() => setShowCreate((v) => !v)}
+              aria-expanded={showCreate}
+              data-testid="toggle-create-form"
+            >
+              {showCreate ? "✕ Cancel" : "+ New Stream"}
+            </button>
+          </div>
         </div>
+
+        {/* Stream comparison modal */}
+        {showCompare && (
+          <StreamComparisonView
+            streams={MOCK_STREAMS}
+            onClose={() => setShowCompare(false)}
+          />
+        )}
 
         {showCreate && (
           <section

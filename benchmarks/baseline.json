@@ -1,0 +1,84 @@
+{
+  "$schema": "./baseline.schema.json",
+  "description": "Performance baselines for the vesting-cliff-drip-stream contract. All values are upper bounds. CI fails if any metric exceeds threshold * (1 + regression_threshold). Update this file via a PR with a written justification in the PR description.",
+  "updated": "2026-07-26",
+  "regression_threshold": 0.10,
+  "wasm_instruction_counts": {
+    "_note": "CPU instruction counts measured by the Soroban host-side budget API (env.budget().cpu_instruction_cost()) running Rust natively. WASM counts are typically 2-5x higher. These baselines reflect Rust-native test execution and should be updated after any significant contract logic change.",
+    "create_vesting_stream": {
+      "cpu_instructions": 2500000,
+      "memory_bytes": 600000
+    },
+    "claim_vested_at_cliff": {
+      "cpu_instructions": 3000000,
+      "memory_bytes": 700000
+    },
+    "claim_vested_mid_stream": {
+      "cpu_instructions": 2800000,
+      "memory_bytes": 650000
+    },
+    "cancel_stream_before_cliff": {
+      "cpu_instructions": 2800000,
+      "memory_bytes": 650000
+    },
+    "cancel_stream_after_cliff": {
+      "cpu_instructions": 3200000,
+      "memory_bytes": 720000
+    },
+    "get_schedule": {
+      "cpu_instructions": 800000,
+      "memory_bytes": 200000
+    },
+    "claimable_amount_before_cliff": {
+      "cpu_instructions": 900000,
+      "memory_bytes": 220000
+    },
+    "claimable_amount_after_cliff": {
+      "cpu_instructions": 950000,
+      "memory_bytes": 230000
+    },
+    "is_cliff_passed": {
+      "cpu_instructions": 800000,
+      "memory_bytes": 200000
+    },
+    "get_min_deposit": {
+      "cpu_instructions": 600000,
+      "memory_bytes": 150000
+    }
+  },
+  "http_response_times": {
+    "_note": "p99 latency in milliseconds measured by autocannon against a local Soroban RPC node (quickstart). These are expected in CI against the Docker-based local node started in the performance workflow. Not measured against public testnet.",
+    "health_check": {
+      "p50_ms": 5,
+      "p95_ms": 20,
+      "p99_ms": 50
+    },
+    "rpc_getHealth": {
+      "p50_ms": 10,
+      "p95_ms": 40,
+      "p99_ms": 100
+    },
+    "rpc_getLatestLedger": {
+      "p50_ms": 15,
+      "p95_ms": 60,
+      "p99_ms": 150
+    },
+    "rpc_simulateTransaction": {
+      "p50_ms": 200,
+      "p95_ms": 600,
+      "p99_ms": 1200
+    },
+    "rpc_sendTransaction": {
+      "p50_ms": 300,
+      "p95_ms": 900,
+      "p99_ms": 2000
+    }
+  },
+  "lighthouse": {
+    "_note": "Lighthouse scores are 0-100. CI fails if any score drops below the threshold. Scores are measured against a production build served locally.",
+    "performance": 85,
+    "accessibility": 95,
+    "best_practices": 90,
+    "seo": 80
+  }
+}

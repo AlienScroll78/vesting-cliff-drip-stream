@@ -14,7 +14,7 @@ Each ADR documents the context that forced a decision, what was decided, and the
 | [0003](0003-cliff-math-catchup-claim.md) | Cliff Math and Catch-Up Claim | Accepted |
 | [0004](0004-error-code-numbering.md) | Error Code Numbering | Accepted |
 | [0005](0005-ttl-persistent-storage-strategy.md) | TTL and Persistent Storage Strategy | Accepted |
-| [0006](0006-i128-rate-type-detailed.md) | i128 as the Rate and Token Amount Type | Accepted |
+| [0006](0006-checked-arithmetic-strategy.md) | Checked Arithmetic Strategy and Overflow Boundary Documentation | Accepted |
 
 ## Adding a New ADR
 
