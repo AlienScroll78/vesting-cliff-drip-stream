@@ -81,4 +81,11 @@ pub enum VestingError {
     /// and would produce confusing behaviour in `cancel_stream` (the same
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
+
+    /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
+    ///
+    /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
+    /// value before retrying. Do not store sensitive data in metadata as it
+    /// is persisted on-chain and publicly visible.
+    MetadataTooLong = 20,
 }

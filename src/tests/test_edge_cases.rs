@@ -31,10 +31,10 @@ fn test_multiple_independent_streams() {
     let (token_id, tc) = setup_token(&env, &sponsor, 5_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &200, &None)
         .unwrap();
     client
-        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200)
+        .create_vesting_stream(&sponsor, &recipient_b, &token_id, &15, &20, &200, &None)
         .unwrap();
 
     advance_ledger(&env, 70);
@@ -184,7 +184,7 @@ fn test_ttl_bumped_on_write() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // PERSISTENT_BUMP_AMOUNT = 518_400; TTL doesn't include the current ledger,
@@ -219,7 +219,7 @@ fn test_ttl_bumped_on_read() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // Advance 200_000 ledgers without any contract interaction.
@@ -319,7 +319,7 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // Advance exactly 518_399 ledgers — TTL hits 0 (archived state).
