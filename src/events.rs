@@ -116,7 +116,11 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
-        refunded_amount,
+        (
+            sponsor.clone(),
+            refunded_to_sponsor,
+            released_to_recipient,
+        ),
     );
 }
 
