@@ -5,12 +5,18 @@
 
 # Container image
 image:
-  repository: ghcr.io/your-org/vesting-backend
+  repository: ghcr.io/your-org/vesting-cliff-drip-stream
   tag: "1.0.0"
+  # digest pins the exact image content and takes precedence over tag when set.
+  # Format: sha256:<64-hex-chars>  (populated automatically by pin-image-digest.sh)
+  digest: ""
   pullPolicy: IfNotPresent
 
 # Number of replicas (overridden by HPA when enabled)
 replicaCount: 1
+
+# Annotations applied to every pod (e.g. reloader.stakater.com/auto: "true")
+podAnnotations: {}
 
 # Port the Node.js backend listens on (process.env.PORT)
 appPort: 3001
@@ -46,6 +52,35 @@ hpa:
   minReplicas: 1
   maxReplicas: 5
   targetCPUUtilizationPercentage: 70
+
+# PodDisruptionBudget — set minAvailable or maxUnavailable to control
+# availability during voluntary disruptions (node drains, rolling updates).
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Requires Argo Rollouts and the ingress-nginx traffic-routing plugin. The
+# rollout automatically aborts and returns traffic to stable on failed
+# Prometheus error-rate analysis.
+canary:
+  enabled: false
+  steps:
+    initialWeight: 10
+    initialPause: 5m
+    secondWeight: 25
+    secondPause: 10m
+  analysis:
+    prometheusAddress: ""
+    maxErrorRate: 0.02
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    labels:
+      release: prometheus
+    path: /metrics
+    interval: 30s
 
 # ServiceAccount — set create: true to have the chart manage it,
 # or set name to an existing SA (e.g. one with an IRSA annotation).
@@ -102,3 +137,31 @@ externalSecret:
     SPONSOR_SECRET_KEY:
       remoteKey: vesting/production/app-secrets
       property: sponsor_secret_key
+    JWT_SECRET:
+      remoteKey: vesting/production/app-secrets
+      property: jwt_secret
+    HORIZON_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: horizon_api_key
+
+# ── Event Worker ────────────────────────────────────────────────────────────
+# Separate deployment for the background event-indexing worker.  Reuses the
+# same container image with a different command/args entrypoint.
+eventWorker:
+  enabled: true
+  replicaCount: 1
+  # Command override (if the image supports multiple entrypoints)
+  # command: ["node", "dist/worker.js"]
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+  podAnnotations: {}
