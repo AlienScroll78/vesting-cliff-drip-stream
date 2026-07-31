@@ -7,12 +7,9 @@ import { scheduleCleanupJob } from "./jobs/streamCleanup.js";
 import { startAdminServer } from "./admin/server.js";
 import { healthHandler, readyHandler } from "./routes/health.js";
 import { sponsorAnalyticsHandler } from "./routes/analytics.js";
-// #288 — Auth v1 routes (JWT + Stellar keypair)
-import { authRouterV1 } from "./routes/authV1.js";
-// #289 — Paginated schedules
-import { schedulesRouter } from "./routes/schedules.js";
-// #287 — Horizon event ingestion worker
-import { startHorizonWorker, getHorizonWorker } from "./workers/horizonWorker.js";
+import { vestingRouter } from "./routes/vesting.js";
+import { attachWebSocketServer } from "./ws.js";
+import { startIndexer } from "./indexer.js";
 
 const app = express();
 app.use(express.json());
