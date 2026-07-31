@@ -1,0 +1,95 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  validate:
+    name: Validate & format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: terraform fmt
+        run: terraform fmt -recursive -check
+
+      - name: terraform init
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        run: terraform validate
+
+  plan:
+    name: Plan (staging)
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=vesting-tf-state" \
+            -backend-config="key=vesting/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="dynamodb_table=vesting-tf-locks"
+
+      - name: terraform workspace
+        run: terraform workspace new staging 2>/dev/null || terraform workspace select staging
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform plan \
+            -var-file="envs/staging.tfvars" \
+            -var="db_password=dummy-ci-password" \
+            -no-color \
+            -out=tfplan
+        continue-on-error: true
+
+      - name: Post plan to PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('terraform/tfplan', 'utf8');
+            const lines = output.split('\n').slice(-50).join('\n');
+            const comment = `## Terraform Plan (staging)\n\n\`\`\`\n${lines}\n\`\`\`\n`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

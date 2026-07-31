@@ -1,4 +1,4 @@
-use soroban_sdk::{symbol_short, Address, Env, Symbol};
+use soroban_sdk::{symbol_short, Address, Env, String, Symbol};
 
 /// Emitted when a new vesting stream is created.
 ///
@@ -13,6 +13,7 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
+    metadata: &Option<String>,
 ) {
     env.events().publish(
         (symbol_short!("vc_create"), recipient.clone()),
@@ -23,6 +24,7 @@ pub fn emit_stream_created(
             start_ledger,
             cliff_ledger,
             end_ledger,
+            metadata.clone(),
         ),
     );
 }

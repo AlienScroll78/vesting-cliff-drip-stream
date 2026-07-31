@@ -149,6 +149,47 @@ Admins can merge without a review in exceptional circumstances (incident hotfix,
 
 ---
 
+## Stellar Wave Program
+
+This repository participates in the **[Stellar Wave Program](docs/stellar-wave.md)** — a monthly one-week contribution sprint run by the [Stellar Development Foundation](https://stellar.org/foundation) via [Drips Wave](https://drips.network/wave). Contributors earn a share of a reward pool for resolving labelled issues.
+
+### Finding Wave issues
+
+Issues in scope for the current Wave carry the **`Stellar Wave`** label. Browse them directly:
+
+```
+https://github.com/AlienScroll78/vesting-cliff-drip-stream/labels/Stellar%20Wave
+```
+
+Or discover issues across all participating repos on the [Drips Wave Explore page](https://drips.network/wave).
+
+### Quick-start for contributors
+
+1. Complete **KYC** in [Settings → Profile](https://drips.network/wave) on the Drips Wave app (required before applying).
+2. Find an issue with the `Stellar Wave` label and click **Apply** in the app with a short message.
+3. Wait to be assigned — do not start coding until the maintainer assigns you.
+4. Open a PR against `main` following the standard workflow above.
+5. Include `Closes #<issue-number>` in your PR description — this is how Points are allocated.
+6. After the Wave ends, withdraw your rewards from the Drips Wave app.
+
+### Points and rewards
+
+| Complexity | Points |
+|------------|--------|
+| Trivial    | 100    |
+| Medium     | 150    |
+| High       | 200    |
+
+Your payout = `(your points / total points in wave) × reward budget`.
+
+### The `Stellar Wave` label
+
+The label is applied by **maintainers only**, either through the Drips Wave app or directly on GitHub. Do not add or remove it yourself.
+
+For the full details — qualifying criteria, submission requirements, application limits, and FAQ — see **[docs/stellar-wave.md](docs/stellar-wave.md)**.
+
+---
+
 ## Security Issues
 
 Please **do not** open a public issue for security vulnerabilities. See [SECURITY.md](SECURITY.md) for the responsible-disclosure process.

@@ -11,6 +11,7 @@ import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CopyButton } from "@/components/CopyButton";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
@@ -150,7 +151,7 @@ function StreamList() {
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
-                  {abbreviateAmount(s.claimableAmount)} {s.token}
+                  <AnimatedNumber value={s.claimableAmount} format={abbreviateAmount} /> {s.token}
                 </div>
                 <div style={{ display: "flex", gap: "0.4rem" }}>
                   {s.startLedger && s.cliffLedger && s.endLedger && (

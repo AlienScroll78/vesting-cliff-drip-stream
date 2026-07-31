@@ -1,7 +1,6 @@
 # Vesting Cliff Drip Stream
 
-[![Pipeline](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml)
-[![CI](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-green?logo=rust)](docs/coverage/html/index.html)
 
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
 
