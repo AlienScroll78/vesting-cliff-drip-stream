@@ -3,30 +3,28 @@
 // attribute-macro-generated sibling impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contracttype, Address};
+use soroban_sdk::{contracttype, Address, Vec};
 
 /// Represents a single vesting schedule stored per recipient.
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
 ///
-/// ## Schema versioning
+/// ## Mutation versioning (Issue #318)
 ///
-/// The `version` field guards against future deserialization mismatches.
-/// All schedules created by the current contract code carry `version = 1`.
-/// Schedules written before this field was introduced have an implicit
-/// `version = 0` (XDR default for a missing `u32`).  Use
-/// `migrate_schedule` to upgrade old entries in-place.
+/// The `version` field is a monotonically increasing mutation counter that
+/// provides an on-chain audit trail.  It is initialised to `1` at stream
+/// creation and incremented atomically on every state-changing operation
+/// (cancel, claim, transfer, etc.).  Overflow to `u32::MAX` returns
+/// [`VestingError::VersionOverflow`] rather than wrapping.
+///
+/// The field is placed **last** in the struct so that XDR-encoded storage
+/// entries written before this field was introduced (which omit it) decode
+/// with an implicit default of `0`, allowing `migrate_schedule` to upgrade
+/// them in-place.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub struct VestingSchedule {
-    /// Schema version for forward-compatibility.
-    ///
-    /// | Value | Meaning                          |
-    /// |-------|----------------------------------|
-    /// | `0`   | Legacy – written before versioning was added |
-    /// | `1`   | Current – all fields present     |
-    pub version: u32,
-
     /// The token being streamed.
     pub token: Address,
 
@@ -54,6 +52,82 @@ pub struct VestingSchedule {
     /// Initialised to `0` on stream creation and incremented on every successful claim.
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
+
+    /// Optional free-form metadata attached at stream creation (max 256 bytes, UTF-8).
+    ///
+    /// Stored on-chain and returned by `get_schedule`. Immutable after creation.
+    /// Empty string is normalised to `None` at creation time.
+    ///
+    /// ⚠️  Metadata is publicly visible on-chain. Do **not** store sensitive
+    /// or personally-identifiable information here.
+    ///
+    /// Schedules created before this field was introduced will deserialise
+    /// with `metadata = None` (XDR default for a missing `Option`).
+    pub metadata: Option<String>,
+}
+
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
+    pub total_deposit: i128,
+
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
+    pub claimed_so_far: i128,
+
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    /// Example: `5000` = 50.00 %.
+    pub percent_vested_bps: u32,
+
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
+}
+
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
+    pub total_deposit: i128,
+
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
+    pub claimed_so_far: i128,
+
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    /// Example: `5000` = 50.00 %.
+    pub percent_vested_bps: u32,
+
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
 }
 
 /// Analytics snapshot for a single vesting stream.
@@ -91,12 +165,25 @@ pub struct StreamInfo {
 /// Storage key variants used for keying contract data.
 #[contracttype]
 #[derive(Clone)]
+#[allow(missing_docs)]
 pub enum DataKey {
-    /// Per-recipient vesting schedule.
+    /// Per-recipient vesting schedule (fixed rate).
     Schedule(Address),
+
+    /// Per-recipient variable-rate vesting schedule.
+    VariableSchedule(Address),
 
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,
+
+    /// Storage key for configured contract admin address.
+    Admin,
+
+    /// Storage key for configured fee basis points (0-500).
+    FeeBps,
+
+    /// Storage key for configured protocol treasury address.
+    Treasury,
 }
 
 /// Human-readable status of a vesting stream.
@@ -112,6 +199,7 @@ pub enum DataKey {
 /// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub enum StreamStatus {
     /// Cliff has not yet been reached; no tokens can be claimed.
     PreCliff,
