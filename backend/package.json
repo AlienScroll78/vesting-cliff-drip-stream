@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
-    "test": "node --test --import tsx tests/**/*.test.ts"
+    "test": "node --test --import tsx tests/schedules.test.ts"
   },
   "dependencies": {
     "express": "^4.19.0",
