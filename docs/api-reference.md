@@ -10,12 +10,8 @@ Ledger sequences are `u32` values from `env.ledger().sequence()`.
 
 ## Table of Contents
 
-- [Admin Functions](#admin-functions)
-  - [initialize](#initialize)
-  - [upgrade](#upgrade)
-  - [transfer_admin](#transfer_admin)
-  - [set_min_deposit](#set_min_deposit)
-- [Sponsor Functions](#sponsor-functions)
+- [HTTP API](#http-api)
+- [Mutating Functions](#mutating-functions)
   - [create_vesting_stream](#create_vesting_stream)
   - [cancel_stream](#cancel_stream)
   - [clawback_stream](#clawback_stream)
@@ -42,252 +38,40 @@ Ledger sequences are `u32` values from `env.ledger().sequence()`.
 
 ---
 
-## Admin Functions
+## HTTP API
 
-### `initialize`
+### GET /api/v1/schedules/:recipient
 
-Sets the contract admin. Must be called once before any upgrade or admin-transfer operations.
+Returns the full vesting schedule for a Stellar recipient address, including computed fields for the current ledger.
 
-**Auth required:** `admin` (the address being set as admin must sign)
+**Behavior**
+- Returns `200` with a `VestingScheduleResponse` payload when the schedule exists.
+- Returns `404` when no schedule exists for the recipient.
+- Returns `400` for invalid Stellar addresses.
+- Applies a `60 req/min` rate limit per IP.
+- Caches responses for approximately 3 seconds based on the current ledger time.
 
-#### Signature
+**Response shape**
 
-```rust
-pub fn initialize(
-    env: Env,
-    admin: Address,
-) -> Result<(), VestingError>
+```json
+{
+  "recipient": "G...",
+  "token": "C...",
+  "rate_per_ledger": 10,
+  "start_ledger": 1000,
+  "cliff_ledger": 1100,
+  "end_ledger": 2000,
+  "last_claimed_ledger": 1000,
+  "claimable_amount": 100,
+  "is_cliff_passed": true
+}
 ```
 
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `admin` | `Address` | The address to set as contract admin |
-
-#### Returns
-
-`Result<(), VestingError>` — `Ok(())` on success
-
-#### Errors
-
-| Code | Name | Condition |
-|---|---|---|
-| 12 | `AlreadyInitialized` | An admin has already been set |
-
-#### Rust Example
-
-```rust
-use soroban_sdk::{Address, Env};
-
-let env = Env::default();
-let admin = Address::from_string(&String::from_str(&env, "GADMIN..."));
-
-client.initialize(&admin)?;
-```
-
-#### CLI Example
-
-```bash
-stellar contract invoke \
-  --id "$VESTING_CONTRACT" \
-  --source "$ADMIN" \
-  --network testnet \
-  -- \
-  initialize \
-  --admin "$ADMIN"
-```
+The OpenAPI document is available in [docs/api.yaml](docs/api.yaml).
 
 ---
 
-### `upgrade`
-
-Upgrades the contract to new WASM code.
-
-**Auth required:** `admin`
-
-#### Signature
-
-```rust
-pub fn upgrade(
-    env: Env,
-    admin: Address,
-    new_wasm_hash: BytesN<32>,
-) -> Result<(), VestingError>
-```
-
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `admin` | `Address` | Current admin address; must sign |
-| `new_wasm_hash` | `BytesN<32>` | SHA-256 hash of the new WASM binary |
-
-#### Returns
-
-`Result<(), VestingError>` — `Ok(())` on success
-
-#### Errors
-
-| Code | Name | Condition |
-|---|---|---|
-| 13 | `Unauthorized` | Caller is not the contract admin |
-
-#### Rust Example
-
-```rust
-use soroban_sdk::{Address, BytesN, Env};
-
-let env = Env::default();
-let admin = Address::from_string(&String::from_str(&env, "GADMIN..."));
-let new_wasm_hash = BytesN::from_array(&env, &[0u8; 32]);
-
-client.upgrade(&admin, &new_wasm_hash)?;
-```
-
-#### CLI Example
-
-```bash
-# First, install the new WASM
-stellar contract install \
-  --wasm target/wasm32-unknown-unknown/release/vesting_drips.wasm \
-  --network testnet \
-  --source "$ADMIN"
-
-# Capture the returned hash, then upgrade
-stellar contract invoke \
-  --id "$VESTING_CONTRACT" \
-  --source "$ADMIN" \
-  --network testnet \
-  -- \
-  upgrade \
-  --admin "$ADMIN" \
-  --new_wasm_hash "<hash-from-install>"
-```
-
----
-
-### `transfer_admin`
-
-Transfers admin authority to a new address.
-
-**Auth required:** `admin` (current admin must sign)
-
-#### Signature
-
-```rust
-pub fn transfer_admin(
-    env: Env,
-    admin: Address,
-    new_admin: Address,
-) -> Result<(), VestingError>
-```
-
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `admin` | `Address` | Current admin address; must sign |
-| `new_admin` | `Address` | New admin address |
-
-#### Returns
-
-`Result<(), VestingError>` — `Ok(())` on success
-
-#### Errors
-
-| Code | Name | Condition |
-|---|---|---|
-| 13 | `Unauthorized` | Caller is not the current admin |
-
-#### Rust Example
-
-```rust
-use soroban_sdk::{Address, Env};
-
-let env = Env::default();
-let admin = Address::from_string(&String::from_str(&env, "GADMIN..."));
-let new_admin = Address::from_string(&String::from_str(&env, "GNEWADMIN..."));
-
-client.transfer_admin(&admin, &new_admin)?;
-```
-
-#### CLI Example
-
-```bash
-stellar contract invoke \
-  --id "$VESTING_CONTRACT" \
-  --source "$ADMIN" \
-  --network testnet \
-  -- \
-  transfer_admin \
-  --admin "$ADMIN" \
-  --new_admin "$NEW_ADMIN"
-```
-
----
-
-### `set_min_deposit`
-
-Configures the minimum total deposit required for new streams.
-
-**Auth required:** `admin`
-
-#### Signature
-
-```rust
-pub fn set_min_deposit(
-    env: Env,
-    admin: Address,
-    min_deposit: i128,
-) -> Result<(), VestingError>
-```
-
-#### Parameters
-
-| Name | Type | Description | Constraints |
-|------|------|-------------|-------------|
-| `admin` | `Address` | Admin address; must sign | — |
-| `min_deposit` | `i128` | New minimum total deposit | Must be > 0 |
-
-#### Returns
-
-`Result<(), VestingError>` — `Ok(())` on success
-
-#### Errors
-
-| Code | Name | Condition |
-|---|---|---|
-| 4 | `InvalidRate` | `min_deposit` ≤ 0 |
-
-#### Rust Example
-
-```rust
-use soroban_sdk::{Address, Env};
-
-let env = Env::default();
-let admin = Address::from_string(&String::from_str(&env, "GADMIN..."));
-let min_deposit: i128 = 1_000_000; // 1 token with 6 decimals
-
-client.set_min_deposit(&admin, &min_deposit)?;
-```
-
-#### CLI Example
-
-```bash
-stellar contract invoke \
-  --id "$VESTING_CONTRACT" \
-  --source "$ADMIN" \
-  --network testnet \
-  -- \
-  set_min_deposit \
-  --admin "$ADMIN" \
-  --min_deposit 1000000
-```
-
----
-
-## Sponsor Functions
+## Mutating Functions
 
 ### `create_vesting_stream`
 
