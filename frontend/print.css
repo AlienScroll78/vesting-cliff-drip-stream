@@ -1,21 +1,136 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   print.css — Print / PDF export styles for Vesting Cliff Drip Stream
+   Referenced by: frontend/src/components/PrintButton.tsx
+                  frontend/src/components/VestingSchedulePrint.tsx
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Visibility helpers (apply in normal browser view too) ─────────────── */
+
+/**
+ * .no-print — elements that should be visible on screen but suppressed when
+ * printing (e.g. PrintButton, navigation controls, interactive widgets).
+ * The rule below is a no-op in normal view; the @media print block below
+ * overrides it to display: none !important.
+ */
+/* (no screen rule needed — elements are visible by default) */
+
+/**
+ * .print-only — elements that are hidden on screen and only shown when
+ * printing (e.g. VestingSchedulePrint).
+ */
+.print-only {
+  display: none;
+}
+
+/* ── PrintButton base styles ───────────────────────────────────────────── */
+.print-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.45rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: inherit;
+  transition: opacity 0.15s ease;
+}
+
+.print-btn:hover {
+  opacity: 0.75;
+}
+
+/* ── Print header (VestingSchedulePrint) ───────────────────────────────── */
+.print-header {
+  display: none; /* hidden on screen; shown in @media print below */
+}
+
+/* ── Print flow diagram ────────────────────────────────────────────────── */
+.print-flow {
+  display: none; /* hidden on screen */
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   @media print
+   ══════════════════════════════════════════════════════════════════════════ */
 @media print {
-  /* ── Hide non-content elements ── */
+  /* ── Hide non-content / interactive elements ─────────────────────────── */
+  .no-print,
   nav,
+  .header nav,
   .connect-btn,
   .subtitle,
   .cta-section,
-  button,
+  button:not([data-print-keep]),
+  input,
+  select,
+  textarea,
   #vesting-form,
-  input {
+  [role="dialog"],
+  [role="alertdialog"] {
     display: none !important;
   }
 
-  /* ── Reset page for paper ── */
+  /* ── Show print-only elements ────────────────────────────────────────── */
+  .print-only {
+    display: block !important;
+  }
+
+  .print-header {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .print-logo {
+    font-size: 14pt;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+  }
+
+  .print-meta {
+    font-size: 8pt;
+    color: #555;
+    text-align: right;
+  }
+
+  /* ── Show the text-art token flow ────────────────────────────────────── */
+  .print-flow {
+    display: block !important;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 7.5pt;
+    line-height: 1.4;
+    margin-top: 1.25rem;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    background: #fafafa;
+    white-space: pre;
+    overflow: visible;
+  }
+
+  /* ── Page setup ──────────────────────────────────────────────────────── */
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm;
+  }
+
+  /* First page has slightly more top room for the header */
+  @page :first {
+    margin-top: 1.25cm;
+  }
+
+  /* ── Reset body for paper ────────────────────────────────────────────── */
   body {
     background: #fff;
     color: #000;
-    font-family: Georgia, serif;
+    font-family: Georgia, "Times New Roman", serif;
     font-size: 11pt;
+    line-height: 1.5;
   }
 
   main {
@@ -29,7 +144,12 @@
     margin-bottom: 0.5rem;
   }
 
-  /* ── Always show schedule preview when printing ── */
+  h2 {
+    font-size: 13pt;
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Always force #schedule-preview to render ────────────────────────── */
   #schedule-preview {
     display: block !important;
     border: none;
@@ -37,43 +157,81 @@
     background: transparent;
   }
 
-  #schedule-preview h2 {
-    font-size: 13pt;
-    margin-bottom: 0.75rem;
+  /* ── Page break rules for multiple schedules ─────────────────────────── */
+
+  /* Each schedule section starts on its own page when there are multiple */
+  #schedule-preview + #schedule-preview,
+  .schedule-entry + .schedule-entry {
+    page-break-before: always;
+    break-before: page;
   }
 
-  /* ── Clean table ── */
+  /* Keep table rows together; avoid orphaned header rows */
+  table {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group; /* repeat header on every page */
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* Keep the pre flow-diagram on the same page as the table if possible */
+  .print-flow {
+    page-break-before: avoid;
+    break-before: avoid;
+  }
+
+  /* Avoid breaking inside the print header */
+  .print-header {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* ── Clean table ─────────────────────────────────────────────────────── */
   table {
     width: 100%;
     border-collapse: collapse;
     font-size: 10pt;
   }
 
-  th, td {
+  th,
+  td {
     border: 1px solid #999;
     padding: 5pt 8pt;
     text-align: left;
+    vertical-align: top;
   }
 
   th {
     background: #f0f0f0;
     font-weight: bold;
     color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  td { color: #000; }
+  td {
+    color: #000;
+  }
 
+  /* Monospace for blockchain addresses */
   .addr {
-    font-family: "Courier New", monospace;
+    font-family: "Courier New", Courier, monospace;
     font-size: 8pt;
     word-break: break-all;
   }
 
-  /* ── Footer with print date ── */
-  @page {
-    margin: 1.5cm;
-  }
-
+  /* ── Page footer with generation timestamp ───────────────────────────── */
   body::after {
     content: "Printed on " attr(data-print-date) " — Vesting Cliff Drip Stream";
     display: block;
@@ -83,5 +241,19 @@
     text-align: center;
     border-top: 1px solid #ccc;
     padding-top: 0.5rem;
+  }
+
+  /* ── Hyperlinks: show full URL in parentheses ────────────────────────── */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 7.5pt;
+    color: #444;
+    word-break: break-all;
+  }
+
+  /* Suppress URL suffix for internal anchors and mailto */
+  a[href^="#"]::after,
+  a[href^="mailto:"]::after {
+    content: "";
   }
 }
