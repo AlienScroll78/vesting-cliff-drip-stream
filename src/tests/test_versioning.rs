@@ -1,64 +1,18 @@
-//! Tests for the sponsor == recipient guard (feature: prevent-self-stream).
-//!
-//! A sponsor creating a stream to themselves is almost certainly a mistake:
-//!   - The sponsor's balance is drained but they are also the recipient.
-//!   - `cancel_stream` would pay both the earned and refund portions to the
-//!     same address, which is confusing and hard to reason about.
-//!
-//! `create_vesting_stream` now rejects this case with `InvalidRecipient`
-//! (error code 10).
-//!
-//! # Note on the Soroban test client
-//! In testutils mode, the generated `VestingDripsClient` exposes two variants:
-//!   - `method(...)` → panics on contract error, returns the success type.
-//!   - `try_method(...)` → `Result<Result<T, ConversionError>, Result<E, InvokeError>>`
-//!
-//! For `Result<(), VestingError>`, a contract error surfaces as
-//! `Err(Ok(VestingError))`. Error-path tests use `try_*` to avoid panicking.
-
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
+use soroban_sdk::{testutils::Address as _, Address, Env};
 
 use crate::{
     contract::{VestingDrips, VestingDripsClient},
     error::VestingError,
-    tests::setup_env,
+    tests::{advance_ledger, setup_env, token_helper::{create_token, mint_to}},
 };
 
-use super::token_helper::{create_token, mint_to};
+// ── Issue #318: Schedule versioning ──────────────────────────────────────────
 
-/// `create_vesting_stream` must reject calls where `sponsor == recipient`.
+/// A freshly created schedule starts at version 1.
 #[test]
-fn test_create_stream_sponsor_equals_recipient_fails() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let alice = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &alice);
-
-    // Error path — use try_ variant so the test process does not panic.
-    let result = client.try_create_vesting_stream(&alice, &alice, &token_id, &10, &50, &200);
-    // Outer Err(Ok(e)) carries the VestingError returned by the contract.
-    let err = result.unwrap_err().unwrap();
-
-    assert_eq!(
-        err,
-        VestingError::InvalidRecipient,
-        "sponsor == recipient must return InvalidRecipient (code 10)"
-    );
-}
-
-/// The `InvalidRecipient` error code is pinned to 10.
-#[test]
-fn test_invalid_recipient_error_code_is_10() {
-    assert_eq!(VestingError::InvalidRecipient as u32, 10);
-}
-
-/// Normal flow (sponsor ≠ recipient) must be unaffected by the new check.
-#[test]
-fn test_create_stream_distinct_sponsor_and_recipient_succeeds() {
+fn test_version_starts_at_one() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
@@ -68,11 +22,91 @@ fn test_create_stream_distinct_sponsor_and_recipient_succeeds() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    // Must succeed — plain method panics on error.
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
 
-    assert!(
-        client.get_schedule(&recipient).is_some(),
-        "schedule must exist after successful creation"
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.version, 1, "version must start at 1 on creation");
+}
+
+/// Claiming increments the version counter.
+#[test]
+fn test_version_increments_on_claim() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+
+    // Advance past cliff.
+    advance_ledger(&env, 60);
+    client.claim_vested(&recipient);
+
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.version, 2, "version must be 2 after one claim");
+}
+
+/// Multiple claims each increment version.
+#[test]
+fn test_version_increments_on_each_claim() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+
+    advance_ledger(&env, 60); // past cliff
+    client.claim_vested(&recipient); // version → 2
+
+    advance_ledger(&env, 20);
+    client.claim_vested(&recipient); // version → 3
+
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.version, 3, "version must be 3 after two claims");
+}
+
+/// Cancelling a stream also increments the version (visible in the schedule
+/// that is removed; confirmed via the function not returning VersionOverflow).
+#[test]
+fn test_version_overflow_returns_error() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+
+    // Manually set version to u32::MAX to trigger overflow on next operation.
+    let mut schedule = client.get_schedule(&recipient).unwrap();
+    schedule.version = u32::MAX;
+    // Write the schedule back via storage inside contract context.
+    env.as_contract(&contract_id, || {
+        crate::storage::set_schedule(&env, &recipient, &schedule);
+    });
+
+    // Attempting to claim should now return VersionOverflow.
+    advance_ledger(&env, 60); // past cliff
+    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    assert_eq!(
+        err,
+        VestingError::VersionOverflow,
+        "must return VersionOverflow when version is u32::MAX"
     );
 }

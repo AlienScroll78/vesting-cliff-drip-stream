@@ -7,7 +7,13 @@ use soroban_sdk::{contracttype, Address};
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
 ///
-/// ## Schema versioning
+/// ## Mutation versioning (Issue #318)
+///
+/// The `version` field is a monotonically increasing mutation counter that
+/// provides an on-chain audit trail.  It is initialised to `1` at stream
+/// creation and incremented atomically on every state-changing operation
+/// (cancel, claim, transfer, etc.).  Overflow to `u32::MAX` returns
+/// [`VestingError::VersionOverflow`] rather than wrapping.
 ///
 /// The `version` field guards against future deserialization mismatches.
 /// All schedules created by the current contract code carry `version = 2`.
@@ -18,6 +24,7 @@ use soroban_sdk::{contracttype, Address};
 #[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub struct VestingSchedule {
     /// Schema version for forward-compatibility.
     ///
@@ -30,6 +37,10 @@ pub struct VestingSchedule {
 
     /// The token being streamed.
     pub token: Address,
+
+    /// The sponsor (funder) who created this stream.
+    /// Required for drain operations where unclaimed tokens are returned to sponsor.
+    pub sponsor: Address,
 
     /// Tokens released per ledger once the cliff has passed.
     pub rate_per_ledger: i128,
@@ -70,14 +81,34 @@ pub struct VestingSchedule {
 /// Storage key variants used for keying contract data.
 #[contracttype]
 #[derive(Clone)]
+#[allow(missing_docs)]
 pub enum DataKey {
-    /// Per-recipient vesting schedule.
+    /// Per-recipient vesting schedule (fixed rate).
     Schedule(Address),
+
+    /// Per-recipient variable-rate vesting schedule.
+    VariableSchedule(Address),
+
+    /// Instance-level configuration: minimum deposit (i128).
+    MinDeposit,
+
+    /// Storage key for configured contract admin address.
+    Admin,
+
+    /// Storage key for configured fee basis points (0-500).
+    FeeBps,
+
+    /// Storage key for configured protocol treasury address.
+    Treasury,
 }
 
 /// Human-readable status of a vesting stream.
 ///
-/// Returned by `get_status` and consumed by front-end badge components.
+/// Returned by `stream_status` (typed enum view, issue #311) and by the
+/// legacy `get_status` view.
+///
+/// The `NotFound` variant indicates no schedule exists for the queried recipient,
+/// allowing callers to avoid a separate existence check.
 ///
 /// # Badge colour mapping
 /// | Variant      | Colour  | Hex       | ARIA label     |
@@ -90,13 +121,14 @@ pub enum DataKey {
 #[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub enum StreamStatus {
     /// Cliff has not yet been reached; no tokens can be claimed.
     PreCliff,
     /// Cliff passed; tokens are dripping linearly until `end_ledger`.
     Active,
-    /// Stream fully drained (`end_ledger` reached or all tokens claimed).
-    Completed,
+    /// Stream fully expired (`end_ledger` reached or all tokens claimed).
+    Expired,
     /// Sponsor cancelled the stream before it reached `end_ledger`.
     Cancelled,
     /// Sponsor has paused the stream; no accrual until resumed.
