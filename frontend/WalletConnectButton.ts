@@ -4,6 +4,46 @@
  * Compatible with Freighter and Albedo wallet adapters.
  */
 
+export const WALLET_STORAGE_KEY = 'vesting_wallet_pubkey';
+
+/** Persist the connected wallet public key to localStorage. */
+export function persistWalletAddress(address: string): void {
+  try {
+    localStorage.setItem(WALLET_STORAGE_KEY, address);
+  } catch {
+    // localStorage unavailable (private browsing / quota exceeded) – ignore
+  }
+}
+
+/** Return the cached public key, or null if nothing is stored. */
+export function restoreWalletAddress(): string | null {
+  try {
+    return localStorage.getItem(WALLET_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Remove the cached public key (e.g. on disconnect). */
+export function clearWalletAddress(): void {
+  try {
+    localStorage.removeItem(WALLET_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Attempt a silent reconnect on page load.
+ * Returns the cached public key if one exists, null otherwise.
+ * Callers should verify the wallet is still unlocked before treating
+ * the address as fully authenticated; on failure they should call
+ * clearWalletAddress() and fall back to the disconnected state.
+ */
+export function silentReconnect(): string | null {
+  return restoreWalletAddress();
+}
+
 export type WalletState = "disconnected" | "connecting" | "connected";
 
 export interface WalletConnectButtonProps {
