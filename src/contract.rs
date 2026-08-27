@@ -24,6 +24,7 @@ const MAX_FEE_BPS: u32 = 500;
 /// Consolidated statistics for a vesting stream.
 ///
 /// Returned by [`VestingDrips::get_stats`].
+#[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(missing_docs)]
@@ -1044,7 +1045,9 @@ impl VestingDrips {
     pub fn get_status(env: Env, recipient: Address) -> Option<StreamStatus> {
         let schedule = storage::get_schedule_readonly(&env, &recipient)?;
         let current = env.ledger().sequence();
-        let status = if current < schedule.cliff_ledger {
+        let status = if schedule.paused {
+            StreamStatus::Paused
+        } else if current < schedule.cliff_ledger {
             StreamStatus::PreCliff
         } else if current < schedule.end_ledger {
             StreamStatus::Active

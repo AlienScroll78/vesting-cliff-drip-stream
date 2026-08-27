@@ -11,6 +11,7 @@ use soroban_sdk::contracterror;
 /// Codes are pinned to explicit `u32` values so clients can switch on them
 /// reliably across contract upgrades (see ADR-0004). Code 0 is reserved for
 /// success by the Soroban runtime and must never be used here.
+#[allow(missing_docs)]
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
