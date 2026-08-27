@@ -119,7 +119,7 @@ fn test_claim_vested_unauthorized_caller_panics() {
     let _ = attacker; // we don't mock attacker auth either
 
     // Calling claim_vested as recipient without auth → panics
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 }
 
 /// Unauthorized third party cannot cancel a stream.
@@ -141,5 +141,5 @@ fn test_sponsor_cannot_claim_as_recipient_panics() {
     let (_env, client, _sponsor, recipient) = setup_stream_then_strict();
 
     // Claiming as recipient without mocked auth → panics
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 }
