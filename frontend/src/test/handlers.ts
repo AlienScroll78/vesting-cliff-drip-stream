@@ -75,6 +75,25 @@ export const defaultHandlers = [
     const { recipient } = params as { recipient: string };
     return HttpResponse.json({ recipient, claimable_amount: "1500" });
   }),
+
+  // Horizon fee_stats — default happy-path for issue #71 fee estimation
+  http.get("https://horizon-testnet.stellar.org/fee_stats", () =>
+    HttpResponse.json({
+      last_ledger: "51200000",
+      last_ledger_base_fee: "100",
+      ledger_capacity_usage: "0.30",
+      fee_charged: {
+        max: "1500", min: "100", mode: "100",
+        p10: "100", p20: "100", p30: "100", p40: "100", p50: "100",
+        p60: "100", p70: "100", p80: "200", p90: "1000", p95: "1200", p99: "1500",
+      },
+    })
+  ),
+
+  // CoinGecko XLM price — default happy-path for issue #71 USD equivalent
+  http.get("https://api.coingecko.com/api/v3/simple/price", () =>
+    HttpResponse.json({ stellar: { usd: 0.12 } })
+  ),
 ];
 
 // ── Error scenario handlers (for use with server.use()) ───────────────────────

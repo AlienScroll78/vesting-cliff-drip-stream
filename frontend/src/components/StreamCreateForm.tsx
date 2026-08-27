@@ -1,7 +1,8 @@
 "use client";
-import { useState, type ChangeEvent, type FocusEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FocusEvent } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { getErrorInfo } from "@/errorMessages";
+import { estimateFee, type FeeEstimate } from "@/utils/feeEstimate";
 
 // ~5 seconds per ledger on Stellar
 const LEDGERS_PER_DAY = Math.round((24 * 60 * 60) / 5);
@@ -109,10 +110,19 @@ export function StreamCreateForm({ onSuccess }: Props) {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [contractError, setContractError] = useState<number | null>(null);
 
+  // ── Fee estimate (issue #71) ───────────────────────────────────────────────
+  const [feeState, setFeeState] = useState<"loading" | FeeEstimate | null>("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateFee().then((result) => {
+      if (!cancelled) setFeeState(result);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
-  const isTouched = Object.keys(touched).length > 0;
-
   // Computed deposit preview
   const rate = Number(values.rate);
   const totalDays = Number(values.totalDays);
@@ -260,6 +270,38 @@ export function StreamCreateForm({ onSuccess }: Props) {
           Connect your wallet to create a stream.
         </p>
       )}
+
+      {/* ── Fee estimate (issue #71) ─────────────────────────────────────── */}
+      <div
+        data-testid="fee-estimate-row"
+        style={{ fontSize: "0.82rem", color: "#374151" }}
+      >
+        {feeState === "loading" ? (
+          <span data-testid="fee-loading" style={{ color: "#9ca3af" }}>
+            ⏳ Estimating network fee…
+          </span>
+        ) : feeState === null ? (
+          <span
+            data-testid="fee-unknown"
+            role="note"
+            style={{ color: "#d97706" }}
+          >
+            ⚠️ Network fee estimate unavailable — you can still submit.
+          </span>
+        ) : (
+          <span
+            data-testid="fee-value"
+            aria-label={`Estimated fee: ${feeState.xlm} XLM${feeState.usd ? `, ${feeState.usd}` : ""}`}
+          >
+            Estimated fee: <strong>{feeState.xlm} XLM</strong>
+            {feeState.usd && (
+              <span style={{ color: "#6b7280", marginLeft: "0.35rem" }}>
+                ({feeState.usd})
+              </span>
+            )}
+          </span>
+        )}
+      </div>
 
       <button
         type="submit"

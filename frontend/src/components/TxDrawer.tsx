@@ -3,10 +3,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useId,
   useReducer,
+  useState,
   type ReactNode,
 } from "react";
+import { estimateFee, type FeeEstimate } from "@/utils/feeEstimate";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +81,22 @@ function TxDrawer() {
   const { tx, dismiss } = useTx();
   const titleId = useId();
 
+  /** Fee estimate — fetched once when the drawer mounts for any pending tx.
+   *  "loading" | FeeEstimate | null (null means simulation failed → warning).
+   *  Issue #71: display XLM fee + USD equivalent; show warning if unavailable. */
+  const [feeState, setFeeState] = useState<"loading" | FeeEstimate | null>("loading");
+
+  useEffect(() => {
+    if (!tx) return;
+    // Re-fetch fee estimate whenever a new tx starts
+    setFeeState("loading");
+    let cancelled = false;
+    estimateFee().then((result) => {
+      if (!cancelled) setFeeState(result);
+    });
+    return () => { cancelled = true; };
+  }, [tx?.status === "pending" ? tx : null]); // reset only on new pending
+
   if (!tx) return null;
 
   const { status, hash, errorMessage } = tx;
@@ -120,6 +139,41 @@ function TxDrawer() {
           {title(status)}
         </p>
 
+        {/* ── Fee estimate (issue #71) ──────────────────────────────────── */}
+        {status === "pending" && (
+          <div style={{ marginTop: "0.3rem" }}>
+            {feeState === "loading" ? (
+              <span
+                data-testid="fee-loading"
+                style={{ fontSize: "0.78rem", color: "#9ca3af" }}
+              >
+                Estimating network fee…
+              </span>
+            ) : feeState === null ? (
+              <span
+                data-testid="fee-unknown"
+                role="note"
+                style={{ fontSize: "0.78rem", color: "#d97706" }}
+              >
+                ⚠️ Fee estimate unavailable
+              </span>
+            ) : (
+              <span
+                data-testid="fee-value"
+                style={{ fontSize: "0.78rem", color: "#374151" }}
+                aria-label={`Estimated fee ${feeState.xlm} XLM${feeState.usd ? `, ${feeState.usd}` : ""}`}
+              >
+                Fee: <strong>{feeState.xlm} XLM</strong>
+                {feeState.usd && (
+                  <span style={{ color: "#6b7280", marginLeft: "0.25rem" }}>
+                    ({feeState.usd})
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+
         {status === "confirmed" && hash && (
           <a
             href={`${STELLAR_EXPERT}/${hash}`}
@@ -143,7 +197,7 @@ function TxDrawer() {
         )}
       </div>
 
-      {/* Retry / dismiss */}
+      {/* Spinner / dismiss */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.35rem" }}>
         {status === "pending" && (
           <Spinner />
