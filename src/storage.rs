@@ -171,3 +171,41 @@ pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
     env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
     env.storage().instance().set(&DataKey::Treasury, treasury);
 }
+
+/// Default maximum cliff ratio: 50% of total duration (in basis points).
+pub const DEFAULT_MAX_CLIFF_RATIO_BPS: u32 = 5_000;
+
+/// Default minimum rate per ledger.
+pub const DEFAULT_MIN_RATE: i128 = 1;
+
+/// Returns the configured max cliff ratio in basis points.
+/// Falls back to [`DEFAULT_MAX_CLIFF_RATIO_BPS`] if not set.
+pub fn get_max_cliff_ratio(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::ConfigMaxCliffRatio)
+        .unwrap_or(DEFAULT_MAX_CLIFF_RATIO_BPS)
+}
+
+/// Stores the max cliff ratio in basis points in instance storage.
+pub fn set_max_cliff_ratio(env: &Env, bps: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ConfigMaxCliffRatio, &bps);
+}
+
+/// Returns the configured minimum rate per ledger.
+/// Falls back to [`DEFAULT_MIN_RATE`] if not set.
+pub fn get_min_rate(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get::<DataKey, i128>(&DataKey::ConfigMinRate)
+        .unwrap_or(DEFAULT_MIN_RATE)
+}
+
+/// Stores the minimum rate per ledger in instance storage.
+pub fn set_min_rate(env: &Env, min_rate: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ConfigMinRate, &min_rate);
+}
