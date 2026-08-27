@@ -56,7 +56,7 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
     m.insert(
         "claim_vested",
         Expect {
-            inputs: &["recipient"],
+            inputs: &["recipient", "amount"],
             has_output: true,
         },
     );

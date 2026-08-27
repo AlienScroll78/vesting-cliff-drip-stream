@@ -85,7 +85,7 @@ fn test_claim_transfer_failed_schedule_not_mutated() {
     // Freeze the recipient so the outbound transfer will be rejected.
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must be untouched — last_claimed_ledger not advanced.
@@ -120,7 +120,7 @@ fn test_claim_final_transfer_failed_schedule_preserved() {
 
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must still exist — not removed on transfer failure.
