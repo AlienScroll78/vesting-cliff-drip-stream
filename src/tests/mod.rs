@@ -7,6 +7,7 @@ mod test_claim;
 mod test_cancel;
 mod test_views;
 mod test_edge_cases;
+mod test_pause;
 mod test_properties;
 
 pub use soroban_sdk::{

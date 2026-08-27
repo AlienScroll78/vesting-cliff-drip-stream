@@ -1,3 +1,6 @@
+// Soroban proc-macros (#[contracttype], #[contracterror], #[contract]) generate
+// impl blocks whose methods cannot carry doc comments — suppress the lint here.
+#![allow(missing_docs)]
 use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env};
 
 use crate::{
@@ -13,6 +16,7 @@ const DRAIN_DELAY_LEDGERS: u32 = 3_153_600;
 /// Consolidated statistics for a vesting stream.
 ///
 /// Returned by [`VestingDrips::get_stats`].
+#[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StreamStats {
@@ -26,6 +30,7 @@ pub struct StreamStats {
     pub claimable_now: i128,
 }
 
+/// The main vesting contract.
 #[contract]
 pub struct VestingDrips;
 
@@ -92,7 +97,7 @@ impl VestingDrips {
 
         // ── Persist schedule ──────────────────────────────────────────────────
         let schedule = VestingSchedule {
-            version: 1,
+            version: 2,
             token: token.clone(),
             rate_per_ledger: rate,
             start_ledger,
@@ -100,6 +105,9 @@ impl VestingDrips {
             end_ledger,
             last_claimed_ledger: start_ledger,
             total_claimed: 0,
+            paused: false,
+            pause_ledger: 0,
+            sponsor: sponsor.clone(),
         };
         storage::set_schedule(&env, &recipient, &schedule);
 
@@ -252,6 +260,10 @@ impl VestingDrips {
             return Err(VestingError::CliffNotReached);
         }
 
+        if schedule.paused {
+            return Err(VestingError::StreamPaused);
+        }
+
         // Cap at the stream's end ledger to avoid over-paying.
         let active_end = current_ledger.min(schedule.end_ledger);
         let claimable_ledgers = active_end - schedule.last_claimed_ledger;
@@ -306,6 +318,9 @@ impl VestingDrips {
         if current_ledger < schedule.cliff_ledger {
             return 0;
         }
+        if schedule.paused {
+            return 0;
+        }
         let active_end = current_ledger.min(schedule.end_ledger);
         let claimable_ledgers = active_end - schedule.last_claimed_ledger;
         claimable_ledgers as i128 * schedule.rate_per_ledger
@@ -327,7 +342,9 @@ impl VestingDrips {
     pub fn get_status(env: Env, recipient: Address) -> Option<StreamStatus> {
         let schedule = storage::get_schedule(&env, &recipient)?;
         let current = env.ledger().sequence();
-        let status = if current < schedule.cliff_ledger {
+        let status = if schedule.paused {
+            StreamStatus::Paused
+        } else if current < schedule.cliff_ledger {
             StreamStatus::PreCliff
         } else if current < schedule.end_ledger {
             StreamStatus::Active
@@ -389,6 +406,107 @@ impl VestingDrips {
         storage::remove_schedule(&env, &recipient);
 
         events::emit_emergency_drain(&env, &recipient, &sponsor, amount);
+
+        Ok(())
+    }
+
+    // ── Pause / Resume (Issue #3) ─────────────────────────────────────────────
+
+    /// Pauses an active vesting stream, freezing accrual at the current ledger.
+    ///
+    /// While paused, `claim_vested` returns `StreamPaused` and no tokens
+    /// accrue. The stream can be resumed by the same sponsor using
+    /// `resume_stream`.
+    ///
+    /// # Arguments
+    /// * `sponsor`   – Must match the original sponsor stored in the schedule.
+    /// * `recipient` – The recipient whose stream to pause.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No stream exists for `recipient`.
+    /// * `NotSponsor`       – Caller is not the original sponsor.
+    /// * `StreamPaused`     – Stream is already paused.
+    pub fn pause_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::NotSponsor);
+        }
+
+        if schedule.paused {
+            return Err(VestingError::StreamPaused);
+        }
+
+        let current_ledger = env.ledger().sequence();
+        schedule.paused = true;
+        schedule.pause_ledger = current_ledger;
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_paused(&env, &recipient, &sponsor, current_ledger);
+
+        Ok(())
+    }
+
+    /// Resumes a paused vesting stream, offsetting all ledger milestones by
+    /// the duration of the pause so that no tokens appear to have accrued
+    /// while frozen.
+    ///
+    /// The offset is applied to `start_ledger`, `cliff_ledger`, `end_ledger`,
+    /// and `last_claimed_ledger` so that the stream continues exactly where it
+    /// left off.
+    ///
+    /// # Arguments
+    /// * `sponsor`   – Must match the original sponsor stored in the schedule.
+    /// * `recipient` – The recipient whose stream to resume.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No stream exists for `recipient`.
+    /// * `NotSponsor`       – Caller is not the original sponsor.
+    ///
+    /// If the stream is not currently paused, this call is a no-op and returns
+    /// `Ok(())` (idempotent).
+    pub fn resume_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
+
+        let mut schedule = storage::get_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::NotSponsor);
+        }
+
+        // If the stream is not paused, this is a no-op.
+        if !schedule.paused {
+            return Ok(());
+        }
+
+        let current_ledger = env.ledger().sequence();
+        let pause_duration = current_ledger.saturating_sub(schedule.pause_ledger);
+
+        // Offset all ledger milestones forward by the pause duration so the
+        // stream resumes exactly where it was frozen.
+        schedule.start_ledger = schedule.start_ledger.saturating_add(pause_duration);
+        schedule.cliff_ledger = schedule.cliff_ledger.saturating_add(pause_duration);
+        schedule.end_ledger = schedule.end_ledger.saturating_add(pause_duration);
+        schedule.last_claimed_ledger = schedule.last_claimed_ledger.saturating_add(pause_duration);
+
+        schedule.paused = false;
+        schedule.pause_ledger = 0;
+
+        storage::set_schedule(&env, &recipient, &schedule);
+
+        events::emit_stream_resumed(&env, &recipient, &sponsor, current_ledger, pause_duration);
 
         Ok(())
     }

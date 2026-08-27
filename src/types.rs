@@ -1,3 +1,6 @@
+// Soroban #[contracttype] generates impl blocks whose methods cannot carry
+// doc comments — suppress the missing_docs lint for this module.
+#![allow(missing_docs)]
 use soroban_sdk::{contracttype, Address};
 
 /// Represents a single vesting schedule stored per recipient.
@@ -7,10 +10,12 @@ use soroban_sdk::{contracttype, Address};
 /// ## Schema versioning
 ///
 /// The `version` field guards against future deserialization mismatches.
-/// All schedules created by the current contract code carry `version = 1`.
+/// All schedules created by the current contract code carry `version = 2`.
 /// Schedules written before this field was introduced have an implicit
-/// `version = 0` (XDR default for a missing `u32`).  Use
-/// `migrate_schedule` to upgrade old entries in-place.
+/// `version = 0` (XDR default for a missing `u32`). Schedules from v1
+/// have `version = 1` (no pause fields). Use `migrate_schedule` to
+/// upgrade old entries in-place.
+#[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VestingSchedule {
@@ -19,7 +24,8 @@ pub struct VestingSchedule {
     /// | Value | Meaning                          |
     /// |-------|----------------------------------|
     /// | `0`   | Legacy – written before versioning was added |
-    /// | `1`   | Current – all fields present     |
+    /// | `1`   | Version 1 – no pause fields      |
+    /// | `2`   | Current – all fields present     |
     pub version: u32,
 
     /// The token being streamed.
@@ -45,6 +51,20 @@ pub struct VestingSchedule {
     /// Initialised to `0` on stream creation and incremented on every successful claim.
     /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
+
+    /// Whether the stream is currently paused.
+    /// When `true`, no tokens accrue and `claim_vested` returns `StreamPaused`.
+    pub paused: bool,
+
+    /// The ledger sequence at which the stream was last paused.
+    /// `0` when the stream has never been paused or has been resumed.
+    /// Used to compute the pause duration when resuming so that `end_ledger`,
+    /// `cliff_ledger`, and related fields are offset by the frozen time.
+    pub pause_ledger: u32,
+
+    /// The sponsor who created this stream.
+    /// Only this address may call `pause_stream` and `resume_stream`.
+    pub sponsor: Address,
 }
 
 /// Storage key variants used for keying contract data.
@@ -60,12 +80,14 @@ pub enum DataKey {
 /// Returned by `get_status` and consumed by front-end badge components.
 ///
 /// # Badge colour mapping
-/// | Variant      | Colour | Hex       | ARIA label     |
-/// |--------------|--------|-----------|----------------|
-/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"    |
-/// | Active       | Blue   | `#3B82F6` | "Active"       |
-/// | Completed    | Green  | `#22C55E` | "Completed"    |
-/// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
+/// | Variant      | Colour  | Hex       | ARIA label     |
+/// |--------------|---------|-----------|----------------|
+/// | PreCliff     | Amber   | `#F59E0B` | "Pre-cliff"    |
+/// | Active       | Blue    | `#3B82F6` | "Active"       |
+/// | Completed    | Green   | `#22C55E` | "Completed"    |
+/// | Cancelled    | Red     | `#EF4444` | "Cancelled"    |
+/// | Paused       | Orange  | `#F97316` | "Paused"       |
+#[allow(missing_docs)]
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StreamStatus {
@@ -77,4 +99,6 @@ pub enum StreamStatus {
     Completed,
     /// Sponsor cancelled the stream before it reached `end_ledger`.
     Cancelled,
+    /// Sponsor has paused the stream; no accrual until resumed.
+    Paused,
 }

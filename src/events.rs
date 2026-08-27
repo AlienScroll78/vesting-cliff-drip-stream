@@ -75,3 +75,31 @@ pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, a
         (sponsor.clone(), amount),
     );
 }
+
+/// Emitted when a sponsor pauses a vesting stream.
+///
+/// Topics: `["vc_pause", recipient]`
+/// Data:   `(sponsor, pause_ledger)`
+pub fn emit_stream_paused(env: &Env, recipient: &Address, sponsor: &Address, pause_ledger: u32) {
+    env.events().publish(
+        (symbol_short!("vc_pause"), recipient.clone()),
+        (sponsor.clone(), pause_ledger),
+    );
+}
+
+/// Emitted when a sponsor resumes a paused vesting stream.
+///
+/// Topics: `["vc_resme", recipient]`
+/// Data:   `(sponsor, resume_ledger, pause_duration)`
+pub fn emit_stream_resumed(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    resume_ledger: u32,
+    pause_duration: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_resme"), recipient.clone()),
+        (sponsor.clone(), resume_ledger, pause_duration),
+    );
+}

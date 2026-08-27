@@ -1,3 +1,6 @@
+// Soroban #[contracterror] generates impl blocks whose methods cannot carry
+// doc comments — suppress the missing_docs lint for this module.
+#![allow(missing_docs)]
 use soroban_sdk::contracterror;
 
 /// All error codes returned by the VestingDrips contract.
@@ -5,6 +8,7 @@ use soroban_sdk::contracterror;
 /// Codes are pinned to explicit `u32` values so clients can switch on them
 /// reliably across contract upgrades (see ADR-0004). Code 0 is reserved for
 /// success by the Soroban runtime and must never be used here.
+#[allow(missing_docs)]
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -63,16 +67,28 @@ pub enum VestingError {
     /// level restriction). No state has been mutated when this error is returned.
     TransferFailed = 9,
 
-    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
-    ///
-    /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
-    /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
-    DrainDelayNotExpired = 9,
-
     /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
     ///
     /// A sponsor creating a stream to themselves is almost certainly a mistake
     /// and would produce confusing behaviour in `cancel_stream` (the same
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 10,
+
+    /// **Code 11** — The emergency-drain delay period has not yet elapsed.
+    ///
+    /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
+    /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
+    DrainDelayNotExpired = 11,
+
+    /// **Code 12** — The stream is currently paused.
+    ///
+    /// `claim_vested` returns this error while a stream is paused. Wait for
+    /// the sponsor to call `resume_stream` before claiming again.
+    StreamPaused = 12,
+
+    /// **Code 13** — Caller is not the original sponsor of this stream.
+    ///
+    /// Only the address that created the stream (stored in `schedule.sponsor`)
+    /// may call `pause_stream` or `resume_stream`.
+    NotSponsor = 13,
 }
