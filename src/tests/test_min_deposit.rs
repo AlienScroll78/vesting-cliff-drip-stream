@@ -25,7 +25,7 @@ fn test_deposit_below_default_minimum_fails() {
     mint_to(&env, &token_id, &sponsor, 50);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::DepositBelowMinimum.into());
@@ -45,7 +45,7 @@ fn test_deposit_at_minimum_succeeds() {
     mint_to(&env, &token_id, &sponsor, 100);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
@@ -64,7 +64,7 @@ fn test_deposit_above_minimum_succeeds() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
@@ -109,7 +109,7 @@ fn test_custom_minimum_deposit_enforced() {
     mint_to(&env, &token_id, &sponsor, 400);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &40)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &40, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::DepositBelowMinimum.into());
@@ -133,7 +133,7 @@ fn test_stream_above_custom_minimum_succeeds() {
     mint_to(&env, &token_id, &sponsor, 600);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &60)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &60, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());

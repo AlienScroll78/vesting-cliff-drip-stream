@@ -34,7 +34,7 @@ fn test_total_claimed_init_zero() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -60,7 +60,7 @@ fn test_total_claimed_after_single_claim() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance 60 ledgers past start (ledger 160, past cliff 150).
@@ -91,7 +91,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // ── Claim 1: at cliff (ledger 150) — 50 ledgers accrued ──────────────────
@@ -133,7 +133,7 @@ fn test_total_claimed_equals_deposit_after_full_claim() {
     mint_to(&env, &token_id, &sponsor, 1_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100, &None)
         .unwrap();
 
     // Claim once past the cliff.
@@ -173,7 +173,7 @@ fn test_total_claimed_consistent_in_get_stats() {
     mint_to(&env, &token_id, &sponsor, 500);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &20, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &20, &100, &None)
         .unwrap();
 
     // Before any claim: both should be 0.

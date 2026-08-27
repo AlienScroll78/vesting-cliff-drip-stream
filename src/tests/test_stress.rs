@@ -40,7 +40,7 @@ fn test_high_load_1000_recipients_claim() {
         .map(|_| {
             let r = Address::generate(&env);
             client
-                .create_vesting_stream(&sponsor, &r, &token_id, &rate, &cliff_duration, &total_duration)
+                .create_vesting_stream(&sponsor, &r, &token_id, &rate, &cliff_duration, &total_duration, &None)
                 .expect("create_vesting_stream failed");
             r
         })
@@ -89,7 +89,7 @@ fn test_high_load_1000_recipients_full_drain() {
         .map(|_| {
             let r = Address::generate(&env);
             client
-                .create_vesting_stream(&sponsor, &r, &token_id, &rate, &10, &total_duration)
+                .create_vesting_stream(&sponsor, &r, &token_id, &rate, &10, &total_duration, &None)
                 .expect("create failed");
             r
         })

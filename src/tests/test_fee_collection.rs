@@ -39,7 +39,7 @@ fn test_set_fee_and_fee_collection_success() {
     // Mint 2,050 tokens to sponsor so sponsor can cover deposit + fee
     let (token_id, token_client) = setup_token(&env, &sponsor, 2_050);
 
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Treasury received 50 tokens fee
     assert_eq!(token_client.balance(&treasury), 50);

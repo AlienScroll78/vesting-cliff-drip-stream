@@ -17,7 +17,7 @@ fn create_stream(
     recipient: &Address,
     token_id: &Address,
 ) {
-    client.create_vesting_stream(sponsor, recipient, token_id, &10, &50, &200);
+    client.create_vesting_stream(sponsor, recipient, token_id, &10, &50, &200, &None);
 }
 
 // ── NotFound ──────────────────────────────────────────────────────────────────

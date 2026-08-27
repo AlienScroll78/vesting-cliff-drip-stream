@@ -24,7 +24,7 @@ fn test_clawback_before_cliff_returns_all_tokens() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Clawback before cliff — should recover all 2000 tokens.
@@ -52,7 +52,7 @@ fn test_clawback_after_partial_claim_returns_remaining() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Recipient claims at cliff (ledger 150): earns 50 × 10 = 500.
@@ -97,7 +97,7 @@ fn test_clawback_removes_schedule() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
@@ -121,7 +121,7 @@ fn test_clawback_at_end_returns_zero_remaining() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Claim everything first.

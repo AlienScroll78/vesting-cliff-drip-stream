@@ -109,7 +109,7 @@ fn test_batch_create_rejects_duplicate_recipient() {
 
     // Create a stream for the recipient first.
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // A batch that includes the same recipient should fail.

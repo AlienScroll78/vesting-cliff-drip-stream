@@ -24,7 +24,7 @@ fn test_empty_allowlist_is_permissive() {
 
     // No allowlist configured — should succeed.
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 }
 
 /// After adding a token, creating a stream with it succeeds.
@@ -43,7 +43,7 @@ fn test_allowed_token_can_create_stream() {
     client.add_allowed_token(&admin, &token_id);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 }
 
 /// Using a token not in the (non-empty) allowlist returns TokenNotAllowed.
@@ -67,7 +67,7 @@ fn test_disallowed_token_returns_error() {
     mint_to(&env, &bad_token, &sponsor, 2_000);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &bad_token, &10, &50, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &bad_token, &10, &50, &200, &None)
         .unwrap_err()
         .unwrap();
 
@@ -98,7 +98,7 @@ fn test_removed_token_is_rejected() {
     // Now the allowlist is empty again (permissive) — stream should succeed.
     // Removing the last token reverts to permissive mode.
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200);
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 }
 
 /// get_allowed_tokens returns the correct set.
