@@ -223,7 +223,17 @@ impl VestingDrips {
         if rate <= 0 {
             return Err(VestingError::InvalidRate);
         }
+        let min_rate = storage::get_min_rate(&env);
+        if rate < min_rate {
+            return Err(VestingError::InvalidRate);
+        }
         if total_duration <= cliff_duration {
+            return Err(VestingError::InvalidDuration);
+        }
+        // Validate cliff ratio does not exceed configured max.
+        let max_cliff_ratio_bps = storage::get_max_cliff_ratio(&env);
+        let cliff_ratio_bps = (cliff_duration as u64 * 10_000 / total_duration as u64) as u32;
+        if cliff_ratio_bps > max_cliff_ratio_bps {
             return Err(VestingError::InvalidDuration);
         }
         if sponsor == recipient {
@@ -231,6 +241,12 @@ impl VestingDrips {
         }
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
+        }
+
+        // Validate token is a SAC by probing try_balance
+        let token_client = token::Client::new(&env, &token);
+        if token_client.try_balance(&sponsor).is_err() {
+            return Err(VestingError::InvalidToken);
         }
 
         // ── Normalise and validate metadata ───────────────────────────────────
@@ -262,7 +278,6 @@ impl VestingDrips {
             return Err(VestingError::DepositBelowMinimum);
         }
 
-        let token_client = token::Client::new(&env, &token);
         token_client
             .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
             .map_err(|_| VestingError::TransferFailed)?;
@@ -688,6 +703,10 @@ impl VestingDrips {
         storage::remove_schedule(&env, &current_recipient);
         storage::set_schedule(&env, &new_recipient, &schedule);
 
+        // Update sponsor's stream list: old recipient out, new recipient in.
+        storage::remove_sponsor_stream(&env, &schedule.sponsor, &current_recipient);
+        storage::add_sponsor_stream(&env, &schedule.sponsor, &new_recipient);
+
         events::emit_recipient_transferred(&env, &current_recipient, &new_recipient);
 
         Ok(())
@@ -872,6 +891,59 @@ impl VestingDrips {
         Ok(())
     }
 
+    /// Sets a governance configuration value in instance storage.
+    ///
+    /// Supported keys:
+    /// * `"max_cliff_ratio"` — Maximum cliff as a percentage of total duration, in
+    ///   basis points (0–10 000). Default 5000 (50 %).
+    /// * `"min_rate"` — Minimum allowed `rate_per_ledger` (must be ≥ 1).
+    ///
+    /// # Errors
+    /// * `Unauthorized` – `admin` is not the address set during `initialize`.
+    /// * `InvalidRate`  – Provided value is out of range.
+    pub fn set_config(
+        env: Env,
+        admin: Address,
+        key: String,
+        value: i128,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        if storage::get_admin(&env) != Some(admin.clone()) {
+            return Err(VestingError::Unauthorized);
+        }
+        if key == String::from_str(&env, "max_cliff_ratio") {
+            if value < 0 || value > 10_000 {
+                return Err(VestingError::InvalidRate);
+            }
+            storage::set_max_cliff_ratio(&env, value as u32);
+        } else if key == String::from_str(&env, "min_rate") {
+            if value < 1 {
+                return Err(VestingError::InvalidRate);
+            }
+            storage::set_min_rate(&env, value);
+        } else {
+            return Err(VestingError::InvalidRate);
+        }
+        Ok(())
+    }
+
+    /// Returns a governance configuration value from instance storage.
+    ///
+    /// Supported keys:
+    /// * `"max_cliff_ratio"` — in basis points (default 5000).
+    /// * `"min_rate"`        — minimum rate per ledger (default 1).
+    ///
+    /// Returns `0` for unrecognised keys.
+    pub fn get_config(env: Env, key: String) -> i128 {
+        if key == String::from_str(&env, "max_cliff_ratio") {
+            storage::get_max_cliff_ratio(&env) as i128
+        } else if key == String::from_str(&env, "min_rate") {
+            storage::get_min_rate(&env)
+        } else {
+            0
+        }
+    }
+
     // ── Read-only views ───────────────────────────────────────────────────────
 
     /// Claims all vested tokens accrued since the last claim.
@@ -1010,6 +1082,14 @@ impl VestingDrips {
             remaining,
             claimable_now,
         })
+    }
+
+    /// Returns the list of active recipient addresses for `sponsor`.
+    ///
+    /// Returns an empty `Vec` (not an error) when the sponsor has no active streams.
+    /// TTL is bumped on read alongside the main schedule storage.
+    pub fn get_streams_for_sponsor(env: Env, sponsor: Address) -> soroban_sdk::Vec<Address> {
+        storage::get_sponsor_streams(&env, &sponsor)
     }
 
     // ── Emergency Drain ───────────────────────────────────────────────────────

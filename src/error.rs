@@ -83,6 +83,9 @@ pub enum VestingError {
     /// address would be both the refund target and the earned-tokens target).
     InvalidRecipient = 11,
 
+    /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
+    InvalidToken = 12,
+
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     ///
     /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
