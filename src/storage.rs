@@ -278,3 +278,31 @@ pub fn set_min_rate(env: &Env, min_rate: i128) {
         .instance()
         .set(&DataKey::ConfigMinRate, &min_rate);
 }
+
+// ── Reentrancy lock ───────────────────────────────────────────────────────────
+
+/// Returns `true` if the reentrancy lock is currently held.
+///
+/// The lock is a temporary instance-storage flag set before token transfers
+/// and cleared immediately after, providing defence-in-depth against
+/// cross-contract re-entrant calls (Issue #13).
+pub fn is_locked(env: &Env) -> bool {
+    env.storage().instance().has(&DataKey::Lock)
+}
+
+/// Acquires the reentrancy lock.
+///
+/// Must be called before any outbound token transfer. Pair with
+/// `release_lock` after the transfer completes.
+pub fn acquire_lock(env: &Env) {
+    env.storage().instance().set(&DataKey::Lock, &true);
+}
+
+/// Releases the reentrancy lock.
+///
+/// Must be called after every outbound token transfer, even if the
+/// transfer fails (the Soroban runtime reverts storage on panic, but
+/// explicit release is clearer and handles `try_transfer` error paths).
+pub fn release_lock(env: &Env) {
+    env.storage().instance().remove(&DataKey::Lock);
+}
