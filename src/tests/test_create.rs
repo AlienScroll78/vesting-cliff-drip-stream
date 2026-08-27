@@ -335,3 +335,4 @@ fn test_metadata_immutable_after_creation() {
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.metadata, Some(label));
 }
+

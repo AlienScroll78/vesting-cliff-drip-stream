@@ -155,7 +155,7 @@ fn snapshot_event_tokens_claimed() {
         .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
         .unwrap();
     advance_ledger(&env, 50); // reach cliff
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 
     assert_event_snapshot(&env, "event_tokens_claimed.snap", "vc_claim");
 }
@@ -174,7 +174,7 @@ fn snapshot_event_stream_completed() {
         .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
         .unwrap();
     advance_ledger(&env, 500); // past end_ledger
-    client.claim_vested(&recipient).unwrap(); // full claim triggers vc_done
+    client.claim_vested(&recipient, &None).unwrap(); // full claim triggers vc_done
 
     assert_event_snapshot(&env, "event_stream_completed.snap", "vc_done");
 }
@@ -196,3 +196,4 @@ fn snapshot_event_stream_cancelled() {
 
     assert_event_snapshot(&env, "event_stream_cancelled.snap", "vc_cancel");
 }
+

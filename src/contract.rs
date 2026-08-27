@@ -455,9 +455,9 @@ impl VestingDrips {
             storage::set_schedule(&env, &recipient, &schedule);
         }
 
-        events::emit_tokens_claimed(&env, &recipient, claimable_amount, active_end);
+        events::emit_tokens_claimed(&env, &recipient, claim_amount, schedule.last_claimed_ledger);
 
-        Ok(claimable_amount)
+        Ok(claim_amount)
     }
 
     /// Claims all vested tokens from a variable-rate stream.
