@@ -265,3 +265,185 @@ fn bench_is_cliff_passed() {
     let mem = env.budget().memory_bytes_cost();
     emit("is_cliff_passed", cpu, mem);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// get_stats — consolidated stream statistics view
+// Closes #621
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_get_stats() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    env.budget().reset_default();
+    let _ = client.get_stats(&recipient);
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("get_stats", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// get_status — stream status enum view
+// Closes #622
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_get_status_pre_cliff() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    // Still before cliff
+    advance_ledger(&env, 20);
+
+    env.budget().reset_default();
+    let _ = client.get_status(&recipient);
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("get_status", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// set_min_deposit — admin configuration entry point
+// Closes #623
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_set_min_deposit() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    env.budget().reset_default();
+    client.set_min_deposit(&admin, &500).unwrap();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("set_min_deposit", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// get_min_deposit — view function
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_get_min_deposit() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    env.budget().reset_default();
+    let _ = client.get_min_deposit();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("get_min_deposit", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// pause_stream — pause an active stream
+// Closes #624
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_pause_stream() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    advance_ledger(&env, 10); // before cliff
+
+    env.budget().reset_default();
+    client.pause_stream(&sponsor, &recipient).unwrap();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("pause_stream", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resume_stream — resume a paused stream
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_resume_stream() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    advance_ledger(&env, 10);
+    client.pause_stream(&sponsor, &recipient).unwrap();
+    advance_ledger(&env, 5);
+
+    env.budget().reset_default();
+    client.resume_stream(&sponsor, &recipient).unwrap();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("resume_stream", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// transfer_recipient — reassign stream to new recipient
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_transfer_recipient() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let new_recipient = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    env.budget().reset_default();
+    client.transfer_recipient(&recipient, &new_recipient).unwrap();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("transfer_recipient", cpu, mem);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// drain_expired_stream — permissionless cleanup after 1-year drain delay
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bench_drain_expired_stream() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let caller = Address::generate(&env);
+    create_stream(&env, &client, &sponsor, &recipient);
+
+    // start=100, end=100+200=300, drain_delay=3_153_600
+    // advance past end + drain delay
+    advance_ledger(&env, 200 + 3_153_600 + 1);
+
+    env.budget().reset_default();
+    client.drain_expired_stream(&caller, &recipient).unwrap();
+
+    let cpu = env.budget().cpu_instruction_cost();
+    let mem = env.budget().memory_bytes_cost();
+    emit("drain_expired_stream", cpu, mem);
+}
