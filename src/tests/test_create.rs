@@ -37,7 +37,7 @@ fn test_create_stream_zero_rate_fails() {
     let (sponsor, recipient) = generate_addresses(&env);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::InvalidRate);
@@ -51,12 +51,12 @@ fn test_create_stream_invalid_duration_fails() {
     let token = Address::generate(&env);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200, &None)
         .unwrap_err();
     assert_eq!(err, Ok(VestingError::InvalidDuration));
 
     let err2 = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200, &None)
         .unwrap_err();
     assert_eq!(err2, Ok(VestingError::InvalidDuration));
 }
@@ -73,7 +73,7 @@ fn test_create_duplicate_stream_fails() {
         .unwrap();
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::ScheduleAlreadyExists);

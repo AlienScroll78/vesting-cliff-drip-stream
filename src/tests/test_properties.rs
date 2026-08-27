@@ -135,7 +135,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None);
 
         advance_ledger(&env, advance);
 
@@ -166,7 +166,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None);
 
         // Advance to end_ledger (or beyond) — no claims made yet so the full
         // deposit should be claimable.

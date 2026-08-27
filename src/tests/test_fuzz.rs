@@ -62,6 +62,7 @@ proptest! {
         let result = client.create_vesting_stream(
             &sponsor, &recipient, &token,
             &rate, &cliff_duration, &total_duration,
+                    &None,None,
         );
 
         prop_assert_eq!(
@@ -87,6 +88,7 @@ proptest! {
         let result = client.create_vesting_stream(
             &sponsor, &recipient, &token,
             &i128::MAX, &1, &total_duration,
+                    &None,None,
         );
 
         prop_assert_eq!(result.unwrap_err(), VestingError::DepositOverflow.into());
@@ -112,6 +114,7 @@ proptest! {
         let ok = client.create_vesting_stream(
             &sponsor, &recipient, &token,
             &boundary_rate, &1, &total_duration,
+                    &None,None,
         );
         prop_assert!(ok.is_ok(), "boundary_rate={boundary_rate} total_duration={total_duration} should succeed");
 
@@ -128,7 +131,8 @@ proptest! {
             let err = client2.create_vesting_stream(
                 &sponsor2, &recipient2, &token2,
                 &(boundary_rate + 1), &1, &total_duration,
-            );
+            &None,
+        );
             prop_assert_eq!(err.unwrap_err(), VestingError::DepositOverflow.into());
         }
     }
@@ -154,6 +158,7 @@ proptest! {
         let result = client.create_vesting_stream(
             &sponsor, &recipient, &token,
             &1, &cliff_duration, &total_duration,
+                    &None,None,
         );
 
         prop_assert_eq!(result.unwrap_err(), VestingError::InvalidDuration.into());
@@ -182,6 +187,7 @@ proptest! {
         let result = client.create_vesting_stream(
             &sponsor, &recipient, &token,
             &rate, &cliff_duration, &total_duration,
+                    &None,None,
         );
 
         prop_assert!(result.is_ok(), "expected success for rate={rate} cliff={cliff_duration} total={total_duration}");

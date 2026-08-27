@@ -168,7 +168,7 @@ fn test_event_snapshot_stream_created() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // env starts at ledger 100 (see setup_env), so:
@@ -235,7 +235,7 @@ fn test_event_snapshot_tokens_claimed() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance past cliff but not to end: ledger 100 → 200.
@@ -302,7 +302,7 @@ fn test_event_snapshot_stream_completed() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Jump well past end_ledger (300) so a single claim drains the whole stream.
@@ -379,7 +379,7 @@ fn test_event_snapshot_stream_cancelled() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Cancel before cliff at ledger 120 → full refund.

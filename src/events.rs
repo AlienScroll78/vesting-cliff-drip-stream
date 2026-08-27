@@ -1,9 +1,35 @@
-use soroban_sdk::{symbol_short, Address, Env, String, Symbol};
+// `#[contracttype]` emits an inherent `impl Type { spec_xdr() }` with no doc
+// comment of its own; rustc doesn't propagate item-level `#[allow]` onto
+// attribute-macro-generated sibling impls, so the allow has to be module-scoped.
+#![allow(missing_docs)]
+
+use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, String, Symbol};
+
+/// Data payload for the `StreamCreated` event.
+///
+/// Published as the event data field when a new vesting stream is created.
+/// Off-chain indexers can decode this struct to reconstruct full stream state.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamCreatedData {
+    /// The SAC token being vested.
+    pub token: Address,
+    /// Tokens released per ledger (rate_per_ledger).
+    pub rate: i128,
+    /// Ledger sequence at which the stream starts.
+    pub start_ledger: u32,
+    /// Ledger sequence at which the cliff is reached.
+    pub cliff_ledger: u32,
+    /// Ledger sequence at which the stream ends.
+    pub end_ledger: u32,
+    /// Total tokens deposited (`rate × (end_ledger - start_ledger)`).
+    pub total_deposit: i128,
+}
 
 /// Emitted when a new vesting stream is created.
 ///
-/// Topics: `["vc_create", recipient]`
-/// Data:   `(sponsor, token, rate_per_ledger, start_ledger, cliff_ledger, end_ledger)`
+/// Topics: `[Symbol("StreamCreated"), sponsor, recipient]`
+/// Data:   `StreamCreatedData { token, rate, start_ledger, cliff_ledger, end_ledger, total_deposit }`
 pub fn emit_stream_created(
     env: &Env,
     sponsor: &Address,
@@ -15,6 +41,7 @@ pub fn emit_stream_created(
     end_ledger: u32,
     metadata: &Option<String>,
 ) {
+    let total_deposit = rate * (end_ledger - start_ledger) as i128;
     let data = StreamCreatedData {
         token: token.clone(),
         rate,
@@ -23,16 +50,13 @@ pub fn emit_stream_created(
         end_ledger,
         total_deposit,
     };
+    // Include metadata in topics for off-chain indexing.
+    let _ = metadata; // stored in schedule; not emitted in topics to keep topic count ≤ 4
     env.events().publish(
         (
             Symbol::new(env, "StreamCreated"),
             sponsor.clone(),
-            token.clone(),
-            rate_per_ledger,
-            start_ledger,
-            cliff_ledger,
-            end_ledger,
-            metadata.clone(),
+            recipient.clone(),
         ),
         data,
     );
@@ -40,7 +64,7 @@ pub fn emit_stream_created(
 
 /// Emitted when a variable-rate vesting stream is created.
 ///
-/// Topics: `["vc_vrcreate", recipient]`
+/// Topics: `["vc_vrcreat", recipient]`
 /// Data:   `(sponsor, token, start_ledger, cliff_ledger, end_ledger, total_deposited)`
 pub fn emit_variable_stream_created(
     env: &Env,
@@ -53,7 +77,7 @@ pub fn emit_variable_stream_created(
     total_deposited: i128,
 ) {
     env.events().publish(
-        (symbol_short!("vc_vrcreat"), recipient.clone()),
+        (symbol_short!("vc_vrcre"), recipient.clone()),
         (
             sponsor.clone(),
             token.clone(),
@@ -62,7 +86,6 @@ pub fn emit_variable_stream_created(
             end_ledger,
             total_deposited,
         ),
-        data,
     );
 }
 
@@ -86,17 +109,13 @@ pub fn emit_milestone_stream_created(
             total_deposited,
             end_ledger,
         ),
-        data,
     );
 }
 
 /// Emitted when a recipient successfully claims vested tokens.
 ///
 /// Topics: `["vc_claim", recipient]`
-/// Data:   `(amount, ledger_claimed_through, dust_collected)`
-///
-/// `dust_collected` is the sub-1-token remainder captured at `end_ledger` to
-/// ensure no tokens are permanently stranded in the contract vault.
+/// Data:   `(amount, ledger_claimed_through)`
 pub fn emit_tokens_claimed(
     env: &Env,
     recipient: &Address,
@@ -111,7 +130,7 @@ pub fn emit_tokens_claimed(
 
 /// Emitted when a recipient successfully claims from a variable-rate stream.
 ///
-/// Topics: `["vc_vrclaim", recipient]`
+/// Topics: `["vc_vrclam", recipient]`
 /// Data:   `(amount, ledger_claimed_through)`
 pub fn emit_variable_tokens_claimed(
     env: &Env,
@@ -125,7 +144,7 @@ pub fn emit_variable_tokens_claimed(
     );
 }
 
-/// Emitted when a vesting schedule is fully exhausted.
+/// Emitted when a vesting schedule is fully exhausted and auto-cleaned up.
 ///
 /// Topics: `["vc_done", recipient]`
 /// Data:   `(token)`
@@ -137,15 +156,11 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 /// Emitted when a sponsor cancels a vesting stream before it completes.
 ///
 /// Topics: `["vc_cancel", recipient]`
-/// Data:   `(refunded_amount)`
+/// Data:   `(sponsor_refund)`
 pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
-        (
-            sponsor.clone(),
-            refunded_to_sponsor,
-            released_to_recipient,
-        ),
+        refunded_amount,
     );
 }
 
@@ -185,7 +200,7 @@ pub fn emit_stream_drained(
     );
 }
 
-/// Emitted by the legacy `emergency_drain` entry point.
+/// Emitted by the `emergency_drain` entry point.
 ///
 /// Topics: `["vc_drain", recipient]`
 /// Data:   `(sponsor, amount)`

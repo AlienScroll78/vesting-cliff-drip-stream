@@ -67,7 +67,7 @@ fn setup_stream_then_strict() -> (Env, VestingDripsClient<'static>, Address, Add
     mint_to(&mock_env, &token_id, &sponsor, 1_000);
 
     mock_client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 
     // Advance past cliff
@@ -104,7 +104,7 @@ fn test_create_stream_unauthorized_caller_panics() {
 
     // Not mocking sponsor auth → host panics with auth failure
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 }
 
