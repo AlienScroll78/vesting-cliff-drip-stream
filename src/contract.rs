@@ -171,7 +171,6 @@ impl VestingDrips {
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
     /// * `DepositBelowMinimum`    – Total deposit is below the configured minimum.
     /// * `ScheduleAlreadyExists`  – A stream already exists for `recipient`.
-    /// * `MetadataTooLong`        – `metadata` exceeds 256 bytes.
     /// * `TokenNotAllowed`        – Token is not in the allowlist (when enforced).
     pub fn create_vesting_stream(
         env: Env,
@@ -181,33 +180,6 @@ impl VestingDrips {
         rate: i128,
         cliff_duration: u32,
         total_duration: u32,
-    ) -> Result<(), VestingError> {
-        Self::create_vesting_stream_with_metadata(
-            env,
-            sponsor,
-            recipient,
-            token,
-            rate,
-            cliff_duration,
-            total_duration,
-            None,
-        )
-    }
-
-    /// Creates a new cliff-vesting stream for `recipient` with optional metadata.
-    ///
-    /// # Errors
-    /// Same as `create_vesting_stream` plus:
-    /// * `MetadataTooLong` – `metadata` exceeds 256 bytes.
-    pub fn create_vesting_stream_with_metadata(
-        env: Env,
-        sponsor: Address,
-        recipient: Address,
-        token: Address,
-        rate: i128,
-        cliff_duration: u32,
-        total_duration: u32,
-        metadata: Option<String>,
     ) -> Result<(), VestingError> {
         // Bump instance storage TTL on every interaction.
         env.storage()
@@ -248,14 +220,7 @@ impl VestingDrips {
         }
 
         // ── Normalise and validate metadata ───────────────────────────────────
-        const MAX_METADATA_BYTES: u32 = 256;
-        let metadata: Option<String> = match metadata {
-            Some(ref s) if s.len() == 0 => None,
-            Some(ref s) if s.len() > MAX_METADATA_BYTES => {
-                return Err(VestingError::MetadataTooLong);
-            }
-            other => other,
-        };
+        let metadata: Option<soroban_sdk::String> = None;
 
         sponsor.require_auth();
 

@@ -10,6 +10,7 @@ use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, String, Symb
 /// Published as the event data field when a new vesting stream is created.
 /// Off-chain indexers can decode this struct to reconstruct full stream state.
 #[contracttype]
+#[allow(missing_docs)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StreamCreatedData {
     /// The SAC token being vested.
