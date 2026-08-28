@@ -26,7 +26,7 @@ mod types;
 pub use contract::{calculate_total_deposit, compute_variable_claimable, StreamStats, VestingDrips};
 pub use error::VestingError;
 pub use events::StreamCreatedData;
-pub use types::{StreamStatus, VestingSchedule};
+pub use types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule};
 
 #[cfg(test)]
 mod tests;

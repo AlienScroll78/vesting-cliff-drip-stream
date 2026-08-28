@@ -4,19 +4,22 @@
 // impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, Env, String, Vec};
 
 use crate::{
     error::VestingError,
     events, storage,
-    types::{DataKey, RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule},
+    types::{DataKey, Milestone, MilestoneSchedule, RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule},
 };
 
-/// ~1 year at ~5 s/ledger: 6 * 60 * 24 * 365 = 3_153_600 ledgers.
+/// ~1 year at ~5 s/ledger.
 const DRAIN_DELAY_LEDGERS: u32 = 3_153_600;
 
 /// Maximum number of segments allowed in a variable-rate stream.
 const MAX_SEGMENTS: u32 = 10;
+
+/// Maximum number of milestones allowed in a milestone-based stream.
+const MAX_MILESTONES: u32 = 20;
 
 /// Maximum fee in basis points (5 %).
 const MAX_FEE_BPS: u32 = 500;
@@ -45,71 +48,12 @@ pub struct VestingDrips;
 
 #[contractimpl]
 impl VestingDrips {
-    // ── Admin / Allowlist ─────────────────────────────────────────────────────
-
-    /// Adds `token` to the allowlist of accepted SAC token contracts.
-    ///
-    /// When the allowlist is non-empty, only listed tokens can be used in
-    /// `create_vesting_stream`. An empty allowlist enables permissive mode
-    /// (all tokens accepted) for backward compatibility.
-    ///
-    /// # Arguments
-    /// * `admin` – Must authorise this call.
-    /// * `token` – SAC token address to add.
-    ///
-    /// # Events
-    /// Emits `AllowlistUpdated { token, added: true }`.
-    pub fn add_allowed_token(
-        env: Env,
-        admin: Address,
-        token: Address,
-    ) -> Result<(), VestingError> {
-        admin.require_auth();
-        storage::add_allowed_token(&env, &token);
-        events::emit_allowlist_updated(&env, &admin, &token, true);
-        Ok(())
-    }
-
-    /// Removes `token` from the allowlist.
-    ///
-    /// If the resulting allowlist is empty the contract reverts to permissive
-    /// mode, accepting all tokens.
-    ///
-    /// # Arguments
-    /// * `admin` – Must authorise this call.
-    /// * `token` – SAC token address to remove.
-    ///
-    /// # Events
-    /// Emits `AllowlistUpdated { token, added: false }`.
-    pub fn remove_allowed_token(
-        env: Env,
-        admin: Address,
-        token: Address,
-    ) -> Result<(), VestingError> {
-        admin.require_auth();
-        storage::remove_allowed_token(&env, &token);
-        events::emit_allowlist_updated(&env, &admin, &token, false);
-        Ok(())
-    }
-
-    /// Returns all currently allowed token addresses.
-    ///
-    /// An empty `Vec` means permissive mode (all tokens accepted).
-    pub fn get_allowed_tokens(env: Env) -> soroban_sdk::Vec<Address> {
-        storage::get_allowed_tokens(&env)
-    }
-
-    // ── Admin / Sponsor ───────────────────────────────────────────────────────
+    // ── Initialization ────────────────────────────────────────────────────────
 
     /// Configures the contract with admin, fee, and treasury settings.
     ///
     /// Must be called **once** immediately after deployment. Subsequent calls
     /// are rejected with `AlreadyInitialized`.
-    ///
-    /// # Arguments
-    /// * `admin`    – Address that gains authority to call admin-gated functions.
-    /// * `fee_bps`  – Protocol fee in basis points (0–500, i.e. 0 %–5 %).
-    /// * `treasury` – Address that receives collected protocol fees.
     ///
     /// # Errors
     /// * `AlreadyInitialized` – `initialize` has already been called.
@@ -135,9 +79,9 @@ impl VestingDrips {
         Ok(())
     }
 
+    // ── Admin / Upgrade ───────────────────────────────────────────────────────
+
     /// Upgrades the contract to the WASM referenced by `new_wasm_hash`.
-    ///
-    /// Emits a `ContractUpgraded` event with the admin and new hash.
     ///
     /// # Errors
     /// * `Unauthorized` – `admin` is not the address set during `initialize`.
@@ -150,8 +94,6 @@ impl VestingDrips {
         if storage::get_admin(&env) != Some(admin.clone()) {
             return Err(VestingError::Unauthorized);
         }
-        // Emit upgrade event before replacing the WASM so the event is
-        // captured under the current contract version.
         events::emit_contract_upgraded(&env, &admin, &new_wasm_hash);
         env.deployer().update_current_contract_wasm(new_wasm_hash);
         Ok(())
@@ -174,34 +116,89 @@ impl VestingDrips {
         Ok(())
     }
 
+    // ── Admin / Allowlist ─────────────────────────────────────────────────────
+
+    /// Adds `token` to the allowlist of accepted SAC token contracts.
+    ///
+    /// When the allowlist is non-empty, only listed tokens can be used in
+    /// `create_vesting_stream`. An empty allowlist enables permissive mode.
+    ///
+    /// # Events
+    /// Emits `AllowlistUpdated { token, added: true }`.
+    pub fn add_allowed_token(
+        env: Env,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        storage::add_allowed_token(&env, &token);
+        events::emit_allowlist_updated(&env, &admin, &token, true);
+        Ok(())
+    }
+
+    /// Removes `token` from the allowlist.
+    ///
+    /// If the resulting allowlist is empty the contract reverts to permissive mode.
+    ///
+    /// # Events
+    /// Emits `AllowlistUpdated { token, added: false }`.
+    pub fn remove_allowed_token(
+        env: Env,
+        admin: Address,
+        token: Address,
+    ) -> Result<(), VestingError> {
+        admin.require_auth();
+        storage::remove_allowed_token(&env, &token);
+        events::emit_allowlist_updated(&env, &admin, &token, false);
+        Ok(())
+    }
+
+    /// Returns all currently allowed token addresses.
+    ///
+    /// An empty `Vec` means permissive mode (all tokens accepted).
+    pub fn get_allowed_tokens(env: Env) -> Vec<Address> {
+        storage::get_allowed_tokens(&env)
+    }
+
     // ── Stream creation ───────────────────────────────────────────────────────
 
     /// Creates a new cliff-vesting stream for `recipient`.
     ///
-    /// The contract must have been initialized via `initialize` before streams
-    /// can be created.
-    ///
-    /// # Arguments
-    /// * `sponsor`        – The funder; must authorise this call and hold sufficient tokens.
-    /// * `recipient`      – The beneficiary who will claim tokens after the cliff.
-    /// * `token`          – SAC-compatible token contract address.
-    /// * `rate`           – Tokens released per ledger (must be > 0).
-    /// * `cliff_duration` – Ledgers from now until the cliff is reached.
-    /// * `total_duration` – Total ledgers the stream runs for (must be > cliff_duration).
-    /// * `metadata`       – Optional free-form label (max 256 UTF-8 bytes). Empty string
-    ///                      is treated as `None`. Immutable after creation.
-    ///                      ⚠️ Stored on-chain and publicly visible — do not include
-    ///                      sensitive or personally-identifiable information.
-    ///
     /// # Errors
-    /// * `NotInitialized`         – `initialize` has not been called yet.
     /// * `InvalidRate`            – `rate` is zero or negative.
     /// * `InvalidDuration`        – `total_duration` ≤ `cliff_duration`.
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
     /// * `DepositBelowMinimum`    – Total deposit is below the configured minimum.
     /// * `ScheduleAlreadyExists`  – A stream already exists for `recipient`.
     /// * `MetadataTooLong`        – `metadata` exceeds 256 bytes.
+    /// * `TokenNotAllowed`        – Token is not in the allowlist (when enforced).
     pub fn create_vesting_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+        token: Address,
+        rate: i128,
+        cliff_duration: u32,
+        total_duration: u32,
+    ) -> Result<(), VestingError> {
+        Self::create_vesting_stream_with_metadata(
+            env,
+            sponsor,
+            recipient,
+            token,
+            rate,
+            cliff_duration,
+            total_duration,
+            None,
+        )
+    }
+
+    /// Creates a new cliff-vesting stream for `recipient` with optional metadata.
+    ///
+    /// # Errors
+    /// Same as `create_vesting_stream` plus:
+    /// * `MetadataTooLong` – `metadata` exceeds 256 bytes.
+    pub fn create_vesting_stream_with_metadata(
         env: Env,
         sponsor: Address,
         recipient: Address,
@@ -226,16 +223,16 @@ impl VestingDrips {
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
         }
-        if sponsor == recipient {
-            return Err(VestingError::InvalidRecipient);
-        }
         if storage::has_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
 
+        // ── Allowlist check ───────────────────────────────────────────────────
+        if !storage::is_token_allowed(&env, &token) {
+            return Err(VestingError::TokenNotAllowed);
+        }
+
         // ── Normalise and validate metadata ───────────────────────────────────
-        // Treat an empty string the same as None.
-        // Validate byte length (not char count) against the 256-byte cap.
         const MAX_METADATA_BYTES: u32 = 256;
         let metadata: Option<String> = match metadata {
             Some(ref s) if s.len() == 0 => None,
@@ -270,9 +267,6 @@ impl VestingDrips {
         // ── Collect Protocol Fee (if configured) ──────────────────────────────
         let (fee_bps, treasury_opt) = storage::get_fee(&env);
         if fee_bps > 0 {
-            if fee_bps > 500 {
-                return Err(VestingError::InvalidRate);
-            }
             let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
             let fee_amount = total_deposit
                 .checked_mul(fee_bps as i128)
@@ -283,14 +277,11 @@ impl VestingDrips {
                 token_client
                     .try_transfer(&sponsor, &treasury, &fee_amount)
                     .map_err(|_| VestingError::TransferFailed)?;
-
                 events::emit_fee_collected(&env, &sponsor, &treasury, fee_amount);
             }
         }
 
         // ── Persist schedule ──────────────────────────────────────────────────
-        // `version` starts at 1 (Issue #318) and is placed last in the struct
-        // for XDR forward-compatibility.
         let schedule = VestingSchedule {
             token: token.clone(),
             sponsor: sponsor.clone(),
@@ -300,7 +291,12 @@ impl VestingDrips {
             end_ledger,
             last_claimed_ledger: start_ledger,
             total_claimed: 0,
+            claimed_amount: 0,
+            dust: 0,
             metadata: metadata.clone(),
+            paused_at_ledger: None,
+            accumulated_pause_ledgers: 0,
+            version: 1,
         };
         storage::set_schedule(&env, &recipient, &schedule);
 
@@ -319,88 +315,215 @@ impl VestingDrips {
         Ok(())
     }
 
-    /// Creates a variable-rate vesting stream with scheduled rate changes.
+    // ── Milestone stream ──────────────────────────────────────────────────────
+
+    /// Creates a milestone-based vesting stream for `recipient`.
     ///
-    /// Supports stepped vesting schedules where the drip rate increases or
-    /// decreases at specified ledger boundaries.
-    ///
-    /// # Arguments
-    /// * `sponsor`        – The funder; must authorise this call.
-    /// * `recipient`      – The beneficiary.
-    /// * `token`          – SAC-compatible token contract address.
-    /// * `cliff_duration` – Ledgers from now until the cliff is reached.
-    /// * `segments`       – Ordered `Vec<(u32, i128)>` of `(end_ledger, rate)`.
+    /// Tokens are released at discrete ledger milestones rather than linearly.
+    /// The `milestones` argument is a `Vec` of `(ledger: u32, bps_unlock: u32)` tuples
+    /// where `bps_unlock` is the percentage in basis points (10000 = 100%).
+    /// All milestone bps values must sum to exactly 10000.
+    /// Milestones must be in strictly ascending ledger order.
     ///
     /// # Errors
-    /// * `ScheduleNotFound` – No schedule exists for `recipient`.
-    ///
-    /// # Idempotency
-    /// Calling this on a schedule that already has `version >= 1` is a no-op
-    /// (returns `Ok(())` without writing to storage).
-    pub fn migrate_schedule(
+    /// * `InvalidRecipient`      – `sponsor == recipient`.
+    /// * `ScheduleAlreadyExists` – A milestone schedule already exists for `recipient`.
+    /// * `InvalidMilestones`     – Milestones are empty, out-of-order, or bps ≠ 10000.
+    /// * `DepositBelowMinimum`   – `total_deposit` is below the configured minimum.
+    /// * `TransferFailed`        – Token transfer failed.
+    pub fn create_milestone_stream(
         env: Env,
         sponsor: Address,
         recipient: Address,
         token: Address,
-        cliff_duration: u32,
-        segments: Vec<(u32, i128)>,
+        milestones: Vec<(u32, u32)>,
+        end_ledger: u32,
+        total_deposit: i128,
     ) -> Result<(), VestingError> {
-        if !storage::is_initialized(&env) {
-            return Err(VestingError::NotInitialized);
-        }
+        env.storage()
+            .instance()
+            .extend_ttl(259_200, 518_400);
+
         if sponsor == recipient {
             return Err(VestingError::InvalidRecipient);
         }
-        if storage::has_variable_schedule(&env, &recipient)
-            || storage::has_schedule(&env, &recipient)
-        {
+
+        if storage::has_milestone_schedule(&env, &recipient) {
             return Err(VestingError::ScheduleAlreadyExists);
         }
 
-        // ── Validate segments ─────────────────────────────────────────────────
-        let n = segments.len();
-        if n == 0 || n > MAX_SEGMENTS {
-            return Err(VestingError::InvalidSegments);
+        // ── Validate milestones ───────────────────────────────────────────────
+        let n = milestones.len();
+        if n == 0 || n > MAX_MILESTONES {
+            return Err(VestingError::InvalidMilestones);
         }
 
-        let start_ledger: u32 = env.ledger().sequence();
-        let mut prev_end: u32 = start_ledger;
-        let mut total_deposit: i128 = 0;
-        let mut rate_segments: Vec<RateSegment> = Vec::new(&env);
+        let mut total_bps: u32 = 0;
+        let mut prev_ledger: u32 = 0;
+        let mut milestone_vec: Vec<Milestone> = Vec::new(&env);
 
         for i in 0..n {
-            let (seg_end_offset, rate) = segments.get(i).unwrap();
-            // seg_end_offset is treated as an absolute ledger number
-            let seg_end: u32 = seg_end_offset;
-
-            if rate <= 0 {
-                return Err(VestingError::InvalidSegments);
+            let (m_ledger, m_bps) = milestones.get(i).unwrap();
+            if m_ledger <= prev_ledger {
+                return Err(VestingError::InvalidMilestones);
             }
-            if seg_end <= prev_end {
-                return Err(VestingError::InvalidSegments);
-            }
-
-            let duration = (seg_end - prev_end) as i128;
-            let seg_deposit = rate
-                .checked_mul(duration)
-                .ok_or(VestingError::DepositOverflow)?;
-            total_deposit = total_deposit
-                .checked_add(seg_deposit)
-                .ok_or(VestingError::DepositOverflow)?;
-
-            rate_segments.push_back(RateSegment {
-                end_ledger: seg_end,
-                rate,
+            prev_ledger = m_ledger;
+            total_bps = total_bps
+                .checked_add(m_bps)
+                .ok_or(VestingError::InvalidMilestones)?;
+            milestone_vec.push_back(Milestone {
+                ledger: m_ledger,
+                bps_unlock: m_bps,
             });
+        }
+
+        if total_bps != 10_000 {
+            return Err(VestingError::InvalidMilestones);
+        }
+
+        let min_deposit = storage::get_min_deposit(&env);
+        if total_deposit < min_deposit {
+            return Err(VestingError::DepositBelowMinimum);
+        }
+
+        sponsor.require_auth();
+
+        let token_client = token::Client::new(&env, &token);
+        token_client
+            .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
+            .map_err(|_| VestingError::TransferFailed)?;
+
+        let schedule = MilestoneSchedule {
+            token: token.clone(),
+            sponsor: sponsor.clone(),
+            total_deposited: total_deposit,
+            milestones: milestone_vec,
+            next_milestone_idx: 0,
+            end_ledger,
+            total_claimed: 0,
+        };
+        storage::set_milestone_schedule(&env, &recipient, &schedule);
+
+        events::emit_milestone_stream_created(
+            &env,
+            &sponsor,
+            &recipient,
+            &token,
+            total_deposit,
+            end_ledger,
+        );
+
+        Ok(())
+    }
+
+    /// Claims all unlocked milestones for `recipient`.
+    ///
+    /// Accumulates all milestones whose `ledger` is ≤ current ledger that have
+    /// not yet been claimed.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No milestone schedule exists for `recipient`.
+    /// * `NothingToClaim`   – No milestones have reached their ledger yet.
+    /// * `TransferFailed`   – Token transfer failed.
+    pub fn claim_milestone(env: Env, recipient: Address) -> Result<i128, VestingError> {
+        recipient.require_auth();
+
+        let mut schedule = storage::get_milestone_schedule(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        let current_ledger = env.ledger().sequence();
+        let mut claimable: i128 = 0;
+        let mut new_idx = schedule.next_milestone_idx;
+
+        let n = schedule.milestones.len();
+        while new_idx < n {
+            let milestone = schedule.milestones.get(new_idx).unwrap();
+            if current_ledger >= milestone.ledger {
+                // Calculate token amount for this milestone
+                let milestone_amount = schedule
+                    .total_deposited
+                    .checked_mul(milestone.bps_unlock as i128)
+                    .ok_or(VestingError::DepositOverflow)?
+                    / 10_000;
+                claimable = claimable
+                    .checked_add(milestone_amount)
+                    .ok_or(VestingError::DepositOverflow)?;
+                new_idx += 1;
+            } else {
+                break;
+            }
+        }
+
+        if claimable == 0 {
+            return Err(VestingError::NothingToClaim);
+        }
+
+        let token_client = token::Client::new(&env, &schedule.token);
+        token_client
+            .try_transfer(
+                &env.current_contract_address(),
+                &recipient,
+                &claimable,
+            )
+            .map_err(|_| VestingError::TransferFailed)?;
+
+        schedule.next_milestone_idx = new_idx;
+        schedule.total_claimed = schedule
+            .total_claimed
+            .checked_add(claimable)
+            .ok_or(VestingError::DepositOverflow)?;
+
+        let stream_finished = schedule.next_milestone_idx >= n;
+        if stream_finished {
+            storage::remove_milestone_schedule(&env, &recipient);
+            events::emit_stream_completed(&env, &recipient, &schedule.token);
+        } else {
+            storage::set_milestone_schedule(&env, &recipient, &schedule);
+        }
+
+        events::emit_milestone_claimed(&env, &recipient, claimable);
+
+        Ok(claimable)
+    }
+
+    // ── Claim (fixed-rate) ────────────────────────────────────────────────────
+
+    /// Claims all vested tokens accrued since the last claim.
+    ///
+    /// The cliff must have been reached before any tokens can be withdrawn.
+    ///
+    /// ## Dust collection (Issue #322)
+    ///
+    /// At `end_ledger`, the claim returns `total_deposit − claimed_amount` to
+    /// ensure no sub-1-token dust remains locked in the vault forever.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No stream exists for `recipient`.
+    /// * `CliffNotReached`  – Current ledger < `cliff_ledger`.
+    /// * `NothingToClaim`   – Claimable amount is zero.
+    pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
+        recipient.require_auth();
+
+        env.storage()
+            .instance()
+            .extend_ttl(259_200, 518_400);
 
         let mut schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        // Paused streams cannot be claimed.
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::NothingToClaim);
+        }
 
         let current_ledger = env.ledger().sequence();
 
         if current_ledger < schedule.cliff_ledger {
             return Err(VestingError::CliffNotReached);
         }
+
+        // Increment version before state mutation (Issue #318).
+        schedule.increment_version()?;
 
         let total_deposited =
             (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
@@ -445,18 +568,105 @@ impl VestingDrips {
         Ok(claimable_amount)
     }
 
+    // ── Variable-rate stream ──────────────────────────────────────────────────
+
+    /// Creates a variable-rate vesting stream with scheduled rate changes.
+    pub fn create_variable_stream(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+        token: Address,
+        cliff_duration: u32,
+        segments: Vec<(u32, i128)>,
+    ) -> Result<(), VestingError> {
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
+        if storage::has_variable_schedule(&env, &recipient)
+            || storage::has_schedule(&env, &recipient)
+        {
+            return Err(VestingError::ScheduleAlreadyExists);
+        }
+
+        let n = segments.len();
+        if n == 0 || n > MAX_SEGMENTS {
+            return Err(VestingError::InvalidSegments);
+        }
+
+        let start_ledger: u32 = env.ledger().sequence();
+        let cliff_ledger: u32 = start_ledger
+            .checked_add(cliff_duration)
+            .ok_or(VestingError::DepositOverflow)?;
+
+        let mut prev_end: u32 = start_ledger;
+        let mut total_deposit: i128 = 0;
+        let mut rate_segments: Vec<RateSegment> = Vec::new(&env);
+        let mut end_ledger: u32 = start_ledger;
+
+        for i in 0..n {
+            let (seg_end, rate) = segments.get(i).unwrap();
+
+            if rate <= 0 {
+                return Err(VestingError::InvalidSegments);
+            }
+            if seg_end <= prev_end {
+                return Err(VestingError::InvalidSegments);
+            }
+
+            let duration = (seg_end - prev_end) as i128;
+            let seg_deposit = rate
+                .checked_mul(duration)
+                .ok_or(VestingError::DepositOverflow)?;
+            total_deposit = total_deposit
+                .checked_add(seg_deposit)
+                .ok_or(VestingError::DepositOverflow)?;
+
+            rate_segments.push_back(RateSegment {
+                end_ledger: seg_end,
+                rate,
+            });
+
+            end_ledger = seg_end;
+            prev_end = seg_end;
+        }
+
+        sponsor.require_auth();
+
+        let token_client = token::Client::new(&env, &token);
+        token_client
+            .try_transfer(&sponsor, &env.current_contract_address(), &total_deposit)
+            .map_err(|_| VestingError::TransferFailed)?;
+
+        let schedule = VariableRateSchedule {
+            token: token.clone(),
+            sponsor: sponsor.clone(),
+            segments: rate_segments,
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            total_deposited: total_deposit,
+            last_claimed_ledger: start_ledger,
+            claimed_amount: 0,
+            total_claimed: 0,
+            paused_at_ledger: None,
+        };
+        storage::set_variable_schedule(&env, &recipient, &schedule);
+
+        events::emit_variable_stream_created(
+            &env,
+            &sponsor,
+            &recipient,
+            &token,
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+            total_deposit,
+        );
+
+        Ok(())
+    }
+
     /// Claims all vested tokens from a variable-rate stream.
-    ///
-    /// Iterates over segments to accumulate the claimable amount from
-    /// `last_claimed_ledger` to `min(current_ledger, end_ledger)`.
-    ///
-    /// Implements dust collection: at `end_ledger` returns `total_deposited −
-    /// claimed_amount` to capture any sub-1-token remainder.
-    ///
-    /// # Errors
-    /// * `ScheduleNotFound` – No variable-rate stream exists for `recipient`.
-    /// * `CliffNotReached`  – Current ledger < `cliff_ledger`.
-    /// * `NothingToClaim`   – Claimable amount is zero.
     pub fn claim_variable_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
         recipient.require_auth();
 
@@ -520,12 +730,8 @@ impl VestingDrips {
     /// by `recipient` only if the cliff has been passed; otherwise the
     /// entire deposit is refunded to `sponsor`.
     ///
-    /// The schedule's `version` counter is incremented before removal so
-    /// that off-chain indexers can detect that a mutation occurred.
-    ///
     /// # Errors
     /// * `ScheduleNotFound` – No stream exists for `recipient`.
-    /// * `VersionOverflow`  – `version` counter is already at `u32::MAX`.
     pub fn cancel_stream(
         env: Env,
         sponsor: Address,
@@ -546,9 +752,10 @@ impl VestingDrips {
             let active_end = current_ledger.min(schedule.end_ledger);
             let earned_ledgers = active_end - schedule.last_claimed_ledger;
             let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
-            let unclaimed_from_end =
-                (schedule.end_ledger - active_end) as i128 * schedule.rate_per_ledger;
-            (earned, unclaimed_from_end)
+            let total_deposited =
+                (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+            let refund = total_deposited - schedule.claimed_amount - earned;
+            (earned, refund.max(0))
         } else {
             let total_remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
                 * schedule.rate_per_ledger;
@@ -578,12 +785,10 @@ impl VestingDrips {
 
     /// Pauses an active stream, halting token accrual at current ledger.
     ///
-    /// Callable only by the original sponsor.
-    ///
     /// # Errors
-    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
-    /// * `Unauthorized`         – Caller is not the stream's sponsor.
-    /// * `StreamAlreadyPaused`  – Stream is already in paused state.
+    /// * `ScheduleNotFound`    – No stream exists for `recipient`.
+    /// * `Unauthorized`        – Caller is not the stream's sponsor.
+    /// * `StreamAlreadyPaused` – Stream is already in paused state.
     pub fn pause_stream(
         env: Env,
         sponsor: Address,
@@ -606,7 +811,6 @@ impl VestingDrips {
         schedule.paused_at_ledger = Some(current_ledger);
 
         storage::set_schedule(&env, &recipient, &schedule);
-
         events::emit_stream_paused(&env, &recipient, &sponsor, current_ledger);
 
         Ok(())
@@ -614,12 +818,10 @@ impl VestingDrips {
 
     /// Resumes a paused stream, shifting end_ledger and cliff_ledger by the paused duration.
     ///
-    /// Callable only by the original sponsor.
-    ///
     /// # Errors
-    /// * `ScheduleNotFound`  – No stream exists for `recipient`.
-    /// * `Unauthorized`      – Caller is not the stream's sponsor.
-    /// * `StreamNotPaused`   – Stream is not currently paused.
+    /// * `ScheduleNotFound` – No stream exists for `recipient`.
+    /// * `Unauthorized`     – Caller is not the stream's sponsor.
+    /// * `StreamNotPaused`  – Stream is not currently paused.
     pub fn resume_stream(
         env: Env,
         sponsor: Address,
@@ -634,9 +836,7 @@ impl VestingDrips {
             return Err(VestingError::Unauthorized);
         }
 
-        let Some(paused_at) = schedule.paused_at_ledger else {
-            return Err(VestingError::StreamNotPaused);
-        };
+        let paused_at = schedule.paused_at_ledger.ok_or(VestingError::StreamNotPaused)?;
 
         let current_ledger = env.ledger().sequence();
         let paused_duration = current_ledger.saturating_sub(paused_at);
@@ -649,7 +849,6 @@ impl VestingDrips {
         schedule.paused_at_ledger = None;
 
         storage::set_schedule(&env, &recipient, &schedule);
-
         events::emit_stream_resumed(&env, &recipient, &sponsor, schedule.end_ledger);
 
         Ok(())
@@ -657,11 +856,9 @@ impl VestingDrips {
 
     /// Reassigns an active vesting stream from `current_recipient` to `new_recipient`.
     ///
-    /// Callable only by `current_recipient`.
-    ///
     /// # Errors
     /// * `ScheduleNotFound`       – No stream exists for `current_recipient`.
-    /// * `InvalidRecipient`       – `new_recipient == current_recipient` or `new_recipient == sponsor`.
+    /// * `InvalidRecipient`       – Recipients are the same or `new_recipient == sponsor`.
     /// * `ScheduleAlreadyExists`  – `new_recipient` already has an active stream.
     pub fn transfer_recipient(
         env: Env,
@@ -687,7 +884,6 @@ impl VestingDrips {
 
         storage::remove_schedule(&env, &current_recipient);
         storage::set_schedule(&env, &new_recipient, &schedule);
-
         events::emit_recipient_transferred(&env, &current_recipient, &new_recipient);
 
         Ok(())
@@ -695,11 +891,9 @@ impl VestingDrips {
 
     /// Configures protocol fee basis points (0-500) and treasury address.
     ///
-    /// Callable only by the contract admin.
-    ///
     /// # Errors
     /// * `Unauthorized` – Caller is not the configured admin.
-    /// * `InvalidRate`   – `fee_bps` exceeds maximum allowed cap of 500 (5%).
+    /// * `InvalidRate`  – `fee_bps` exceeds 500.
     pub fn set_fee(
         env: Env,
         admin: Address,
@@ -721,8 +915,7 @@ impl VestingDrips {
         Ok(())
     }
 
-    /// Compliance clawback: the original sponsor recovers **all** remaining tokens
-    /// from the contract vault, bypassing cliff state.
+    /// Compliance clawback: the original sponsor recovers **all** remaining tokens.
     ///
     /// # Errors
     /// * `ScheduleNotFound`     – No stream exists for `recipient`.
@@ -738,9 +931,11 @@ impl VestingDrips {
         let schedule = storage::get_schedule(&env, &recipient)
             .ok_or(VestingError::ScheduleNotFound)?;
 
-        let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-            * schedule.rate_per_ledger;
+        let total_deposited =
+            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        let remaining = total_deposited - schedule.claimed_amount;
 
+        // Test that clawback is supported by attempting a zero-value clawback.
         let sac_admin_client = token::StellarAssetClient::new(&env, &schedule.token);
         if sac_admin_client
             .try_clawback(&env.current_contract_address(), &0_i128)
@@ -872,67 +1067,78 @@ impl VestingDrips {
         Ok(())
     }
 
-    // ── Read-only views ───────────────────────────────────────────────────────
-
-    /// Claims all vested tokens accrued since the last claim.
-    ///
-    /// The cliff must have been reached before any tokens can be withdrawn.
-    ///
-    /// The schedule's `version` counter is incremented on every successful claim.
-    ///
-    /// The schedule's `version` counter is incremented on every successful claim.
+    /// Recovers unclaimed tokens from an expired stream after a long safety delay.
     ///
     /// # Errors
-    /// * `ScheduleNotFound` – No stream exists for `recipient`.
-    /// * `CliffNotReached`  – Current ledger < `cliff_ledger`.
-    /// * `NothingToClaim`   – Claimable amount is zero.
-    /// * `VersionOverflow`  – `version` counter is already at `u32::MAX`.
-    pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError> {
-        recipient.require_auth();
+    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
+    /// * `StreamNotExpired`     – `end_ledger` has not yet been reached.
+    /// * `DrainDelayNotExpired` – The 1-year delay after `end_ledger` has not passed.
+    pub fn emergency_drain(
+        env: Env,
+        sponsor: Address,
+        recipient: Address,
+    ) -> Result<(), VestingError> {
+        sponsor.require_auth();
 
-        // Bump instance storage TTL on every interaction.
-        env.storage()
-            .instance()
-            .extend_ttl(259_200, 518_400);
-
-        let mut schedule =
+        let schedule =
             storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
 
-        if schedule.paused_at_ledger.is_some() {
-            return Err(VestingError::NothingToClaim);
+        let current = env.ledger().sequence();
+
+        if current < schedule.end_ledger {
+            return Err(VestingError::StreamNotExpired);
         }
 
+        let drain_available_at = schedule.end_ledger.saturating_add(DRAIN_DELAY_LEDGERS);
+        if current < drain_available_at {
+            return Err(VestingError::DrainDelayNotExpired);
+        }
+
+        let total_deposited =
+            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        let amount = total_deposited - schedule.claimed_amount;
+
+        if amount > 0 {
+            let token_client = token::Client::new(&env, &schedule.token);
+            token_client
+                .try_transfer(&env.current_contract_address(), &sponsor, &amount)
+                .map_err(|_| VestingError::TransferFailed)?;
+        }
+
+        storage::remove_schedule(&env, &recipient);
+        events::emit_emergency_drain(&env, &recipient, &sponsor, amount);
+
+        Ok(())
+    }
+
+    // ── Read-only views ───────────────────────────────────────────────────────
+
+    /// Returns the vesting schedule for `recipient`, or `None`.
+    pub fn get_schedule(env: Env, recipient: Address) -> Option<VestingSchedule> {
+        storage::get_schedule_readonly(&env, &recipient)
+    }
+
+    /// Returns the number of tokens claimable right now for `recipient`.
+    ///
+    /// Returns `0` if the cliff has not been reached or no schedule exists.
+    pub fn claimable_amount(env: Env, recipient: Address) -> i128 {
+        let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
+            return 0;
+        };
+        if schedule.paused_at_ledger.is_some() {
+            return 0;
+        }
         let current_ledger = env.ledger().sequence();
         if current_ledger < schedule.cliff_ledger {
             return 0;
         }
-
-        // Increment version before state mutation (Issue #318).
-        schedule.increment_version()?;
-
-        // Increment version before state mutation (Issue #318).
-        schedule.increment_version()?;
-
-        let token_client = token::Client::new(&env, &schedule.token);
-        token_client
-            .try_transfer(
-                &env.current_contract_address(),
-                &recipient,
-                &claimable_amount,
-            )
-            .map_err(|_| VestingError::TransferFailed)?;
-
-        schedule.last_claimed_ledger = active_end;
-        schedule.total_claimed += claimable_amount;
-        let stream_finished = active_end == schedule.end_ledger;
-
-        if stream_finished {
-            storage::remove_schedule(&env, &recipient);
-            events::emit_stream_completed(&env, &recipient, &schedule.token);
-        } else {
-            let active_end = current_ledger.min(schedule.end_ledger);
-            (active_end - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger
+        let total_deposited =
+            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        if current_ledger >= schedule.end_ledger {
+            return total_deposited - schedule.claimed_amount;
         }
+        let active_end = current_ledger.min(schedule.end_ledger);
+        (active_end - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger
     }
 
     /// Returns the number of tokens claimable from a variable-rate stream.
@@ -1012,74 +1218,13 @@ impl VestingDrips {
         })
     }
 
-    // ── Emergency Drain ───────────────────────────────────────────────────────
-
-    /// Recovers unclaimed tokens from an expired stream after a long safety delay.
-    ///
-    /// # Errors
-    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
-    /// * `StreamNotExpired`     – `end_ledger` has not yet been reached.
-    /// * `DrainDelayNotExpired` – The 1-year delay after `end_ledger` has not passed.
-    pub fn emergency_drain(
-        env: Env,
-        sponsor: Address,
-        recipient: Address,
-    ) -> Result<(), VestingError> {
-        sponsor.require_auth();
-
-        let schedule =
-            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
-
-        let current = env.ledger().sequence();
-
-        if current < schedule.end_ledger {
-            return Err(VestingError::StreamNotExpired);
-        }
-
-        let drain_available_at = schedule.end_ledger.saturating_add(DRAIN_DELAY_LEDGERS);
-        if current < drain_available_at {
-            return Err(VestingError::DrainDelayNotExpired);
-        }
-
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
-        let amount = total_deposited - schedule.claimed_amount;
-
-        if amount > 0 {
-            let token_client = token::Client::new(&env, &schedule.token);
-            token_client
-                .try_transfer(&env.current_contract_address(), &sponsor, &amount)
-                .map_err(|_| VestingError::TransferFailed)?;
-        }
-
-        storage::remove_schedule(&env, &recipient);
-        events::emit_emergency_drain(&env, &recipient, &sponsor, amount);
-
-        Ok(())
+    /// Returns the version string for the contract.
+    pub fn get_version(_env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&_env, env!("CARGO_PKG_VERSION"))
     }
 }
 
 // ── Free functions ────────────────────────────────────────────────────────────
-
-        let claimable_now = {
-            let current = env.ledger().sequence();
-            if current < schedule.cliff_ledger {
-                0
-            } else {
-                let active_end = current.min(schedule.end_ledger);
-                let ledgers = active_end - schedule.last_claimed_ledger;
-                ledgers as i128 * schedule.rate_per_ledger
-            }
-        };
-
-        Some(StreamStats {
-            total_deposited,
-            total_claimed,
-            remaining,
-            claimable_now,
-        })
-    }
-}
 
 /// Computes the full deposit for a stream.
 ///

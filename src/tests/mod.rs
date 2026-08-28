@@ -14,6 +14,28 @@ mod test_views;
 mod test_dust;
 mod test_variable_rate;
 mod test_initialize;
+mod test_upgrade;
+mod test_upgrade_event;
+mod test_milestone_stream;
+mod test_clawback;
+mod test_drain;
+mod test_min_deposit;
+mod test_benchmarks;
+mod test_coverage;
+mod test_transfer_failed;
+mod test_pause_resume;
+mod test_stress;
+mod test_fuzz;
+mod test_batch_create;
+mod test_fee_collection;
+mod test_stream_status;
+mod test_total_claimed;
+mod test_mutations;
+mod test_snapshots;
+mod test_event_snapshots;
+mod test_auth;
+mod test_recipient_transfer;
+mod test_error_codes;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},

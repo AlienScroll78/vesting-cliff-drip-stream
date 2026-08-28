@@ -5,6 +5,59 @@
 
 use soroban_sdk::{contracttype, Address, Vec};
 
+/// A single rate segment for variable-rate vesting streams.
+///
+/// Defines the rate per ledger from the start of the segment up to `end_ledger`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RateSegment {
+    /// Absolute ledger number at which this segment ends.
+    pub end_ledger: u32,
+    /// Tokens released per ledger in this segment (must be > 0).
+    pub rate: i128,
+}
+
+/// A variable-rate vesting schedule stored per recipient.
+///
+/// Supports stepped vesting schedules where the drip rate changes at defined
+/// ledger boundaries.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VariableRateSchedule {
+    /// The token being streamed.
+    pub token: Address,
+
+    /// The sponsor (funder) who created this stream.
+    pub sponsor: Address,
+
+    /// Ordered list of rate segments.
+    pub segments: Vec<RateSegment>,
+
+    /// Ledger sequence at which the stream was created.
+    pub start_ledger: u32,
+
+    /// Ledger sequence the recipient must wait for before any claim is valid.
+    pub cliff_ledger: u32,
+
+    /// Ledger sequence at which the stream ends.
+    pub end_ledger: u32,
+
+    /// Total tokens deposited when the stream was created.
+    pub total_deposited: i128,
+
+    /// Tracks the last ledger up to which tokens have been claimed.
+    pub last_claimed_ledger: u32,
+
+    /// Running total of tokens transferred to the recipient.
+    pub claimed_amount: i128,
+
+    /// Alias for `claimed_amount`; kept for API compatibility.
+    pub total_claimed: i128,
+
+    /// If set, the ledger at which the stream was paused.
+    pub paused_at_ledger: Option<u32>,
+}
+
 /// Represents a single vesting schedule stored per recipient.
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
@@ -29,7 +82,6 @@ pub struct VestingSchedule {
     pub token: Address,
 
     /// The sponsor (funder) who created this stream.
-    /// Required for drain operations where unclaimed tokens are returned to sponsor.
     pub sponsor: Address,
 
     /// Tokens released per ledger once the cliff has passed.
@@ -50,35 +102,55 @@ pub struct VestingSchedule {
 
     /// Running total of tokens transferred to the recipient via `claim_vested`.
     /// Initialised to `0` on stream creation and incremented on every successful claim.
-    /// Useful for audits and UI displays without requiring off-chain event indexing.
     pub total_claimed: i128,
 
+    /// Alias for `total_claimed`; incremented on every successful claim.
+    /// Exposed as a separate field for API compatibility with dust-tracking tests.
+    pub claimed_amount: i128,
+
+    /// Sub-unit token remainder accumulated due to integer division.
+    /// Carried forward and added to the next claim once it reaches ≥ 1 token.
+    pub dust: i128,
+
     /// Optional free-form metadata attached at stream creation (max 256 bytes, UTF-8).
-    ///
-    /// Stored on-chain and returned by `get_schedule`. Immutable after creation.
-    /// Empty string is normalised to `None` at creation time.
-    ///
-    /// ⚠️  Metadata is publicly visible on-chain. Do **not** store sensitive
-    /// or personally-identifiable information here.
-    ///
-    /// Schedules created before this field was introduced will deserialise
-    /// with `metadata = None` (XDR default for a missing `Option`).
     pub metadata: Option<String>,
+
+    /// If set, the ledger sequence at which this stream was paused.
+    pub paused_at_ledger: Option<u32>,
+
+    /// Total ledgers the stream has been paused (used to extend end_ledger on resume).
+    pub accumulated_pause_ledgers: u32,
+
+    /// Monotonically increasing mutation counter.
+    /// Initialised to `1` at stream creation; incremented on every state change.
+    /// `0` is the legacy default for schedules created before versioning was added.
+    pub version: u32,
+}
+
+impl VestingSchedule {
+    /// Increments the version counter.
+    ///
+    /// Returns `Err(VestingError::VersionOverflow)` if already at `u32::MAX`.
+    pub fn increment_version(&mut self) -> Result<(), crate::error::VestingError> {
+        self.version = self
+            .version
+            .checked_add(1)
+            .ok_or(crate::error::VestingError::VersionOverflow)?;
+        Ok(())
+    }
 }
 
 /// Analytics snapshot for a single vesting stream.
 ///
-/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
+/// Returned by `VestingDrips::get_stream_info`. All token amounts are in the
 /// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StreamInfo {
     /// Total tokens deposited when the stream was created.
-    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
     pub total_deposit: i128,
 
     /// Tokens already transferred to the recipient via `claim_vested`.
-    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
     pub claimed_so_far: i128,
 
     /// Tokens currently available to claim (zero if cliff not yet reached).
@@ -88,71 +160,6 @@ pub struct StreamInfo {
     pub remaining_locked: i128,
 
     /// Percentage of the stream that has been claimed, in basis points (0–10 000).
-    /// Example: `5000` = 50.00 %.
-    pub percent_vested_bps: u32,
-
-    /// `true` if the cliff has been reached at the queried ledger.
-    pub cliff_reached: bool,
-
-    /// `true` if the stream has ended (current ledger >= `end_ledger`).
-    pub stream_ended: bool,
-}
-
-/// Analytics snapshot for a single vesting stream.
-///
-/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
-/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StreamInfo {
-    /// Total tokens deposited when the stream was created.
-    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
-    pub total_deposit: i128,
-
-    /// Tokens already transferred to the recipient via `claim_vested`.
-    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
-    pub claimed_so_far: i128,
-
-    /// Tokens currently available to claim (zero if cliff not yet reached).
-    pub claimable_now: i128,
-
-    /// Tokens that will still drip after the current ledger.
-    pub remaining_locked: i128,
-
-    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
-    /// Example: `5000` = 50.00 %.
-    pub percent_vested_bps: u32,
-
-    /// `true` if the cliff has been reached at the queried ledger.
-    pub cliff_reached: bool,
-
-    /// `true` if the stream has ended (current ledger >= `end_ledger`).
-    pub stream_ended: bool,
-}
-
-/// Analytics snapshot for a single vesting stream.
-///
-/// Returned by `VestingDrips::get_stream_info`.  All token amounts are in the
-/// smallest unit of the streamed token (same denomination as `rate_per_ledger`).
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StreamInfo {
-    /// Total tokens deposited when the stream was created.
-    /// Equal to `rate_per_ledger * (end_ledger - start_ledger)`.
-    pub total_deposit: i128,
-
-    /// Tokens already transferred to the recipient via `claim_vested`.
-    /// Computed as `rate_per_ledger * (last_claimed_ledger - start_ledger)`.
-    pub claimed_so_far: i128,
-
-    /// Tokens currently available to claim (zero if cliff not yet reached).
-    pub claimable_now: i128,
-
-    /// Tokens that will still drip after the current ledger.
-    pub remaining_locked: i128,
-
-    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
-    /// Example: `5000` = 50.00 %.
     pub percent_vested_bps: u32,
 
     /// `true` if the cliff has been reached at the queried ledger.
@@ -166,9 +173,6 @@ pub struct StreamInfo {
 ///
 /// Each milestone specifies a ledger sequence at which a percentage (in basis
 /// points) of the total tokens becomes claimable by the recipient.
-///
-/// # Basis Points
-/// 10000 bps = 100%. All milestones in a `MilestoneSchedule` must sum to 10000.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Milestone {
@@ -183,8 +187,6 @@ pub struct Milestone {
 /// A milestone-based vesting schedule stored per recipient.
 ///
 /// Instead of a single cliff, tokens unlock incrementally at each milestone.
-/// After the final milestone, remaining tokens stream linearly to `end_ledger`.
-///
 /// Max 20 milestones to prevent excessive storage costs.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -205,13 +207,7 @@ pub struct MilestoneSchedule {
     /// Index of the next unclaimed milestone (0-based).
     pub next_milestone_idx: u32,
 
-    /// Ledger at which linear post-milestone drip begins (= last milestone ledger).
-    pub drip_start_ledger: u32,
-
-    /// Rate of tokens per ledger for the linear drip after the final milestone.
-    pub drip_rate_per_ledger: i128,
-
-    /// Ledger sequence at which the stream ends (no more accrual after this).
+    /// Ledger sequence at which the stream ends.
     pub end_ledger: u32,
 
     /// Running total of tokens transferred to the recipient.
@@ -229,6 +225,9 @@ pub enum DataKey {
     /// Per-recipient variable-rate vesting schedule.
     VariableSchedule(Address),
 
+    /// Per-recipient milestone-based vesting schedule.
+    MilestoneSchedule(Address),
+
     /// Instance-level configuration: minimum deposit (i128).
     MinDeposit,
 
@@ -240,6 +239,12 @@ pub enum DataKey {
 
     /// Storage key for configured protocol treasury address.
     Treasury,
+
+    /// Storage key for the allowlist of approved token addresses.
+    AllowedTokens,
+
+    /// Storage key tracking whether the contract has been initialized.
+    Initialized,
 }
 
 /// Human-readable status of a vesting stream.
@@ -249,15 +254,6 @@ pub enum DataKey {
 ///
 /// The `NotFound` variant indicates no schedule exists for the queried recipient,
 /// allowing callers to avoid a separate existence check.
-///
-/// # Badge colour mapping
-/// | Variant      | Colour | Hex       | ARIA label     |
-/// |--------------|--------|-----------|----------------|
-/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"    |
-/// | Active       | Blue   | `#3B82F6` | "Active"       |
-/// | Expired      | Green  | `#22C55E` | "Expired"      |
-/// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
-/// | NotFound     | Grey   | `#6B7280` | "Not found"    |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(missing_docs)]
