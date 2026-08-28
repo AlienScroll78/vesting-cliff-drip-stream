@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { SponsorStreamListEmpty, SearchResultsEmpty, SponsorDashboardEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { useStreams, StreamFilter } from "@/hooks/useStreams";
@@ -134,8 +134,12 @@ export default function SponsorStreamsPage() {
 
       {loading ? (
         <StreamListSkeleton count={5} />
+      ) : streams.length === 0 && filter !== "all" ? (
+        /* #373 — search/filter empty state */
+        <SearchResultsEmpty onResetFilter={() => setFilter("all")} />
       ) : streams.length === 0 ? (
-        <SponsorStreamListEmpty onCreateStream={() => { window.location.href = "/"; }} />
+        /* #373 — sponsor dashboard no-streams state */
+        <SponsorDashboardEmpty />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table

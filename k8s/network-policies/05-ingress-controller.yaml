@@ -1,0 +1,72 @@
+# NetworkPolicy: ingress controller → frontend (port 3000) and backend-api (port 3000)
+#
+# The ingress-nginx controller runs in its own namespace (typically
+# "ingress-nginx") and needs to forward HTTP(S) traffic into the vesting
+# namespace.  Because the source is in a different namespace, we use a
+# combined namespaceSelector + podSelector.
+#
+# Label assumptions:
+#   ingress-nginx controller pods:
+#     namespace label:  kubernetes.io/metadata.name=ingress-nginx
+#     pod label:        app.kubernetes.io/name=ingress-nginx
+#   frontend pods:     app.kubernetes.io/name=frontend   (port 3000)
+#   backend-api pods:  app.kubernetes.io/name=vesting-backend (port 3000)
+#
+# If you use a different ingress controller (e.g. Traefik, AWS Load Balancer
+# Controller), update the namespaceSelector and podSelector accordingly.
+---
+# Ingress to frontend ← ingress-nginx controller:3000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # The ingress controller pod must be in the ingress-nginx namespace
+        # AND carry the expected pod label (defence-in-depth).
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+# Ingress to backend-api ← ingress-nginx controller:3000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-backend
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vesting-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000

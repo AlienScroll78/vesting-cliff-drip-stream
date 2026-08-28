@@ -1,19 +1,19 @@
 import { useWizard, WIZARD_STEPS } from './useWizard'
 import { WizardProgress } from './WizardProgress'
-import { StepConnectWallet } from './StepConnectWallet'
-import { StepSelectRecipient } from './StepSelectRecipient'
+import { StepRecipient } from './StepRecipient'
 import { StepSelectToken } from './StepSelectToken'
-import { StepSetAmounts } from './StepSetAmounts'
-import { StepPreview } from './StepPreview'
-import { StepConfirm } from './StepConfirm'
+import { StepSchedule } from './StepSchedule'
+import { StepReview } from './StepReview'
 
 interface Props {
-  /** Called when the user dismisses the wizard (cancel or done). */
   onClose?: () => void
 }
 
 export function CreateStreamWizard({ onClose }: Props) {
-  const { step, stepIndex, data, next, back, update, reset } = useWizard()
+  const {
+    step, stepIndex, data, touched,
+    next, back, update, touch, reset,
+  } = useWizard()
 
   function handleDone() {
     reset()
@@ -47,23 +47,42 @@ export function CreateStreamWizard({ onClose }: Props) {
         <WizardProgress steps={WIZARD_STEPS} current={stepIndex} />
 
         <div style={styles.body}>
-          {step === 'connect-wallet' && (
-            <StepConnectWallet data={data} update={update} onNext={next} />
+          {step === 'recipient' && (
+            <StepRecipient
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+            />
           )}
-          {step === 'select-recipient' && (
-            <StepSelectRecipient data={data} update={update} onNext={next} onBack={back} />
+          {step === 'token' && (
+            <StepSelectToken
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+              onBack={back}
+            />
           )}
-          {step === 'select-token' && (
-            <StepSelectToken data={data} update={update} onNext={next} onBack={back} />
+          {step === 'schedule' && (
+            <StepSchedule
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+              onBack={back}
+            />
           )}
-          {step === 'set-amounts' && (
-            <StepSetAmounts data={data} update={update} onNext={next} onBack={back} />
-          )}
-          {step === 'preview' && (
-            <StepPreview data={data} onNext={next} onBack={back} />
-          )}
-          {step === 'confirm' && (
-            <StepConfirm data={data} onBack={back} onDone={handleDone} />
+          {step === 'review' && (
+            <StepReview
+              data={data}
+              onNext={next}
+              onBack={back}
+              onDone={handleDone}
+            />
           )}
         </div>
       </div>
