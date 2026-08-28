@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Shared helpers for backend routes.
  *
@@ -10,7 +8,7 @@
 const REQUIRED_VARS = ["HORIZON_URL", "NETWORK_PASSPHRASE", "CONTRACT_ID"];
 const ADMIN_REQUIRED = ["ADMIN_API_KEY", "SPONSOR_SECRET_KEY", "SOROBAN_RPC_URL"];
 
-function loadConfig(requireAdmin = false) {
+export function loadConfig(requireAdmin = false) {
   const vars = requireAdmin ? [...REQUIRED_VARS, ...ADMIN_REQUIRED] : REQUIRED_VARS;
   const missing = vars.filter((k) => !process.env[k]);
   if (missing.length > 0) {
@@ -22,15 +20,31 @@ function loadConfig(requireAdmin = false) {
   return Object.fromEntries(vars.map((k) => [k, process.env[k]]));
 }
 
-// Lazy-load @stellar/stellar-sdk so the module can be required in tests
+// Lazy-load @stellar/stellar-sdk so the module can be imported in tests
 // without the full Stellar SDK installed (tests mock it).
-let _sdk;
+let _sdk = null;
+
 function getSdk() {
-  if (!_sdk) _sdk = require("@stellar/stellar-sdk");
+  if (!_sdk) {
+    // createRequire allows CJS-style require inside an ESM module
+    import("module").then(({ createRequire }) => {
+      const require = createRequire(import.meta.url);
+      try {
+        _sdk = require("@stellar/stellar-sdk");
+      } catch {
+        _sdk = null;
+      }
+    }).catch(() => {});
+  }
   return _sdk;
 }
 
-module.exports = {
-  loadConfig,
-  get StellarSdk() { return getSdk(); },
-};
+export const StellarSdk = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const sdk = getSdk();
+      return sdk ? sdk[prop] : undefined;
+    },
+  },
+);

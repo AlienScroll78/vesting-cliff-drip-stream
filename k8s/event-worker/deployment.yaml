@@ -29,6 +29,14 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+      # This pod runs two background workers in a single container:
+      #   1. horizonWorker  — polls Horizon for on-chain contract events and
+      #                       writes them to stream_events (always active).
+      #   2. jobWorker      — dequeues and processes async jobs from the Redis
+      #                       job_queue list (activated via ENABLE_JOB_WORKER).
+      #
+      # To enable the jobWorker set ENABLE_JOB_WORKER=true in the environment
+      # (either via the ConfigMap or the Secrets manifest).
       containers:
         - name: event-worker
           image: ghcr.io/your-org/vesting-cliff-drip-stream/event-worker:latest
@@ -66,6 +74,11 @@ spec:
             limits:
               cpu: 300m
               memory: 256Mi
+          env:
+            # Set to "true" to activate the async jobWorker loop alongside
+            # the horizonWorker.  See backend/src/workers/jobWorker.ts.
+            - name: ENABLE_JOB_WORKER
+              value: "true"
           envFrom:
             - configMapRef:
                 name: vesting-config
