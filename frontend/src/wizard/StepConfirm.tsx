@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useWallet } from '../contexts/WalletContext'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -9,16 +10,46 @@ interface Props {
 
 type State = 'idle' | 'submitting' | 'success' | 'error'
 
+// ── Stub: replace with real Soroban contract invocation ────────────────────────
+async function submitCreateStream(params: {
+  sponsor: string
+  recipient: string
+  token: string
+  rate: number
+  cliffDuration: number
+  totalDuration: number
+}): Promise<{ hash: string; network: string }> {
+  // TODO: use @stellar/stellar-sdk + Freighter signTransaction to call
+  //   create_vesting_stream(sponsor, recipient, token, rate, cliff_duration, total_duration)
+  void params
+  await new Promise(r => setTimeout(r, 1400))
+  const hash = Array.from({ length: 64 }, () =>
+    Math.floor(Math.random() * 16).toString(16)
+  ).join('')
+  return { hash, network: 'testnet' }
+}
+
 export function StepConfirm({ data, onBack, onDone }: Props) {
+  const { address } = useWallet()
   const [state, setState] = useState<State>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const [txHash, setTxHash] = useState('')
+  const [txNetwork, setTxNetwork] = useState('testnet')
 
   async function submit() {
     setState('submitting')
+    setErrorMsg('')
     try {
-      // TODO: call create_vesting_stream via @stellar/freighter-api / soroban-client
-      // Simulated delay for demo
-      await new Promise(r => setTimeout(r, 1200))
+      const { hash, network } = await submitCreateStream({
+        sponsor: address ?? data.walletAddress,
+        recipient: data.recipient,
+        token: data.tokenAddress,
+        rate: Number(data.rate),
+        cliffDuration: Number(data.cliffDuration),
+        totalDuration: Number(data.totalDuration),
+      })
+      setTxHash(hash)
+      setTxNetwork(network)
       setState('success')
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Transaction failed')
@@ -27,13 +58,49 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
   }
 
   if (state === 'success') {
+    const explorerUrl = `https://stellar.expert/explorer/${txNetwork}/tx/${txHash}`
     return (
       <div style={{ ...styles.card, alignItems: 'center', textAlign: 'center' }}>
-        <div style={styles.successIcon}>✓</div>
+        <div style={styles.successIcon} aria-hidden="true">✓</div>
         <h2 style={styles.heading}>Stream created!</h2>
         <p style={styles.sub}>
-          Tokens are now locked. The recipient can claim after the cliff.
+          Tokens are now locked in the vault. The recipient can claim after the cliff.
         </p>
+
+        {/* Success toast with tx link */}
+        <div
+          role="status"
+          data-testid="wizard-tx-success"
+          style={{
+            width: '100%',
+            padding: '0.875rem 1rem',
+            background: '#f0fdf4',
+            border: '1px solid #86efac',
+            borderRadius: 'var(--radius)',
+            fontSize: '0.85rem',
+            textAlign: 'left',
+          }}
+        >
+          <p style={{ fontWeight: 700, color: 'var(--color-completed)', marginBottom: '0.35rem' }}>
+            ✓ Transaction confirmed
+          </p>
+          <p style={{ margin: 0 }}>
+            View on{' '}
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'var(--color-active)', fontFamily: 'monospace', wordBreak: 'break-all' }}
+              aria-label={`View transaction ${txHash} on Stellar Expert`}
+            >
+              Stellar Expert ↗
+            </a>
+          </p>
+          <p style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem', wordBreak: 'break-all' }}>
+            {txHash}
+          </p>
+        </div>
+
         <button
           type="button"
           className="btn btn-primary btn-full"
@@ -59,7 +126,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
       </p>
 
       {state === 'error' && (
-        <p role="alert" style={styles.error}>
+        <p role="alert" style={styles.error} data-testid="wizard-submit-error">
           {errorMsg}
         </p>
       )}
@@ -79,6 +146,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
           className="btn btn-primary"
           disabled={state === 'submitting'}
           onClick={submit}
+          aria-busy={state === 'submitting'}
           data-testid="wizard-submit-btn"
         >
           {state === 'submitting' ? 'Signing…' : 'Sign & Submit'}

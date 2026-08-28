@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 
 export const WIZARD_STEPS = [
   'connect-wallet',
+  'select-recipient',
   'select-token',
   'set-amounts',
   'preview',
@@ -13,6 +14,8 @@ export type WizardStep = (typeof WIZARD_STEPS)[number]
 export interface WizardFormData {
   // connect-wallet
   walletAddress: string
+  // select-recipient
+  recipient: string
   // select-token
   tokenAddress: string
   tokenSymbol: string
@@ -20,20 +23,22 @@ export interface WizardFormData {
   rate: string          // tokens per ledger, raw input
   cliffDuration: string // ledgers
   totalDuration: string // ledgers
-  recipient: string
 }
 
 const INITIAL_DATA: WizardFormData = {
   walletAddress: '',
+  recipient: '',
   tokenAddress: '',
   tokenSymbol: '',
   rate: '',
   cliffDuration: '',
   totalDuration: '',
-  recipient: '',
 }
 
 const LEDGERS_PER_SECOND = 0.2 // ~5 s per ledger
+
+/** i128::MAX value for overflow detection */
+export const I128_MAX = BigInt('170141183460469231731687303715884105727')
 
 /** Convert a ledger count to a human-readable duration string. */
 export function ledgersToDuration(ledgers: number): string {
@@ -41,7 +46,23 @@ export function ledgersToDuration(ledgers: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h`
-  return `${Math.round(seconds / 86400)}d`
+  if (seconds < 86400 * 30) return `${Math.round(seconds / 86400)}d`
+  if (seconds < 86400 * 365) return `${(seconds / (86400 * 30)).toFixed(1)}mo`
+  return `${(seconds / (86400 * 365)).toFixed(1)}yr`
+}
+
+/**
+ * Client-side equivalent of Rust checked_mul: returns true when
+ * rate * totalDuration would overflow i128.
+ */
+export function isDepositOverflow(rate: number, totalDuration: number): boolean {
+  if (rate <= 0 || totalDuration <= 0) return false
+  try {
+    const deposit = BigInt(Math.floor(rate)) * BigInt(Math.floor(totalDuration))
+    return deposit > I128_MAX
+  } catch {
+    return true
+  }
 }
 
 export function useWizard() {

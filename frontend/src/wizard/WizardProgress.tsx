@@ -1,11 +1,12 @@
 import type { WizardStep } from './useWizard'
 
 const LABELS: Record<WizardStep, string> = {
-  'connect-wallet': 'Connect',
-  'select-token':   'Token',
-  'set-amounts':    'Amounts',
-  'preview':        'Preview',
-  'confirm':        'Confirm',
+  'connect-wallet':    'Connect',
+  'select-recipient':  'Recipient',
+  'select-token':      'Token',
+  'set-amounts':       'Amounts',
+  'preview':           'Preview',
+  'confirm':           'Confirm',
 }
 
 interface WizardProgressProps {

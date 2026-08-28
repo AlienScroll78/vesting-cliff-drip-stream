@@ -14,7 +14,7 @@ export function StepConnectWallet({ data, update, onNext }: Props) {
     try {
       await connect()
     } catch {
-      // wallet will show its own error UI
+      // wallet context surfaces its own errors
     }
   }
 
@@ -27,28 +27,45 @@ export function StepConnectWallet({ data, update, onNext }: Props) {
       <p style={styles.sub}>
         You need a Freighter wallet to sign and pay for the stream deposit.
       </p>
+
       {resolved ? (
         <div style={styles.connected}>
-          <span style={styles.check}>✓</span>
+          <span style={{ color: 'var(--color-completed)', fontWeight: 700 }}>✓</span>
           <span data-testid="wizard-wallet-address" style={styles.addr}>
             {resolved.slice(0, 6)}…{resolved.slice(-4)}
           </span>
+          <span style={{ fontSize: '0.8rem', color: '#6b7280', marginLeft: 'auto' }}>
+            Freighter connected
+          </span>
         </div>
       ) : (
-        <button
-          type="button"
-          className="btn btn-primary btn-full"
-          onClick={handleConnect}
-          data-testid="wizard-connect-btn"
-        >
-          Connect Freighter
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn btn-primary btn-full"
+            onClick={handleConnect}
+            data-testid="wizard-connect-btn"
+          >
+            Connect Freighter
+          </button>
+          <p style={{ fontSize: '0.8rem', color: '#6b7280', textAlign: 'center' }}>
+            Don&apos;t have Freighter?{' '}
+            <a
+              href="https://www.freighter.app/"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'var(--color-active)' }}
+            >
+              Install extension ↗
+            </a>
+          </p>
+        </>
       )}
 
       <button
         type="button"
         className="btn btn-primary btn-full"
-        style={{ marginTop: '1.25rem' }}
+        style={{ marginTop: '0.5rem' }}
         disabled={!resolved}
         onClick={() => {
           if (resolved) {
@@ -73,6 +90,5 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0.75rem', background: '#f0fdf4',
     borderRadius: 'var(--radius)', border: '1px solid #86efac',
   },
-  check: { color: 'var(--color-completed)', fontWeight: 700 },
   addr: { fontFamily: 'monospace', fontSize: '0.875rem' },
 }
