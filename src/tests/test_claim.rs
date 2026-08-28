@@ -3,7 +3,6 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::VestingDripsClient,
     error::VestingError,
     tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
 };
@@ -31,6 +30,7 @@ fn test_first_claim_at_cliff_includes_all_accrued() {
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 50);
 
+    // At cliff: 50 ledgers * 10 tokens/ledger = 500
     let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 500);
     assert_eq!(token_client.balance(&recipient), 500);
@@ -72,10 +72,12 @@ fn test_partial_claim_mid_stream() {
 
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 100);
+    // 100 ledgers * 10 = 1000
     let claimed1 = client.claim_vested(&recipient);
     assert_eq!(claimed1, 1_000);
 
     advance_ledger(&env, 50);
+    // 50 more ledgers * 10 = 500
     let claimed2 = client.claim_vested(&recipient);
     assert_eq!(claimed2, 500);
 
@@ -92,6 +94,7 @@ fn test_claim_past_end_caps_at_end_ledger() {
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 500);
 
+    // Full deposit: 200 ledgers * 10 = 2000
     let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 2_000);
     assert_eq!(token_client.balance(&recipient), 2_000);
@@ -131,6 +134,7 @@ fn test_claimable_amount_at_end_ledger() {
 
     advance_ledger(&env, 200);
 
+    // 200 ledgers * 10 = 2000
     assert_eq!(client.claimable_amount(&recipient), 2_000);
 }
 
@@ -146,11 +150,12 @@ fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
 
     advance_ledger(&env, 500);
 
+    // remaining = 2000 - 1000 = 1000
     assert_eq!(client.claimable_amount(&recipient), 1_000);
 }
 
 #[test]
-fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
+fn test_claim_after_all_tokens_claimed_returns_schedule_not_found() {
     let env = setup_env();
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
@@ -159,7 +164,7 @@ fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
     advance_ledger(&env, 300);
     client.claim_vested(&recipient);
 
+    // Schedule was removed after full claim
     let err = client.try_claim_vested(&recipient).unwrap_err();
     assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 }
-

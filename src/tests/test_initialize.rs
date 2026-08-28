@@ -1,4 +1,4 @@
-//! Tests for the `initialize` entry point (issue #325).
+//! Tests for the `initialize` entry point.
 //!
 //! Verifies that the contract must be initialized before use, that
 //! initialization can only happen once, and that fee_bps and treasury
@@ -19,8 +19,6 @@ fn make_raw_client(env: &soroban_sdk::Env) -> VestingDripsClient {
     VestingDripsClient::new(env, &contract_id)
 }
 
-// ── One-shot initialization ───────────────────────────────────────────────────
-
 /// `initialize` succeeds on first call and accepts valid fee_bps.
 #[test]
 fn test_initialize_succeeds() {
@@ -31,7 +29,6 @@ fn test_initialize_succeeds() {
     let treasury = soroban_sdk::Address::generate(&env);
 
     client.initialize(&admin, &100u32, &treasury);
-    // No error = success
 }
 
 /// `initialize` rejects fee_bps > 500.
@@ -60,7 +57,6 @@ fn test_initialize_accepts_max_fee_bps() {
     let treasury = soroban_sdk::Address::generate(&env);
 
     client.initialize(&admin, &500u32, &treasury);
-    // No error = success
 }
 
 /// `initialize` with zero fee_bps succeeds.
@@ -75,7 +71,7 @@ fn test_initialize_accepts_zero_fee_bps() {
     client.initialize(&admin, &0u32, &treasury);
 }
 
-/// Second call to `initialize` returns `AlreadyInitialized` (code 13).
+/// Second call to `initialize` returns `AlreadyInitialized`.
 #[test]
 fn test_initialize_twice_fails_with_already_initialized() {
     let env = setup_env();
@@ -93,8 +89,6 @@ fn test_initialize_twice_fails_with_already_initialized() {
         .unwrap();
     assert_eq!(err, VestingError::AlreadyInitialized);
 }
-
-// ── NotInitialized guard on create_vesting_stream ────────────────────────────
 
 /// `create_vesting_stream` fails with `NotInitialized` before `initialize` is called.
 #[test]
@@ -124,6 +118,7 @@ fn test_create_stream_succeeds_after_initialize() {
 
     let (sponsor, recipient) = generate_addresses(&env);
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+    let rate = 10 * crate::types::RATE_DECIMALS;
 
     client
         .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)

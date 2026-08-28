@@ -6,6 +6,12 @@
 //! will cause this test to fail before any client code is affected.
 //!
 //! Run with:  cargo test --test contract_spec  (after `cargo build --release`)
+//!
+//! NOTE: this test is skipped unless the `contract-spec-tests` feature is enabled.
+//! It requires a pre-built WASM and `stellar_xdr`/`wasmparser` crates.
+
+#[cfg(feature = "contract-spec-tests")]
+mod contract_spec_tests {
 
 use std::collections::HashMap;
 
@@ -250,3 +256,5 @@ fn critical_return_types() {
         cliff.outputs.first()
     );
 }
+
+} // end #[cfg(feature = "contract-spec-tests")]

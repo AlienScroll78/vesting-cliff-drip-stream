@@ -36,7 +36,7 @@ pub fn emit_stream_created(
     sponsor: &Address,
     recipient: &Address,
     token: &Address,
-    rate: i128,
+    rate_per_ledger: i128,
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
@@ -154,7 +154,7 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
         .publish((symbol_short!("vc_done"), recipient.clone()), token.clone());
 }
 
-/// Emitted when a sponsor cancels a vesting stream before it completes.
+/// Emitted when a sponsor cancels a vesting stream.
 ///
 /// Topics: `["vc_cancel", recipient]`
 /// Data:   `(sponsor_refund)`
@@ -162,6 +162,24 @@ pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i1
     env.events().publish(
         (symbol_short!("vc_cancel"), recipient.clone()),
         refunded_amount,
+    );
+}
+
+/// Emitted when a recipient's stream is transferred to a new address.
+///
+/// Topics: `["StreamTransferred", current_recipient]`
+/// Data:   `(new_recipient)`
+pub fn emit_stream_transferred(
+    env: &Env,
+    current_recipient: &Address,
+    new_recipient: &Address,
+) {
+    env.events().publish(
+        (
+            Symbol::new(env, "StreamTransferred"),
+            current_recipient.clone(),
+        ),
+        new_recipient.clone(),
     );
 }
 
@@ -183,7 +201,7 @@ pub fn emit_stream_clawed_back(
     );
 }
 
-/// Emitted when an expired stream is drained by a permissionless caller.
+/// Emitted when an expired stream is drained.
 ///
 /// Topics: `["vc_drain", recipient]`
 /// Data:   `(caller, sponsor, token, amount)`
@@ -203,23 +221,12 @@ pub fn emit_stream_drained(
 
 /// Emitted by the `emergency_drain` entry point.
 ///
-/// Topics: `["vc_drain", recipient]`
-/// Data:   `(sponsor, amount)`
-pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, amount: i128) {
+/// Topics: `["ContractInit", admin]`
+/// Data:   `(fee_bps, treasury)`
+pub fn emit_contract_initialized(env: &Env, admin: &Address, fee_bps: u32, treasury: &Address) {
     env.events().publish(
-        (symbol_short!("vc_drain"), recipient.clone()),
-        (sponsor.clone(), amount),
-    );
-}
-
-/// Emitted when the token allowlist is updated (token added or removed).
-///
-/// Topics: `["AllowlistUpdated", admin]`
-/// Data:   `(token, added)` — `added` is `true` for add, `false` for remove
-pub fn emit_allowlist_updated(env: &Env, admin: &Address, token: &Address, added: bool) {
-    env.events().publish(
-        (Symbol::new(env, "AllowlistUpdated"), admin.clone()),
-        (token.clone(), added),
+        (Symbol::new(env, "ContractInit"), admin.clone()),
+        (fee_bps, treasury.clone()),
     );
 }
 
