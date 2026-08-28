@@ -6,6 +6,7 @@ mod test_cancel;
 mod test_claim;
 mod test_create;
 mod test_edge_cases;
+mod test_event_snapshots;
 mod test_events;
 mod test_allowlist;
 mod test_properties;
