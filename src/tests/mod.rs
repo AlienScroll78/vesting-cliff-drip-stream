@@ -2,14 +2,18 @@
 
 pub mod token_helper;
 
+mod test_allowlist;
 mod test_cancel;
 mod test_claim;
 mod test_create;
+mod test_dust;
 mod test_edge_cases;
 mod test_event_snapshots;
 mod test_events;
-mod test_allowlist;
+mod test_initialize;
 mod test_properties;
+mod test_total_claimed;
+mod test_variable_rate;
 mod test_versioning;
 mod test_views;
 mod test_dust;

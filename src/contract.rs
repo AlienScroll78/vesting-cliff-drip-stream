@@ -217,6 +217,11 @@ impl VestingDrips {
             .instance()
             .extend_ttl(259_200, 518_400);
 
+        // Guard: contract must be initialized before accepting streams.
+        if !storage::is_initialized(&env) {
+            return Err(VestingError::NotInitialized);
+        }
+
         // ── Validation ────────────────────────────────────────────────────────
         if sponsor == recipient {
             return Err(VestingError::InvalidRecipient);
@@ -286,9 +291,6 @@ impl VestingDrips {
         // ── Collect Protocol Fee (if configured) ──────────────────────────────
         let (fee_bps, treasury_opt) = storage::get_fee(&env);
         if fee_bps > 0 {
-            if fee_bps > 500 {
-                return Err(VestingError::InvalidRate);
-            }
             let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
             let fee_amount = total_deposit
                 .checked_mul(fee_bps as i128)
@@ -1246,46 +1248,22 @@ impl VestingDrips {
 
     /// Recovers unclaimed tokens from an expired stream after a long safety delay.
     ///
-    /// # Errors
-    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
-    /// * `StreamNotExpired`     – `end_ledger` has not yet been reached.
-    /// * `DrainDelayNotExpired` – The 1-year delay after `end_ledger` has not passed.
-    pub fn emergency_drain(
-        env: Env,
-        sponsor: Address,
-        recipient: Address,
-    ) -> Result<(), VestingError> {
-        sponsor.require_auth();
+    /// Returns `0` if no schedule exists for `recipient` (i.e. the stream
+    /// has not been created, or has been fully claimed and the schedule
+    /// was removed).
+    ///
+    /// The value persists in the schedule until the stream is fully consumed.
+    /// For a fully consumed stream the final total is reflected in the
+    /// `claim_vested` return value before the schedule is removed.
+    pub fn get_total_claimed(env: Env, recipient: Address) -> i128 {
+        storage::get_schedule_readonly(&env, &recipient)
+            .map(|s| s.total_claimed)
+            .unwrap_or(0)
+    }
 
-        let schedule =
-            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
-
-        let current = env.ledger().sequence();
-
-        if current < schedule.end_ledger {
-            return Err(VestingError::StreamNotExpired);
-        }
-
-        let drain_available_at = schedule.end_ledger.saturating_add(DRAIN_DELAY_LEDGERS);
-        if current < drain_available_at {
-            return Err(VestingError::DrainDelayNotExpired);
-        }
-
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
-        let amount = total_deposited - schedule.claimed_amount;
-
-        if amount > 0 {
-            let token_client = token::Client::new(&env, &schedule.token);
-            token_client
-                .try_transfer(&env.current_contract_address(), &sponsor, &amount)
-                .map_err(|_| VestingError::TransferFailed)?;
-        }
-
-        storage::remove_schedule(&env, &recipient);
-        events::emit_emergency_drain(&env, &recipient, &sponsor, amount);
-
-        Ok(())
+    /// Returns the configured minimum deposit.
+    pub fn get_min_deposit(env: Env) -> i128 {
+        storage::get_min_deposit(&env)
     }
 }
 

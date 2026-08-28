@@ -216,7 +216,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 1 | `ScheduleNotFound` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | Ledger is still before `cliff_ledger` |
 | 3 | `InvalidDuration` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `rate` is zero or negative |
+| 4 | `InvalidRate` | `rate` is zero or negative; or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
 | 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
@@ -224,6 +224,21 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 9 | `TransferFailed` | Token transfer failed |
 | 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
+| 12 | `InvalidCliffDuration` | `cliff_duration` is zero |
+| 13 | `AlreadyInitialized` | `initialize` has already been called |
+| 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
+| 15 | `StreamPaused` | Claim attempted on a paused stream |
+| 16 | `BatchTooLarge` | Batch size exceeds the maximum of 20 |
+| 17 | `RateTooLow` | `rate × total_duration` is below the configured minimum |
+| 18 | `NotInitialized` | `initialize` has not yet been called |
+| 19 | `InvalidSegments` | Variable-rate segments are invalid (empty, out-of-order, or bad rate) |
+| 20 | `MetadataTooLong` | `metadata` exceeds 256 UTF-8 bytes |
+| 21 | `Unauthorized` | Caller is not the contract admin or original sponsor |
+| 22 | `DepositBelowMinimum` | Total deposit is below the configured minimum |
+| 23 | `StreamAlreadyPaused` | Stream is already paused |
+| 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
+| 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
+| 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
 
 ---
 

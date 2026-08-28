@@ -10,12 +10,21 @@ use crate::{
 
 // ── Issue #318: Schedule versioning ──────────────────────────────────────────
 
+/// Helper: register and initialize a fresh contract.
+fn make_client(env: &Env) -> (soroban_sdk::Address, VestingDripsClient) {
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    let treasury = Address::generate(env);
+    client.initialize(&admin, &0u32, &treasury);
+    (contract_id, client)
+}
+
 /// A freshly created schedule starts at version 1.
 #[test]
 fn test_version_starts_at_one() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_, client) = make_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -33,8 +42,7 @@ fn test_version_starts_at_one() {
 #[test]
 fn test_version_increments_on_claim() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_, client) = make_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -56,8 +64,7 @@ fn test_version_increments_on_claim() {
 #[test]
 fn test_version_increments_on_each_claim() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (_, client) = make_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -77,13 +84,11 @@ fn test_version_increments_on_each_claim() {
     assert_eq!(schedule.version, 3, "version must be 3 after two claims");
 }
 
-/// Cancelling a stream also increments the version (visible in the schedule
-/// that is removed; confirmed via the function not returning VersionOverflow).
+/// Version overflows to u32::MAX returns VersionOverflow error.
 #[test]
 fn test_version_overflow_returns_error() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (contract_id, client) = make_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
