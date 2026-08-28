@@ -1,10 +1,11 @@
 /**
  * Issue #35: Health and readiness endpoints.
+ * Issue #567: Contract version field added to both responses.
  *
  * GET /health — liveness probe (always 200 if process is alive)
  * GET /ready  — readiness probe (checks DB + RPC; 503 if either is unreachable)
  *
- * Both responses include service version and uptime.
+ * Both responses include service version, uptime, and contract_version.
  */
 
 import type { Request, Response } from "express";
@@ -13,13 +14,29 @@ import { pool } from "../db.js";
 const START_TIME = Date.now();
 const VERSION = process.env.npm_package_version ?? process.env.SERVICE_VERSION ?? "unknown";
 
+/** Module-level contract version, updated by startup after the version check. */
+let _contractVersion = "unknown";
+
+/**
+ * Update the module-level contract version string.
+ * Call this from startup.js once `checkContractVersion` succeeds.
+ */
+export function setContractVersion(v: string): void {
+  _contractVersion = v;
+}
+
 function uptimeSeconds(): number {
   return Math.floor((Date.now() - START_TIME) / 1000);
 }
 
 /** GET /health — liveness (always 200) */
 export function healthHandler(_req: Request, res: Response): void {
-  res.json({ status: "ok", version: VERSION, uptime: uptimeSeconds() });
+  res.json({
+    status: "ok",
+    version: VERSION,
+    uptime: uptimeSeconds(),
+    contract_version: _contractVersion,
+  });
 }
 
 /** GET /ready — readiness (checks DB + RPC) */
@@ -56,6 +73,7 @@ export async function readyHandler(_req: Request, res: Response): Promise<void> 
     status: healthy ? "ok" : "degraded",
     version: VERSION,
     uptime: uptimeSeconds(),
+    contract_version: _contractVersion,
     checks,
   });
 }

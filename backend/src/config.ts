@@ -129,6 +129,22 @@ const configSchema = z.object({
   logLevel: z
     .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
     .default('info'),
+
+  // ── Contract version check ─────────────────────────────────────────────────
+  /**
+   * Expected contract version string (e.g. "ledger-12345678").
+   * When set, `checkContractVersion` compares the live version against this
+   * value at startup and can abort if they differ.
+   * @default "" (check disabled)
+   */
+  expectedContractVersion: z.string().default(''),
+
+  /**
+   * When true, a version mismatch is logged as a warning but does NOT abort
+   * startup. Useful in development or when rolling out a new contract version.
+   * @default false
+   */
+  allowVersionMismatch: booleanString.default('false'),
 });
 
 // ---------------------------------------------------------------------------
@@ -160,6 +176,8 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env) {
     jwtExpiresIn:         env.JWT_EXPIRES_IN,
     corsAllOrigins:       env.CORS_ALL_ORIGINS,
     logLevel:             env.LOG_LEVEL,
+    expectedContractVersion: env.EXPECTED_CONTRACT_VERSION,
+    allowVersionMismatch:    env.ALLOW_VERSION_MISMATCH,
   });
 
   if (!result.success) {
