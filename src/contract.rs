@@ -23,6 +23,12 @@ const MAX_MILESTONES: u32 = 20;
 /// Maximum fee in basis points (5 %).
 const MAX_FEE_BPS: u32 = 500;
 
+/// Maximum batch size for `batch_create_vesting_streams`.
+const MAX_BATCH_SIZE: u32 = 20;
+
+/// Maximum milestones for a milestone stream.
+const MAX_MILESTONES: u32 = 20;
+
 /// Consolidated statistics for a vesting stream.
 ///
 /// Returned by [`VestingDrips::get_stats`].
@@ -100,9 +106,6 @@ impl VestingDrips {
     }
 
     /// Transfers admin authority from the current admin to `new_admin`.
-    ///
-    /// # Errors
-    /// * `Unauthorized` – `admin` is not the address set during `initialize`.
     pub fn transfer_admin(
         env: Env,
         admin: Address,
@@ -294,7 +297,7 @@ impl VestingDrips {
             start_ledger,
             cliff_ledger,
             end_ledger,
-            &metadata,
+            &None,
         );
 
         Ok(())
@@ -608,8 +611,7 @@ impl VestingDrips {
         let total_deposited =
             (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
 
-        // Dust collection: at or past end_ledger return the full remainder so
-        // no sub-1-token dust stays locked in the vault.
+        // Dust collection: at or past end_ledger return the full remainder.
         let claimable_amount = if current_ledger >= schedule.end_ledger {
             total_deposited - schedule.claimed_amount
         } else {
@@ -819,6 +821,91 @@ impl VestingDrips {
         Ok(claimable_amount)
     }
 
+    /// Claims the next unlocked milestone from a milestone stream.
+    pub fn claim_milestone(env: Env, recipient: Address) -> Result<i128, VestingError> {
+        recipient.require_auth();
+
+        let schedule =
+            storage::get_schedule(&env, &recipient).ok_or(VestingError::ScheduleNotFound)?;
+
+        let milestones: Vec<(u32, u32)> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MilestoneSchedule(recipient.clone()))
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        let total_deposited: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MilestoneTotalDeposit(recipient.clone()))
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        let claimed_bps: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MilestoneClaimedBps(recipient.clone()))
+            .unwrap_or(0);
+
+        let current_ledger = env.ledger().sequence();
+
+        // Sum all reached-but-unclaimed milestones (bps).
+        let mut reached_bps: u32 = 0;
+        for i in 0..milestones.len() {
+            let (ledger, bps) = milestones.get(i).unwrap();
+            if current_ledger >= ledger {
+                reached_bps += bps;
+            }
+        }
+        let new_claimable_bps = reached_bps.saturating_sub(claimed_bps);
+
+        if new_claimable_bps == 0 {
+            return Err(VestingError::NothingToClaim);
+        }
+
+        // Convert bps to token amount.
+        let claimable_amount = total_deposited
+            .checked_mul(new_claimable_bps as i128)
+            .ok_or(VestingError::DepositOverflow)?
+            / 10_000;
+
+        if claimable_amount == 0 {
+            return Err(VestingError::NothingToClaim);
+        }
+
+        let token_client = token::Client::new(&env, &schedule.token);
+        token_client
+            .try_transfer(
+                &env.current_contract_address(),
+                &recipient,
+                &claimable_amount,
+            )
+            .map_err(|_| VestingError::TransferFailed)?;
+
+        let new_claimed_bps = claimed_bps + new_claimable_bps;
+        env.storage()
+            .persistent()
+            .set(&DataKey::MilestoneClaimedBps(recipient.clone()), &new_claimed_bps);
+
+        // Remove schedule if fully claimed.
+        if new_claimed_bps >= 10_000 {
+            storage::remove_schedule(&env, &recipient);
+            env.storage()
+                .persistent()
+                .remove(&DataKey::MilestoneSchedule(recipient.clone()));
+            env.storage()
+                .persistent()
+                .remove(&DataKey::MilestoneTotalDeposit(recipient.clone()));
+            env.storage()
+                .persistent()
+                .remove(&DataKey::MilestoneClaimedBps(recipient.clone()));
+            events::emit_stream_completed(&env, &recipient, &schedule.token);
+        }
+
+        events::emit_tokens_claimed(&env, &recipient, claimable_amount, current_ledger);
+
+        Ok(claimable_amount)
+    }
+
     // ── Cancellation / Clawback ───────────────────────────────────────────────
 
     /// Allows the original sponsor to cancel an active stream.
@@ -916,7 +1003,6 @@ impl VestingDrips {
         if schedule.sponsor != sponsor {
             return Err(VestingError::Unauthorized);
         }
-
         if schedule.paused_at_ledger.is_some() {
             return Err(VestingError::StreamAlreadyPaused);
         }
@@ -1022,7 +1108,6 @@ impl VestingDrips {
         if admin != stored_admin {
             return Err(VestingError::Unauthorized);
         }
-
         if fee_bps > 500 {
             return Err(VestingError::InvalidRate);
         }
@@ -1437,9 +1522,115 @@ impl VestingDrips {
     pub fn get_min_deposit(env: Env) -> i128 {
         storage::get_min_deposit(&env)
     }
-}
 
-// ── Free functions ────────────────────────────────────────────────────────────
+    // ── Read-only views ───────────────────────────────────────────────────────
+
+    /// Returns the vesting schedule for `recipient`.
+    pub fn get_schedule(env: Env, recipient: Address) -> Option<VestingSchedule> {
+        storage::get_schedule_readonly(&env, &recipient)
+    }
+
+    /// Returns the variable-rate schedule for `recipient`.
+    pub fn get_variable_schedule(
+        env: Env,
+        recipient: Address,
+    ) -> Option<VariableRateSchedule> {
+        storage::get_variable_schedule_readonly(&env, &recipient)
+    }
+
+    /// Returns the number of tokens currently claimable (fixed-rate stream).
+    ///
+    /// Returns `0` before the cliff or if no schedule exists.
+    pub fn claimable_amount(env: Env, recipient: Address) -> i128 {
+        let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
+            return 0;
+        };
+        if schedule.paused_at_ledger.is_some() {
+            return 0;
+        }
+        let current_ledger = env.ledger().sequence();
+        if current_ledger < schedule.cliff_ledger {
+            return 0;
+        }
+        let total_deposited =
+            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        if current_ledger >= schedule.end_ledger {
+            return total_deposited - schedule.claimed_amount;
+        }
+        let active_end = current_ledger.min(schedule.end_ledger);
+        (active_end - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger
+    }
+
+    /// Returns the number of tokens claimable from a variable-rate stream.
+    pub fn claimable_variable_amount(env: Env, recipient: Address) -> i128 {
+        let Some(schedule) = storage::get_variable_schedule_readonly(&env, &recipient) else {
+            return 0;
+        };
+        if schedule.paused_at_ledger.is_some() {
+            return 0;
+        }
+        let current_ledger = env.ledger().sequence();
+        if current_ledger < schedule.cliff_ledger {
+            return 0;
+        }
+        if current_ledger >= schedule.end_ledger {
+            return schedule.total_deposited - schedule.claimed_amount;
+        }
+        compute_variable_claimable(
+            &schedule.segments,
+            schedule.last_claimed_ledger,
+            current_ledger,
+            schedule.start_ledger,
+        )
+    }
+
+    /// Returns `true` if the cliff has been passed for `recipient`.
+    pub fn is_cliff_passed(env: Env, recipient: Address) -> bool {
+        let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
+            return false;
+        };
+        env.ledger().sequence() >= schedule.cliff_ledger
+    }
+
+    /// Returns the current [`StreamStatus`] for `recipient` (legacy view).
+    pub fn get_status(env: Env, recipient: Address) -> Option<StreamStatus> {
+        let schedule = storage::get_schedule_readonly(&env, &recipient)?;
+        let current = env.ledger().sequence();
+        let status = if current < schedule.cliff_ledger {
+            StreamStatus::PreCliff
+        } else if current < schedule.end_ledger {
+            StreamStatus::Active
+        } else {
+            StreamStatus::Expired
+        };
+        Some(status)
+    }
+
+    /// Returns the typed [`StreamStatus`] for `recipient`.
+    ///
+    /// Returns `StreamStatus::NotFound` when no schedule exists.
+    pub fn stream_status(env: Env, recipient: Address) -> StreamStatus {
+        let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
+            return StreamStatus::NotFound;
+        };
+        let current = env.ledger().sequence();
+        if current < schedule.cliff_ledger {
+            StreamStatus::PreCliff
+        } else if current < schedule.end_ledger {
+            StreamStatus::Active
+        } else {
+            StreamStatus::Expired
+        }
+    }
+
+    /// Returns consolidated statistics for `recipient`'s fixed-rate stream.
+    pub fn get_stats(env: Env, recipient: Address) -> Option<StreamStats> {
+        let schedule = storage::get_schedule_readonly(&env, &recipient)?;
+
+        let total_duration = (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_deposited = schedule.rate_per_ledger * total_duration;
+        let total_claimed = schedule.total_claimed;
+        let remaining = total_deposited - total_claimed;
 
 /// Computes the full deposit for a stream.
 ///

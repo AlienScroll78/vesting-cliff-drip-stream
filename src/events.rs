@@ -49,7 +49,6 @@ pub fn emit_stream_created(
         start_ledger,
         cliff_ledger,
         end_ledger,
-        total_deposit,
     };
     // Include metadata in topics for off-chain indexing.
     let _ = metadata; // stored in schedule; not emitted in topics to keep topic count ≤ 4
@@ -59,7 +58,7 @@ pub fn emit_stream_created(
             sponsor.clone(),
             recipient.clone(),
         ),
-        data,
+        (data, metadata.clone()),
     );
 }
 
@@ -148,7 +147,7 @@ pub fn emit_variable_tokens_claimed(
 /// Emitted when a vesting schedule is fully exhausted and auto-cleaned up.
 ///
 /// Topics: `["vc_done", recipient]`
-/// Data:   `(token)`
+/// Data:   `token`
 pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
     env.events()
         .publish((symbol_short!("vc_done"), recipient.clone()), token.clone());

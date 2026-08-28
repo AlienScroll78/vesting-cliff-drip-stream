@@ -96,6 +96,32 @@ pub struct MilestoneSchedule {
     pub drip_rate_per_ledger: i128,
     pub end_ledger: u32,
     pub total_claimed: i128,
+    /// Alias for `total_claimed`; used by dust-collection paths.
+    pub claimed_amount: i128,
+    /// If `Some(ledger)`, the stream was paused at that ledger.
+    pub paused_at_ledger: Option<u32>,
+}
+
+/// Analytics snapshot for a single vesting stream.
+///
+/// Returned by `VestingDrips::get_stream_info`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamInfo {
+    /// Total tokens deposited when the stream was created.
+    pub total_deposit: i128,
+    /// Tokens already transferred to the recipient via `claim_vested`.
+    pub claimed_so_far: i128,
+    /// Tokens currently available to claim (zero if cliff not yet reached).
+    pub claimable_now: i128,
+    /// Tokens that will still drip after the current ledger.
+    pub remaining_locked: i128,
+    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
+    pub percent_vested_bps: u32,
+    /// `true` if the cliff has been reached at the queried ledger.
+    pub cliff_reached: bool,
+    /// `true` if the stream has ended (current ledger >= `end_ledger`).
+    pub stream_ended: bool,
 }
 
 /// A single token allocation within a multi-token vesting stream.
