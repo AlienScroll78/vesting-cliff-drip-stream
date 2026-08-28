@@ -1,0 +1,83 @@
+.container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.value {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+  word-break: break-word;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #e5e7eb 25%,
+    #f3f4f6 50%,
+    #e5e7eb 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 0.5rem;
+  height: 5rem;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .stat {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .label {
+    color: #9ca3af;
+  }
+
+  .value {
+    color: #f3f4f6;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #374151 25%,
+      #4b5563 50%,
+      #374151 75%
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: #e5e7eb;
+  }
+}
