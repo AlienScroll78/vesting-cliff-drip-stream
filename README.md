@@ -60,6 +60,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 
 
+## Architecture
+
+System architecture diagrams — including the event indexer pipeline (Horizon polling, data flow, error path, and WebSocket push) — are documented in [`docs/architecture.md`](docs/architecture.md).
+
 ## Architecture Decision Records
 
 Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
