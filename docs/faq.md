@@ -53,6 +53,30 @@ No pause mechanism exists. The contract has no admin key and no pause entry-poin
 
 ---
 
+**Q: Can I pause and resume a stream?**
+
+No. There is no `pause_stream` or `resume_stream` entry-point. Streams run continuously from `start_ledger` to `end_ledger` at a fixed [rate](glossary.md#rate). If you need to halt a stream mid-way, the only option is to cancel it (see `cancel_stream` in the [API reference](api-reference.md#cancel_stream)) and create a new one with adjusted parameters once you are ready to resume. Note that cancelling after the cliff transfers accrued tokens to the recipient immediately — the "resume" stream starts fresh with a new cliff and duration.
+
+---
+
+**Q: What is clawback and when can it be used?**
+
+[Clawback](glossary.md#clawback) is a compliance mechanism that lets the original [sponsor](glossary.md#sponsor) recover **all remaining tokens** from a stream, bypassing the cliff and accrual rules. It is only available on tokens that carry the SAC clawback flag — not every token supports it. Typical use cases include AML violations, sanctions list matches, or court orders. Invoke it via [`clawback_stream`](api-reference.md#clawback_stream), which requires a mandatory `reason` string (max 256 chars) for audit purposes. The action emits a `StreamClawedBack` event with the reason field for off-chain compliance monitoring. See [flows.md](flows.md) for the full clawback sequence diagram.
+
+---
+
+**Q: What happens to tokens in an expired stream?**
+
+After `end_ledger` the stream stops accruing but the vault balance is not automatically swept anywhere. The recipient can still call `claim_vested` to collect unclaimed tokens at any time after expiry. If the recipient never claims, the tokens remain locked in the contract. After a [drain delay](glossary.md#drain-delay) of approximately 1 year (~3,153,600 ledgers past `end_ledger`), any caller can invoke [`drain_expired_stream`](api-reference.md#drain_expired_stream) to return the remaining balance to the original sponsor. This permissionless cleanup path is described in detail in [flows.md](flows.md#5-drain-expired-stream).
+
+---
+
+**Q: Can I transfer my stream to a new address?**
+
+No. The recipient address is fixed at stream creation and stored as the storage key for the `VestingSchedule`. There is no `transfer_stream` or `change_recipient` entry-point. If a recipient needs to change their receiving address (e.g., key rotation), the sponsor must cancel the existing stream and create a new one pointing to the updated address. Any accrued tokens at the time of cancellation are transferred to the original recipient before cancellation completes (if the cliff has passed).
+
+---
+
 ## Claiming
 
 **Q: How often should a recipient call `claim_vested`?**
@@ -88,6 +112,18 @@ Yes. The native XLM asset has a SAC contract address on every Stellar network. P
 ```bash
 stellar contract id asset --asset native --network testnet
 ```
+
+---
+
+**Q: Can a stream vest multiple tokens at once?**
+
+No. Each `VestingSchedule` is bound to a single `token` address set at creation. The contract has one vault per stream, and the [rate](glossary.md#rate) is denominated in that token's base unit. To stream multiple tokens to the same recipient, deploy separate contract instances or create separate streams on multiple contract deployments — one per token. A multi-token design is tracked in [docs/design/multi-token.md](design/multi-token.md).
+
+---
+
+**Q: What is the minimum deposit and why does it exist?**
+
+The [minimum deposit](glossary.md#minimum-deposit) is a configurable threshold (default 100 tokens) that `rate × total_duration` must meet or exceed when calling [`create_vesting_stream`](api-reference.md#create_vesting_stream). It exists to prevent [dust](glossary.md#dust)-level streams that would consume persistent storage and ledger resources disproportionate to the tokens at stake. Violation returns error code 14 (`DepositBelowMinimum`). The threshold is stored in [instance storage](glossary.md#instance-storage) and can be updated by the contract admin via [`set_min_deposit`](api-reference.md#set_min_deposit). Check the current value with [`get_min_deposit`](api-reference.md#get_min_deposit) before stream creation.
 
 ---
 

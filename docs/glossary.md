@@ -22,6 +22,12 @@ The privileged [address](#address) with authority to perform sensitive contract 
 
 ---
 
+### Allowlist
+
+An optional on-chain registry of [addresses](#address) permitted to receive vesting streams. When enabled, [`create_vesting_stream`](api-reference.md#create_vesting_stream) checks that the `recipient` address appears in the allowlist before accepting the stream; unlisted recipients are rejected with an authorization error. The allowlist is managed by the contract [admin](#admin) and stored in [instance storage](#instance-storage). By default the allowlist feature is disabled and any valid recipient address is accepted. See [`set_allowlist`](api-reference.md#set_allowlist) and [`get_allowlist`](api-reference.md#get_allowlist) for management functions.
+
+---
+
 ### Auth / `require_auth()`
 
 A Soroban SDK call that enforces that a given `Address` has signed the current transaction. This contract requires the sponsor to authorize `create_vesting_stream` and `cancel_stream`, and the recipient to authorize `claim_vested`.
@@ -100,6 +106,12 @@ A token-streaming primitive where tokens flow to a recipient at a constant rate 
 
 ---
 
+### Dust
+
+A fractional token remainder too small to be economically meaningful — typically a sub-stroop or single-unit balance left in the vault after all full-ledger accruals have been claimed. Dust arises from integer division when `rate × elapsed_ledgers` does not divide evenly over the stream's lifetime. The contract leaves dust in the vault and returns it to the [sponsor](#sponsor) on cancellation or via [`drain_expired_stream`](api-reference.md#drain_expired_stream) after the [drain delay](#drain-delay) elapses. The [minimum deposit](#minimum-deposit) threshold prevents streams so small that the entire deposit would be considered dust.
+
+---
+
 ### Emergency Drain
 
 A sponsor-initiated recovery mechanism ([`emergency_drain`](api-reference.md#emergency_drain)) for reclaiming tokens from an expired stream when the [recipient](#recipient)'s keys are permanently lost. Only callable after [`end_ledger`](#end_ledger) + [drain delay](#drain-delay) (~1 year) have elapsed. This balances two risks: preventing indefinite token lockup (if recipient keys are lost) versus protecting recipients from premature sponsor clawback. Unlike [`clawback_stream`](api-reference.md#clawback_stream), which is instantaneous and compliance-driven, emergency drain enforces a long safety window to give recipients time to claim. Returns error code 10 (`DrainDelayNotExpired`) if called too early.
@@ -117,6 +129,12 @@ The absolute ledger sequence number at which the stream ends, computed as `start
 ### Horizon
 
 The REST API server for the Stellar network, operated by the Stellar Development Foundation and third-party providers. Clients query Horizon to fetch account balances, transaction history, and current ledger sequence numbers.
+
+---
+
+### Idempotency Key
+
+A unique, caller-supplied token included in an API or transaction request to guarantee that retrying the same operation does not produce duplicate effects. In the context of this contract's off-chain tooling and REST wrappers, an idempotency key (typically a UUID or content hash) allows a client to safely re-submit a `create_vesting_stream` request after a network timeout without risking a second stream being created. The contract itself enforces idempotency at the on-chain level via the `ScheduleAlreadyExists` guard (error 6) — a second call with the same recipient is rejected regardless of key. Idempotency keys are primarily relevant for the HTTP API layer described in [`docs/api.yaml`](api.yaml).
 
 ---
 
@@ -138,6 +156,12 @@ A configurable threshold (default 100 tokens) enforcing that `rate × total_dura
 
 ---
 
+### Milestone Stream
+
+A vesting variant in which token releases are gated on discrete, verifiable project milestones rather than purely on elapsed [ledgers](#ledger). Each milestone (e.g., code audit completion, product launch) unlocks a pre-defined tranche of tokens when an authorised oracle or admin attests that the milestone has been met. Unlike a standard linear drip, a milestone stream's cliff and unlock schedule are event-driven. This feature is tracked in the project roadmap; the current contract implements time-based [accrual](#accrual) only. See [docs/design/multi-token.md](design/multi-token.md) for related design discussions.
+
+---
+
 ### Permissionless
 
 A contract function callable by any [address](#address) without [authorization](#auth--require_auth) requirements. [`drain_expired_stream`](api-reference.md#drain_expired_stream) is permissionless: after a stream expires and the [drain delay](#drain-delay) elapses, **any user** can trigger cleanup to return unclaimed tokens to the [sponsor](#sponsor). This design allows the network community to perform housekeeping, reducing the contract's storage footprint and freeing locked tokens. Permissionless functions still validate business logic (e.g., delay expiration) but don't require the caller to prove identity or ownership.
@@ -147,6 +171,12 @@ A contract function callable by any [address](#address) without [authorization](
 ### Persistent Storage
 
 A Soroban storage tier whose entries survive across ledger closings indefinitely, subject to [TTL](#ttl-time-to-live) rent. This contract stores each `VestingSchedule` in persistent storage and bumps the TTL on every read and write.
+
+---
+
+### Protocol Fee
+
+A percentage of the total stream [deposit](#deposit) charged at stream creation and transferred to a designated fee-collection address. Fees are expressed in **basis points** (bps), where 1 bps = 0.01%. For example, a 50 bps fee on a 10,000-token deposit retains 9,950 tokens for vesting and routes 50 tokens to the fee recipient. The fee rate and collection address are set by the contract [admin](#admin) via [`set_protocol_fee`](api-reference.md#set_protocol_fee) and stored in [instance storage](#instance-storage). A fee of 0 bps (the default) disables the mechanism entirely. Protocol fees are deducted before the [minimum deposit](#minimum-deposit) check so that the threshold applies to the net vesting amount.
 
 ---
 
@@ -237,6 +267,12 @@ The process of replacing a deployed contract's [WASM](#wasm-webassembly) code wi
 ### Vault
 
 The contract's internal token balance — the tokens held by the contract address itself after the sponsor's upfront deposit. Tokens are released from the vault to the recipient on each `claim_vested` call.
+
+---
+
+### Variable Rate
+
+A stream configuration in which the [rate](#rate) (tokens per [ledger](#ledger)) changes over the lifetime of the stream, rather than remaining constant. A variable-rate schedule is typically expressed as a piecewise function: for example, `rate₁` tokens/ledger from `start_ledger` to a breakpoint, then `rate₂` tokens/ledger from the breakpoint to `end_ledger`. The total [deposit](#deposit) equals the sum of each segment: `(rate₁ × segment₁_duration) + (rate₂ × segment₂_duration)`. [Accrual](#accrual) and [catch-up claim](#catch-up-claim) logic must evaluate the correct rate segment for the current ledger. The current contract implements a single constant rate only; variable-rate support is a planned extension. See [ADR-0002](adr/0002-i128-rate-representation.md) for the rate representation rationale.
 
 ---
 
