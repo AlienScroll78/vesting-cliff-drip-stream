@@ -119,6 +119,8 @@ sequenceDiagram
     Contract-->>Sponsor: Ok(())
 ```
 
+> **Key concepts:** If an [allowlist](glossary.md#allowlist) is active, the contract validates that `recipient` is a whitelisted address before accepting the stream. The `deposit` is computed as `rate × total_duration`; if a [protocol fee](glossary.md#protocol-fee) is configured it will be deducted per-claim rather than at creation. For [milestone stream](glossary.md#milestone-stream) variants, additional checkpoint parameters are passed here.
+
 ## 2. Claim After Cliff
 
 The recipient calls `claim_vested` at any point after the [cliff](glossary.md#cliff). On the first call the contract performs a [catch-up claim](glossary.md#catch-up-claim) — a lump-sum transfer of all tokens accrued since `start_ledger`. Subsequent calls collect tokens accrued since the last claim. Any sub-unit remainder ([dust](glossary.md#dust)) stays in the vault until cancellation or drain.
@@ -138,6 +140,8 @@ sequenceDiagram
     Contract->>Contract: update last_claimed_ledger
     Contract-->>Recipient: Ok(claimable)
 ```
+
+> **Key concepts:** The first claim after the cliff triggers the [catch-up claim](glossary.md#catch-up-claim) for all accrued tokens. If a [protocol fee](glossary.md#protocol-fee) is active, `fee_amount = claimable * fee_bps / 10_000` is withheld before transfer; any sub-unit remainder is [dust](glossary.md#dust). When automating claims, use the transaction sequence number as an [idempotency key](glossary.md#idempotency-key) to avoid double-submission on timeouts. For [variable rate](glossary.md#variable-rate) streams the `claimable` formula sums across rate segments.
 
 ## 3. Cancel Before Cliff
 
@@ -159,6 +163,8 @@ sequenceDiagram
     Contract-->>Sponsor: Ok(())
     Note over Recipient: Receives nothing (cliff not reached)
 ```
+
+> **Key concepts:** If an [allowlist](glossary.md#allowlist) was used at creation, cancelling does not modify the allowlist — the recipient slot remains reserved until re-used or removed by the admin. Any [dust](glossary.md#dust) in the vault is included in the full-deposit refund to the sponsor.
 
 ## 4. Cancel After Cliff
 
