@@ -9,7 +9,7 @@ const VALID_TOKEN   = "CFU5BPFMUWIF6LXAQFCQ2RDS75QZL5ER2XXKHSIM2FBHTB4MFTKA5ITF"
 
 function renderNoWallet(props = {}) {
   return render(
-    <WalletContext.Provider value={{ address: null, freighterInstalled: false, balances: [], balancesLoading: false, connect: vi.fn(), disconnect: vi.fn() }}>
+    <WalletContext.Provider value={{ address: null, freighterInstalled: false, balances: [], balancesLoading: false, provider: null, network: "testnet", modalOpen: false, openModal: vi.fn(), closeModal: vi.fn(), connect: vi.fn(), connectWithProvider: vi.fn(), disconnect: vi.fn(), switchNetwork: vi.fn() }}>
       <StreamCreateForm {...props} />
     </WalletContext.Provider>
   );
@@ -17,7 +17,7 @@ function renderNoWallet(props = {}) {
 
 function renderWithWallet(props = {}) {
   return render(
-    <WalletContext.Provider value={{ address: VALID_ADDRESS, freighterInstalled: true, balances: [], balancesLoading: false, connect: vi.fn(), disconnect: vi.fn() }}>
+    <WalletContext.Provider value={{ address: VALID_ADDRESS, freighterInstalled: true, balances: [], balancesLoading: false, provider: "freighter", network: "testnet", modalOpen: false, openModal: vi.fn(), closeModal: vi.fn(), connect: vi.fn(), connectWithProvider: vi.fn(), disconnect: vi.fn(), switchNetwork: vi.fn() }}>
       <StreamCreateForm {...props} />
     </WalletContext.Provider>
   );
