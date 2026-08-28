@@ -227,13 +227,8 @@ pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
     let fee_bps = env
         .storage()
         .instance()
-        .get::<DataKey, u32>(&DataKey::FeeBps)
-        .unwrap_or(0);
-    let treasury = env
-        .storage()
-        .instance()
-        .get::<DataKey, Address>(&DataKey::Treasury);
-    (fee_bps, treasury)
+        .get::<DataKey, Vec<Address>>(&DataKey::AllowedTokens)
+        .unwrap_or_else(|| Vec::new(env))
 }
 
 pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
