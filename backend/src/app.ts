@@ -32,6 +32,9 @@ app.get(
   createScheduleController(),
 );
 
+// Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
+app.use('/admin', adminRouter);
+
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
     return res.status(400).json({ error: err.message });

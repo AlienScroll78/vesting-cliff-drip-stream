@@ -11,6 +11,13 @@ Ledger sequences are `u32` values from `env.ledger().sequence()`.
 ## Table of Contents
 
 - [HTTP API](#http-api)
+- [Admin API](#admin-api)
+  - [Authentication](#authentication)
+  - [GET /admin/streams](#get-adminstreams)
+  - [GET /admin/indexer/status](#get-adminindexerstatus)
+  - [POST /admin/indexer/restart](#post-adminindexerrestart)
+  - [GET /admin/webhooks/dlq](#get-adminwebhooksdlq)
+  - [POST /admin/webhooks/dlq/replay](#post-adminwebhooksdlqreplay)
 - [Mutating Functions](#mutating-functions)
   - [create_vesting_stream](#create_vesting_stream)
   - [cancel_stream](#cancel_stream)
@@ -68,6 +75,211 @@ Returns the full vesting schedule for a Stellar recipient address, including com
 ```
 
 The OpenAPI document is available in [docs/api.yaml](docs/api.yaml).
+
+---
+
+---
+
+## Admin API
+
+The Admin API provides operator-level access to monitor streams, manage the event indexer, and inspect the webhook dead-letter queue. All endpoints require a valid API key passed as a Bearer token.
+
+> **Note:** Admin endpoints are intended for internal operator use only. Do not expose them on the public ingress. In production they run behind a separate internal port or a private load-balancer rule.
+
+### Authentication
+
+Every admin endpoint validates the `Authorization` header using a constant-time comparison against the `ADMIN_API_KEY` environment variable.
+
+```
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
+**Error responses**
+
+| HTTP Status | Condition |
+|------------|-----------|
+| `401 Unauthorized` | `Authorization` header absent or not a `Bearer` scheme |
+| `403 Forbidden` | Token present but does not match `ADMIN_API_KEY` |
+| `503 Service Unavailable` | `ADMIN_API_KEY` environment variable is not set |
+
+---
+
+### GET /admin/streams
+
+List all vesting streams with optional filters.
+
+**Query parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | no | Filter by stream status: `active`, `pre_cliff`, `expired`, `cancelled` |
+| `sponsor` | string | no | Filter by sponsor Stellar public key (G…) |
+| `recipient` | string | no | Filter by recipient Stellar public key (G…) |
+| `limit` | integer | no | Maximum rows (default `50`, max `200`) |
+| `offset` | integer | no | Pagination offset (default `0`) |
+
+**Response 200**
+
+```json
+{
+  "total": 42,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "id": 1,
+      "sponsor": "GABC...",
+      "recipient": "GDEF...",
+      "token": "CABC...",
+      "rate_per_ledger": "10",
+      "start_ledger": 51200000,
+      "cliff_ledger": 51217280,
+      "end_ledger": 51372800,
+      "status": "active",
+      "cancelled_at": null,
+      "created_at": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `400` | `status` is not one of the allowed values |
+| `400` | `sponsor` or `recipient` is not a valid Stellar public key |
+| `500` | Database query failed |
+
+---
+
+### GET /admin/indexer/status
+
+Returns the current state of the Horizon event indexer, including lag, last cursor, and error count.
+
+**Response 200**
+
+```json
+{
+  "status": "running",
+  "lastCursor": "51203447-0",
+  "lastIndexedLedger": 51203447,
+  "chainTipLedger": 51203450,
+  "lagLedgers": 3,
+  "errorCount": 0,
+  "lastError": null,
+  "uptimeSeconds": 3600
+}
+```
+
+**Fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `"running" \| "stopped" \| "error"` | Current indexer lifecycle state |
+| `lastCursor` | string | Horizon paging token last consumed |
+| `lastIndexedLedger` | integer | Sequence of the last indexed ledger |
+| `chainTipLedger` | integer | Latest ledger seen on-chain |
+| `lagLedgers` | integer | `chainTipLedger − lastIndexedLedger` |
+| `errorCount` | integer | Cumulative error count since last restart |
+| `lastError` | string \| null | Last error message, if any |
+| `uptimeSeconds` | integer \| null | Seconds since the indexer last started |
+
+> The endpoint degrades gracefully if the database is unavailable — it returns the last known in-process state rather than a 503.
+
+---
+
+### POST /admin/indexer/restart
+
+Signal the event indexer to stop polling and restart from its last saved cursor.
+
+**Request body:** none required.
+
+**Response 200**
+
+```json
+{ "ok": true, "message": "Indexer restarted successfully" }
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `500` | Restart function threw an error |
+
+---
+
+### GET /admin/webhooks/dlq
+
+List items in the webhook dead-letter queue, newest first.
+
+**Query parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | no | Maximum rows (default `100`, max `500`) |
+
+**Response 200**
+
+```json
+{
+  "total": 2,
+  "limit": 100,
+  "items": [
+    {
+      "id": 7,
+      "webhook_url": "https://partner.example.com/hooks",
+      "payload": { "event": "stream_created", "recipient": "G..." },
+      "last_error": "connect ECONNREFUSED 93.184.216.34:443",
+      "retry_count": 3,
+      "failed_at": "2024-06-01T12:00:00.000Z",
+      "last_retry_at": "2024-06-01T13:30:00.000Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `500` | Database query failed |
+
+---
+
+### POST /admin/webhooks/dlq/replay
+
+Replay one or all items in the dead-letter queue. Items are replayed in ascending `failed_at` order.
+
+**Request body (optional)**
+
+```json
+{ "id": 7 }
+```
+
+Omit `id` (or send an empty object `{}`) to replay **all** DLQ items.
+
+**Response 200**
+
+```json
+{
+  "replayed": 2,
+  "succeeded": 2,
+  "failed": 0,
+  "results": [
+    { "id": 7, "ok": true },
+    { "id": 8, "ok": true }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `400` | `id` is present but not a positive integer |
+| `404` | No DLQ item found with the given `id` |
+| `500` | Database query or replay function failed |
 
 ---
 
