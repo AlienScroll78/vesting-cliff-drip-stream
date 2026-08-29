@@ -11,6 +11,8 @@
 import { Pool } from "pg";
 import { networkConfig } from "../config/network.js";
 import { publishEvent, type StreamEventType } from "./ws.js";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { invalidateRecipient } = require("./sorobanViews.js");
 
 const FINALITY_DEPTH = 3;
 const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_MS ?? "6000", 10);
@@ -226,6 +228,12 @@ export class EventIndexer {
       delete payload.recipient; // recipient is already a top-level field in the WS envelope
 
       publishEvent(knownType, recipient, payload);
+
+      // Invalidate the Soroban view cache for this recipient so the next
+      // read reflects the updated on-chain state.
+      invalidateRecipient(recipient).catch((err: unknown) => {
+        console.warn("[indexer] cache invalidation failed for", recipient, err);
+      });
     }
   }
 
