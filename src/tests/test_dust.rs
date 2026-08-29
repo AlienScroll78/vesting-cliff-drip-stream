@@ -30,7 +30,7 @@ fn test_claim_at_end_ledger_returns_full_deposit() {
     // Advance to exactly end_ledger (start=100, total_duration=100 → end=200)
     advance_ledger(&env, 100);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 700, "full deposit should be returned at end_ledger");
     assert_eq!(token_client.balance(&recipient), 700);
     // Stream must be deleted after full claim
@@ -56,13 +56,13 @@ fn test_partial_then_dust_claim() {
 
     // Advance to ledger 107 (past cliff, before end)
     advance_ledger(&env, 7);
-    let first_claim = client.claim_vested(&recipient).unwrap();
+    let first_claim = client.claim_vested(&recipient);
     // (107 - 100) × 3 = 21
     assert_eq!(first_claim, 21);
 
     // Advance to end_ledger (ledger 110)
     advance_ledger(&env, 3);
-    let dust_claim = client.claim_vested(&recipient).unwrap();
+    let dust_claim = client.claim_vested(&recipient);
     // 30 − 21 = 9
     assert_eq!(dust_claim, 9);
     assert_eq!(token_client.balance(&recipient), 30, "recipient must hold full deposit");
@@ -80,7 +80,7 @@ fn test_claimable_amount_at_end_ledger_is_full_remainder() {
 
     // Claim 70 tokens at ledger 110 (10 ledgers × 7)
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Advance to end_ledger
     advance_ledger(&env, 20);
@@ -116,7 +116,7 @@ fn test_claim_past_end_ledger_returns_full_deposit() {
     let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
     advance_ledger(&env, 500);
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient);
     assert_eq!(claimed, 2_000);
     assert_eq!(token_client.balance(&recipient), 2_000);
     assert!(client.get_schedule(&recipient).is_none());
@@ -134,7 +134,7 @@ fn test_no_tokens_remain_after_full_claim() {
 
     // Advance to end_ledger and claim
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Contract must hold zero tokens for this stream
     assert_eq!(token_client.balance(&contract_id), 0);
@@ -151,14 +151,14 @@ fn test_claimed_amount_tracking() {
 
     // Claim at cliff (ledger 110): 10 ledgers × 10 = 100
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
     let sched = client.get_schedule(&recipient).unwrap();
     assert_eq!(sched.claimed_amount, 100);
     assert_eq!(sched.total_claimed, 100);
 
     // Claim at ledger 120: 10 more ledgers × 10 = 100
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
     let sched = client.get_schedule(&recipient).unwrap();
     assert_eq!(sched.claimed_amount, 200);
 }

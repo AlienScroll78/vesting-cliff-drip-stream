@@ -95,7 +95,7 @@ fn bench_claim_vested_at_cliff() {
     advance_ledger(&env, 50); // exactly at cliff
 
     env.budget().reset_default();
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -117,13 +117,13 @@ fn bench_claim_vested_mid_stream() {
 
     // Clear catch-up accrual first.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Measure a clean incremental claim.
     advance_ledger(&env, 50);
 
     env.budget().reset_default();
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -146,7 +146,7 @@ fn bench_cancel_stream_before_cliff() {
     advance_ledger(&env, 10); // still before cliff
 
     env.budget().reset_default();
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -169,7 +169,7 @@ fn bench_cancel_stream_after_cliff() {
     advance_ledger(&env, 100); // well past the cliff
 
     env.budget().reset_default();
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();

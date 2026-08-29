@@ -15,7 +15,7 @@ use crate::{
 const DRAIN_DELAY_LEDGERS: u32 = 3_153_600;
 
 /// Maximum number of segments allowed in a variable-rate stream.
-const MAX_SEGMENTS: u32 = 10;
+const MAX_SEGMENTS: usize = 10;
 
 /// Maximum number of milestones allowed in a milestone-based stream.
 const MAX_MILESTONES: u32 = 20;
@@ -39,11 +39,8 @@ const MAX_MILESTONES: u32 = 20;
 pub struct StreamStats {
     /// Total tokens deposited when the stream was created.
     pub total_deposited: i128,
-    /// Tokens already transferred to the recipient via `claim_vested`.
     pub total_claimed: i128,
-    /// Tokens still held by the contract vault for this stream.
     pub remaining: i128,
-    /// Tokens claimable right now (zero if cliff not yet reached).
     pub claimable_now: i128,
 }
 
@@ -58,8 +55,7 @@ impl VestingDrips {
 
     /// Configures the contract with admin, fee, and treasury settings.
     ///
-    /// Must be called **once** immediately after deployment. Subsequent calls
-    /// are rejected with `AlreadyInitialized`.
+    /// Must be called **once** immediately after deployment.
     ///
     /// # Errors
     /// * `AlreadyInitialized` – `initialize` has already been called.
@@ -264,7 +260,7 @@ impl VestingDrips {
                 / 10_000;
             if fee_amount > 0 {
                 token_client
-                    .try_transfer(&sponsor, &treasury, &fee_amount)
+                    .try_transfer(&env.current_contract_address(), &treasury, &fee_amount)
                     .map_err(|_| VestingError::TransferFailed)?;
                 events::emit_fee_collected(&env, &sponsor, &treasury, fee_amount);
             }
@@ -766,6 +762,11 @@ impl VestingDrips {
 
         let mut schedule = storage::get_variable_schedule(&env, &recipient)
             .ok_or(VestingError::ScheduleNotFound)?;
+
+        // Paused streams cannot be claimed.
+        if schedule.paused_at_ledger.is_some() {
+            return Err(VestingError::NothingToClaim);
+        }
 
         let current_ledger = env.ledger().sequence();
 
@@ -1478,7 +1479,7 @@ impl VestingDrips {
 
         let claimable_now = {
             let current = env.ledger().sequence();
-            if current < schedule.cliff_ledger {
+            if current < schedule.cliff_ledger || schedule.paused_at_ledger.is_some() {
                 0
             } else {
                 compute_claimable(&schedule, current)

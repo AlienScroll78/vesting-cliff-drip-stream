@@ -34,7 +34,7 @@ fn test_upgrade_rejects_non_admin() {
     let result = client.try_upgrade(&attacker, &mock_hash);
     let err = result.unwrap_err().unwrap();
 
-    assert_eq!(err, VestingError::Unauthorized);
+    assert_eq!(err, Ok(VestingError::Unauthorized));
 }
 
 /// The admin set during `initialize` can call `upgrade` with a mock WASM hash.
@@ -66,7 +66,7 @@ fn test_initialize_twice_fails() {
 
     let result = client.try_initialize(&attacker, &0u32, &default_treasury(&env));
     let err = result.unwrap_err().unwrap();
-    assert_eq!(err, VestingError::AlreadyInitialized);
+    assert_eq!(err, Ok(VestingError::AlreadyInitialized));
 }
 
 /// `transfer_admin` moves authority to a new address.
