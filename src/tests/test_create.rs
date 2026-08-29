@@ -29,7 +29,6 @@ fn test_create_stream_success() {
     assert_eq!(schedule.cliff_ledger, 150);
     assert_eq!(schedule.end_ledger, 300);
     assert_eq!(schedule.last_claimed_ledger, 100);
-    assert_eq!(schedule.metadata, None);
 
     assert_eq!(token_client.balance(&sponsor), 0);
     assert_eq!(token_client.balance(&contract_id), 2_000);

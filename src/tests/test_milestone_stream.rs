@@ -28,7 +28,7 @@ fn test_create_milestone_stream_empty_milestones_rejected() {
         .try_create_milestone_stream(&sponsor, &recipient, &token_id, &empty, &500, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::InvalidMilestones);
+    assert_eq!(err, Ok(VestingError::InvalidMilestones));
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn test_create_milestone_stream_bps_not_10000_rejected() {
         .try_create_milestone_stream(&sponsor, &recipient, &token_id, &milestones, &400, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::InvalidMilestones);
+    assert_eq!(err, Ok(VestingError::InvalidMilestones));
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn test_create_milestone_stream_non_ascending_ledgers_rejected() {
         .try_create_milestone_stream(&sponsor, &recipient, &token_id, &milestones, &400, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::InvalidMilestones);
+    assert_eq!(err, Ok(VestingError::InvalidMilestones));
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn test_create_milestone_stream_duplicate_ledger_rejected() {
         .try_create_milestone_stream(&sponsor, &recipient, &token_id, &milestones, &200, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::InvalidMilestones);
+    assert_eq!(err, Ok(VestingError::InvalidMilestones));
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn test_create_milestone_stream_same_recipient_twice_rejected() {
         .try_create_milestone_stream(&sponsor, &recipient, &token_id, &milestones, &300, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::ScheduleAlreadyExists);
+    assert_eq!(err, Ok(VestingError::ScheduleAlreadyExists));
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn test_create_milestone_stream_sponsor_equals_recipient_rejected() {
         .try_create_milestone_stream(&sponsor, &sponsor, &token_id, &milestones, &200, &10_000)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::InvalidRecipient);
+    assert_eq!(err, Ok(VestingError::InvalidRecipient));
 }
 
 // ── Happy path ────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ fn test_claim_milestone_nothing_before_first_milestone() {
     client.create_milestone_stream(&sponsor, &recipient, &token_id, &milestones, &200, &10_000);
 
     let err = client.try_claim_milestone(&recipient).unwrap_err().unwrap();
-    assert_eq!(err, VestingError::NothingToClaim);
+    assert_eq!(err, Ok(VestingError::NothingToClaim));
 }
 
 #[test]
@@ -290,5 +290,5 @@ fn test_claim_milestone_incremental_claims() {
 
     // Schedule is removed after full claim
     let err = client.try_claim_milestone(&recipient).unwrap_err().unwrap();
-    assert_eq!(err, VestingError::ScheduleNotFound);
+    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
 }

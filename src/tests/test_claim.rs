@@ -112,7 +112,7 @@ fn test_double_claim_same_ledger_returns_nothing_to_claim() {
     client.claim_vested(&recipient);
 
     let err = client.try_claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, Ok(VestingError::NothingToClaim));
+    assert_eq!(err, VestingError::NothingToClaim);
 }
 
 #[test]
@@ -166,5 +166,5 @@ fn test_claim_after_all_tokens_claimed_returns_schedule_not_found() {
 
     // Schedule was removed after full claim
     let err = client.try_claim_vested(&recipient).unwrap_err();
-    assert_eq!(err, Ok(VestingError::ScheduleNotFound));
+    assert_eq!(err, VestingError::ScheduleNotFound);
 }
