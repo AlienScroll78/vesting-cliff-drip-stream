@@ -180,6 +180,47 @@ export function decodeEvent(record: any): DecodedStreamEvent | null {
   };
 }
 
+// ── Version recording helpers ─────────────────────────────────────────────────
+
+/**
+ * Maps contract event types to mutation_type values for schedule_versions.
+ * Only lifecycle-changing events produce version rows.
+ * vc_claim does NOT produce a version row (not a schedule mutation).
+ */
+const MUTATION_TYPE_MAP: Partial<Record<EventType, string>> = {
+  vc_create: "created",
+  vc_cancel: "cancelled",
+  vc_done: "completed",
+  vc_drain: "completed",
+} as const;
+
+/**
+ * Build the `changed_fields` JSON snapshot for a version row from a
+ * decoded stream event.
+ */
+function buildVersionFields(ev: DecodedStreamEvent): Record<string, unknown> {
+  switch (ev.event_type) {
+    case "vc_create":
+      return {
+        sponsor: ev.sponsor,
+        token: ev.token,
+        ledger_sequence: ev.ledger_sequence,
+      };
+    case "vc_cancel":
+      return {
+        refunded_amount: ev.amount !== null ? ev.amount.toString() : null,
+      };
+    case "vc_done":
+    case "vc_drain":
+      return {
+        token: ev.token,
+        amount_recovered: ev.amount !== null ? ev.amount.toString() : null,
+      };
+    default:
+      return {};
+  }
+}
+
 // ── Worker class ──────────────────────────────────────────────────────────────
 
 export class HorizonWorker {
@@ -362,6 +403,7 @@ export class HorizonWorker {
     try {
       await client.query("BEGIN");
       for (const ev of events) {
+        // ── Write to stream_events ──────────────────────────────────────
         await client.query(
           `INSERT INTO stream_events
              (event_type, recipient, sponsor, token, amount,
@@ -378,6 +420,33 @@ export class HorizonWorker {
             ev.tx_hash,
           ]
         );
+
+        // ── Record a schedule version for lifecycle-changing events ─────
+        const mutationType = MUTATION_TYPE_MAP[ev.event_type];
+        if (mutationType) {
+          const changedFields = buildVersionFields(ev);
+          // Determine next version number and insert atomically
+          await client.query(
+            `WITH next_version AS (
+               SELECT COALESCE(MAX(version_number), 0) + 1 AS v
+               FROM schedule_versions
+               WHERE recipient = $1
+             )
+             INSERT INTO schedule_versions
+               (recipient, version_number, mutation_type,
+                changed_fields, ledger_sequence, tx_hash)
+             SELECT $1, next_version.v, $2, $3, $4, $5
+             FROM next_version
+             ON CONFLICT (recipient, version_number) DO NOTHING`,
+            [
+              ev.recipient,
+              mutationType,
+              JSON.stringify(changedFields),
+              ev.ledger_sequence,
+              ev.tx_hash,
+            ]
+          );
+        }
       }
       await client.query("COMMIT");
       console.log(`[horizon-worker] upserted ${events.length} event(s)`);
