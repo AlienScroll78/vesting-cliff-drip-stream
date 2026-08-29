@@ -33,6 +33,8 @@ import { Router, Request, Response } from "express";
 import { Pool } from "pg";
 import { createClient } from "redis";
 import { authMiddlewareV1 } from "./authV1.js";
+import { validate } from "../middleware/validate.js";
+import { SchedulesQuerySchema } from "../validation.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -365,7 +367,7 @@ const schedulesRouter = Router();
  *
  * Protected: requires valid JWT where sub matches the `sponsor` query param.
  */
-schedulesRouter.get("/", authMiddlewareV1, schedulesHandler);
+schedulesRouter.get("/", authMiddlewareV1, validate({ query: SchedulesQuerySchema }), schedulesHandler);
 
 export { schedulesRouter };
 

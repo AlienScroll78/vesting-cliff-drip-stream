@@ -127,18 +127,20 @@ describe("vestingRouter", () => {
     const { vestingRouter } = await import("./vesting.js");
     const req = { params: { recipient: mockRecipient }, query: {} } as unknown as Request;
     const { res, json, status } = makeRes();
+    const noop = vi.fn();
     await vestingRouter.stack
       .find((layer: any) => layer.route?.path === "/schedules/:recipient")
-      ?.route?.stack?.[0]?.handle(req, res);
+      ?.route?.stack?.[0]?.handle(req, res, noop);
   });
 
   it("GET /claimable/:recipient returns claimable amount", async () => {
     const { vestingRouter } = await import("./vesting.js");
     const req = { params: { recipient: mockRecipient }, query: {} } as unknown as Request;
     const { res, json, status } = makeRes();
+    const noop = vi.fn();
     await vestingRouter.stack
       .find((layer: any) => layer.route?.path === "/claimable/:recipient")
-      ?.route?.stack?.[0]?.handle(req, res);
+      ?.route?.stack?.[0]?.handle(req, res, noop);
   });
 
   it("GET /schedules/sponsor/:sponsor returns paginated list", async () => {

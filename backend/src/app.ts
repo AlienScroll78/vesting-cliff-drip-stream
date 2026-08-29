@@ -26,7 +26,11 @@ app.use(
   }),
 );
 
-app.get('/api/v1/schedules/:recipient', createScheduleController());
+app.get(
+  '/api/v1/schedules/:recipient',
+  validate({ params: RecipientParamsSchema }),
+  createScheduleController(),
+);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {

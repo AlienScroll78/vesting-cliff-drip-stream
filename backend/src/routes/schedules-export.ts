@@ -29,6 +29,8 @@ import { Router, Request, Response } from "express";
 import { authMiddleware } from "./auth.js";
 import { pool } from "../db.js";
 import { createRedisClient } from "../redisClient.js";
+import { validate } from "../middleware/validate.js";
+import { ExportQuerySchema } from "../validation.js";
 
 const router = Router();
 
@@ -235,6 +237,7 @@ async function exportHandler(req: Request, res: Response): Promise<void> {
 router.get(
   "/schedules/export",
   authMiddleware as (req: Request, res: Response, next: () => void) => void,
+  validate({ query: ExportQuerySchema }),
   exportHandler,
 );
 
