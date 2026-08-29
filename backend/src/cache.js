@@ -6,6 +6,9 @@
  *
  * When REDIS_URL is absent the module falls back to a plain in-process
  * Map so the server starts without Redis in development / CI.
+ *
+ * Every cacheGet/cacheSet call is wrapped in an OTel span via withCacheSpan
+ * so that cache hit/miss rates are visible in distributed traces.
  */
 
 import { createRequire } from "module";
@@ -76,6 +79,7 @@ export function viewKey(recipient, ledger) {
 
 /**
  * Retrieve a cached view response.
+ * Records a cache.get span with a cache.hit=true/false attribute.
  * @param {string} key
  * @returns {Promise<string | null>}
  */
@@ -89,12 +93,13 @@ export async function cacheGet(key) {
     } catch {
       // fall through to local
     }
-  }
-  return localGet(key);
+    return localGet(key);
+  });
 }
 
 /**
  * Store a view response.
+ * Records a cache.set span.
  * @param {string} key
  * @param {string} value  JSON-serialised payload
  */
@@ -107,8 +112,8 @@ export async function cacheSet(key, value) {
     } catch {
       // fall through to local
     }
-  }
-  localSet(key, value);
+    localSet(key, value);
+  });
 }
 
 /**

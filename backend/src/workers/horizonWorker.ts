@@ -22,6 +22,7 @@
 
 import { Pool } from "pg";
 import { networkConfig } from "../config/network.js";
+import { withIndexerSpan, withHorizonSpan, withDbQuerySpan } from "./tracing.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -279,47 +280,50 @@ export class HorizonWorker {
   /** Single poll tick — fetch, decode, upsert. */
   async tick(): Promise<void> {
     this.lastPollAt = new Date();
-    try {
-      const cursor = await this.readCursor();
-      const { records, nextCursor, latestLedger } = await this.fetchPage(cursor);
+    await withIndexerSpan("tick", async () => {
+      try {
+        const cursor = await this.readCursor();
+        const { records, nextCursor, latestLedger } = await this.fetchPage(cursor);
 
-      this.chainTip = latestLedger;
+        this.chainTip = latestLedger;
 
-      if (records.length > 0) {
-        // Only ingest events that are FINALITY_DEPTH ledgers behind the tip.
-        const finalised = records.filter(
-          (r: any) =>
-            latestLedger - (typeof r.ledger === "number" ? r.ledger : parseInt(r.ledger ?? "0", 10)) >=
-            FINALITY_DEPTH
+        if (records.length > 0) {
+          // Only ingest events that are FINALITY_DEPTH ledgers behind the tip.
+          const finalised = records.filter(
+            (r: any) =>
+              latestLedger - (typeof r.ledger === "number" ? r.ledger : parseInt(r.ledger ?? "0", 10)) >=
+              FINALITY_DEPTH
+          );
+
+          if (finalised.length > 0) {
+            await this.processRecords(finalised);
+          }
+        }
+
+        if (nextCursor) {
+          await this.writeCursor(nextCursor, latestLedger);
+          this.lastLedger = latestLedger;
+        }
+
+        // Reset backoff on success
+        this.backoffMs = 0;
+        this.errorCount = 0;
+      } catch (err: any) {
+        this.errorCount++;
+        const status = err?.status ?? err?.cause?.status;
+        this.backoffMs = computeBackoff(this.errorCount, status, MAX_BACKOFF_MS);
+        console.error(
+          `[horizon-worker] tick error (attempt=${this.errorCount} backoff=${this.backoffMs}ms):`,
+          err?.message ?? err
         );
-
-        if (finalised.length > 0) {
-          await this.processRecords(finalised);
+        throw err;
+      } finally {
+        if (this.running) {
+          const delay = this.backoffMs > 0 ? this.backoffMs : POLL_INTERVAL_MS;
+          this.scheduleNext(delay);
         }
       }
-
-      if (nextCursor) {
-        await this.writeCursor(nextCursor, latestLedger);
-        this.lastLedger = latestLedger;
-      }
-
-      // Reset backoff on success
-      this.backoffMs = 0;
-      this.errorCount = 0;
-    } catch (err: any) {
-      this.errorCount++;
-      const status = err?.status ?? err?.cause?.status;
-      this.backoffMs = computeBackoff(this.errorCount, status, MAX_BACKOFF_MS);
-      console.error(
-        `[horizon-worker] tick error (attempt=${this.errorCount} backoff=${this.backoffMs}ms):`,
-        err?.message ?? err
-      );
-    } finally {
-      if (this.running) {
-        const delay = this.backoffMs > 0 ? this.backoffMs : POLL_INTERVAL_MS;
-        this.scheduleNext(delay);
-      }
-    }
+    });
   }
 
   // ── Horizon fetch ───────────────────────────────────────────────────────
@@ -329,36 +333,38 @@ export class HorizonWorker {
     nextCursor: string | null;
     latestLedger: number;
   }> {
-    const eventsUrl = new URL(
-      `${this.horizonUrl}/contracts/${this.contractId}/events`
-    );
-    eventsUrl.searchParams.set("limit", String(PAGE_LIMIT));
-    eventsUrl.searchParams.set("order", "asc");
-    if (cursor) eventsUrl.searchParams.set("cursor", cursor);
+    return withHorizonSpan("getContractEvents", async () => {
+      const eventsUrl = new URL(
+        `${this.horizonUrl}/contracts/${this.contractId}/events`
+      );
+      eventsUrl.searchParams.set("limit", String(PAGE_LIMIT));
+      eventsUrl.searchParams.set("order", "asc");
+      if (cursor) eventsUrl.searchParams.set("cursor", cursor);
 
-    const [eventsResp, ledgerResp] = await Promise.all([
-      fetch(eventsUrl.toString()),
-      fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
-    ]);
+      const [eventsResp, ledgerResp] = await Promise.all([
+        fetch(eventsUrl.toString()),
+        fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
+      ]);
 
-    if (!eventsResp.ok) {
-      const err: any = new Error(`Horizon responded HTTP ${eventsResp.status}`);
-      err.status = eventsResp.status;
-      throw err;
-    }
+      if (!eventsResp.ok) {
+        const err: any = new Error(`Horizon responded HTTP ${eventsResp.status}`);
+        err.status = eventsResp.status;
+        throw err;
+      }
 
-    const data: any = await eventsResp.json();
-    const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
-    const latestLedger: number =
-      ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
+      const data: any = await eventsResp.json();
+      const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
+      const latestLedger: number =
+        ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
 
-    const records: any[] = data._embedded?.records ?? [];
-    const nextCursor =
-      records.length > 0
-        ? (records[records.length - 1].paging_token as string)
-        : null;
+      const records: any[] = data._embedded?.records ?? [];
+      const nextCursor =
+        records.length > 0
+          ? (records[records.length - 1].paging_token as string)
+          : null;
 
-    return { records, nextCursor, latestLedger };
+      return { records, nextCursor, latestLedger };
+    });
   }
 
   // ── Event processing ────────────────────────────────────────────────────
@@ -409,8 +415,14 @@ export class HorizonWorker {
              (event_type, recipient, sponsor, token, amount,
               ledger_sequence, tx_hash)
            VALUES ($1,$2,$3,$4,$5,$6,$7)
-           ON CONFLICT (tx_hash) DO NOTHING`,
-          [
+           ON CONFLICT (tx_hash) DO NOTHING`;
+
+    return withDbQuerySpan(INSERT_SQL, async () => {
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const ev of events) {
+          await client.query(INSERT_SQL, [
             ev.event_type,
             ev.recipient,
             ev.sponsor,
@@ -448,14 +460,7 @@ export class HorizonWorker {
           );
         }
       }
-      await client.query("COMMIT");
-      console.log(`[horizon-worker] upserted ${events.length} event(s)`);
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+    });
   }
 
   private async writeDlq(record: any, error: string): Promise<void> {
