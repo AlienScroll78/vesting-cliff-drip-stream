@@ -244,20 +244,22 @@ pub enum DataKey {
 
 /// Human-readable status of a vesting stream.
 ///
-/// Returned by `stream_status` (typed enum view, issue #311) and by the
+/// Returned by `stream_status` (typed enum view, issue #583) and by the
 /// legacy `get_status` view.
 ///
 /// The `NotFound` variant indicates no schedule exists for the queried recipient,
 /// allowing callers to avoid a separate existence check.
 ///
 /// # Badge colour mapping
-/// | Variant      | Colour | Hex       | ARIA label     |
-/// |--------------|--------|-----------|----------------|
-/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"    |
-/// | Active       | Blue   | `#3B82F6` | "Active"       |
-/// | Expired      | Green  | `#22C55E` | "Expired"      |
-/// | Cancelled    | Red    | `#EF4444` | "Cancelled"    |
-/// | NotFound     | Grey   | `#6B7280` | "Not found"    |
+/// | Variant      | Colour | Hex       | ARIA label      |
+/// |--------------|--------|-----------|-----------------|
+/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"     |
+/// | Active       | Blue   | `#3B82F6` | "Active"        |
+/// | Expired      | Green  | `#22C55E` | "Expired"       |
+/// | Cancelled    | Red    | `#EF4444` | "Cancelled"     |
+/// | Paused       | Yellow | `#EAB308` | "Paused"        |
+/// | Drained      | Purple | `#A855F7` | "Drained"       |
+/// | NotFound     | Grey   | `#6B7280` | "Not found"     |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(missing_docs)]
@@ -270,6 +272,10 @@ pub enum StreamStatus {
     Expired,
     /// Sponsor cancelled the stream before it reached `end_ledger`.
     Cancelled,
+    /// Sponsor paused the stream; token accrual is halted until resumed.
+    Paused,
+    /// Stream was fully drained (all tokens recovered by sponsor after expiry drain delay).
+    Drained,
     /// No schedule exists for this recipient.
     NotFound,
 }
