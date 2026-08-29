@@ -1,193 +1,138 @@
+"use strict";
+
 /**
- * webhookWorker.js – Issue #552
+ * webhookWorker.js — delivers webhook payloads with HMAC-SHA256 signing
+ * and exponential-backoff retry.
  *
- * Reliable webhook delivery with:
- *   - Exponential backoff retries (up to 5 attempts: 1s, 2s, 4s, 8s, 16s)
- *   - HMAC-SHA256 signature on every delivery (X-Webhook-Signature header)
- *   - Dead-letter queue (DLQ) persistence after all retries are exhausted
- *   - Structured logging for each attempt / failure
+ * The worker is intentionally separate from the HTTP ingestion layer so
+ * delivery failures never block incoming requests.
+ *
+ * Usage:
+ *   const worker = require('./webhookWorker');
+ *   await worker.dispatch('tokens_claimed', { recipient: '...', amount: 500 });
  */
 
-import { createHmac } from "crypto";
-import { pool } from "./db.js";
+const crypto = require("crypto");
+const { createDeliveryLog, updateDeliveryLog, findRegistrationsByEvent } = require("./webhookStore");
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+const SUPPORTED_EVENTS = [
+  "cliff_reached",
+  "tokens_claimed",
+  "stream_cancelled",
+  "stream_expired",
+];
 
-export const MAX_RETRIES = 5;
-export const BASE_DELAY_MS = 1_000; // 1 s → 2 s → 4 s → 8 s → 16 s
+const MAX_ATTEMPTS = 3;
+// Base delay in ms; actual delay = BASE_DELAY_MS * 2^(attempt-1)
+const BASE_DELAY_MS = 1_000;
 const DELIVERY_TIMEOUT_MS = 10_000;
 
-// ---------------------------------------------------------------------------
-// Internal: sign a payload
-// ---------------------------------------------------------------------------
-
-/**
- * Creates an HMAC-SHA256 hex digest of the JSON payload using the shared secret.
- * The signature is included in the `X-Webhook-Signature` request header as
- * `sha256=<hex>` so consumers can verify authenticity.
- *
- * @param {string} secret  Shared webhook secret from config.
- * @param {string} body    JSON-serialised payload string.
- * @returns {string}  `sha256=<hex>`
- */
-export function signPayload(secret, body) {
-  const hmac = createHmac("sha256", secret);
-  hmac.update(body, "utf8");
-  return `sha256=${hmac.digest("hex")}`;
+// Lazily required so the worker can be loaded without node-fetch installed
+// in test environments that mock it.
+let _fetch;
+function getFetch() {
+  if (!_fetch) _fetch = (...args) => import("node-fetch").then((m) => m.default(...args));
+  return _fetch;
 }
 
-// ---------------------------------------------------------------------------
-// Internal: single HTTP attempt
-// ---------------------------------------------------------------------------
+/**
+ * Compute the HMAC-SHA256 hex signature for a payload string.
+ * @param {string} secret
+ * @param {string} payload
+ * @returns {string}
+ */
+function computeSignature(secret, payload) {
+  return "sha256=" + crypto.createHmac("sha256", secret).update(payload).digest("hex");
+}
 
 /**
- * Performs one HTTP POST to the target URL.
- *
- * @param {string} url      Destination URL.
- * @param {object} payload  Event payload (will be JSON-serialised).
- * @param {string} secret   Webhook HMAC secret.
- * @returns {Promise<void>} Resolves on HTTP 2xx, rejects otherwise.
+ * Attempt a single HTTP delivery.
+ * Returns { ok: true } or { ok: false, error: string }.
  */
-async function attemptDelivery(url, payload, secret) {
-  const body = JSON.stringify(payload);
-  const signature = signPayload(secret, body);
-
+async function attemptDelivery(url, secret, payloadStr) {
+  const signature = computeSignature(secret, payloadStr);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
 
-  let res;
   try {
-    res = await fetch(url, {
+    const fetchFn = getFetch();
+    const res = await fetchFn(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Webhook-Signature": signature,
+        "X-Vesting-Signature": signature,
+        "User-Agent": "VestingWebhook/1.0",
       },
-      body,
+      body: payloadStr,
       signal: controller.signal,
     });
-  } finally {
-    clearTimeout(timeoutId);
-  }
+    clearTimeout(timer);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Internal: persist to DLQ
-// ---------------------------------------------------------------------------
-
-/**
- * Writes a permanently-failed delivery to the dead_letter_queue table.
- *
- * @param {string} webhookUrl
- * @param {object} payload
- * @param {string} lastError   Error message from the final attempt.
- */
-export async function moveToDlq(webhookUrl, payload, lastError) {
-  try {
-    await pool.query(
-      `INSERT INTO webhook_dead_letter_queue
-         (webhook_url, payload, last_error, failed_at, retry_count)
-       VALUES ($1, $2, $3, NOW(), $4)`,
-      [webhookUrl, JSON.stringify(payload), lastError, MAX_RETRIES]
-    );
-    console.warn(`[webhookWorker] DLQ: stored failed delivery for ${webhookUrl}`);
-  } catch (dbErr) {
-    console.error("[webhookWorker] Failed to write to DLQ:", dbErr);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Public: deliverWebhook
-// ---------------------------------------------------------------------------
-
-/**
- * Delivers a webhook payload with exponential-backoff retries.
- * After {@link MAX_RETRIES} failed attempts the item is moved to the DLQ.
- *
- * @param {string} webhookUrl  Destination URL.
- * @param {object} payload     Event payload.
- * @param {string} secret      HMAC secret used to sign the payload.
- * @returns {Promise<{ok: boolean, attempts: number, error?: string}>}
- */
-export async function deliverWebhook(webhookUrl, payload, secret) {
-  let delay = BASE_DELAY_MS;
-  let lastError = "";
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      await attemptDelivery(webhookUrl, payload, secret);
-      console.info(
-        `[webhookWorker] Delivered ${payload.event ?? "event"} to ${webhookUrl} (attempt ${attempt})`
-      );
-      return { ok: true, attempts: attempt };
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[webhookWorker] Attempt ${attempt}/${MAX_RETRIES} failed for ${webhookUrl}: ${lastError}`
-      );
-
-      if (attempt < MAX_RETRIES) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-  }
-
-  // All retries exhausted → DLQ
-  await moveToDlq(webhookUrl, payload, lastError);
-  return { ok: false, attempts: MAX_RETRIES, error: lastError };
-}
-
-// ---------------------------------------------------------------------------
-// Public: replayDlqItem
-// ---------------------------------------------------------------------------
-
-/**
- * Replays a single DLQ item by id.
- * On success the row is removed from the DLQ.
- * On failure the error and retry timestamp are updated.
- *
- * @param {number|string} dlqId  PK of the DLQ row.
- * @param {string}        secret HMAC secret.
- * @returns {Promise<{ok: boolean, error?: string}>}
- */
-export async function replayDlqItem(dlqId, secret) {
-  const { rows } = await pool.query(
-    "SELECT * FROM webhook_dead_letter_queue WHERE id = $1",
-    [dlqId]
-  );
-
-  if (!rows.length) {
-    throw new Error(`DLQ item ${dlqId} not found`);
-  }
-
-  const row = rows[0];
-  const payload =
-    typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
-
-  try {
-    await attemptDelivery(row.webhook_url, payload, secret);
-
-    // Success → remove from DLQ
-    await pool.query("DELETE FROM webhook_dead_letter_queue WHERE id = $1", [dlqId]);
-    console.info(`[webhookWorker] DLQ replay succeeded for id=${dlqId}, removed from queue`);
-    return { ok: true };
+    if (res.ok) return { ok: true };
+    return { ok: false, error: `HTTP ${res.status} ${res.statusText}` };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    await pool.query(
-      `UPDATE webhook_dead_letter_queue
-          SET last_error = $1, last_retry_at = NOW()
-        WHERE id = $2`,
-      [error, dlqId]
-    );
-    console.warn(`[webhookWorker] DLQ replay failed for id=${dlqId}: ${error}`);
-    return { ok: false, error };
+    clearTimeout(timer);
+    return { ok: false, error: err.message ?? String(err) };
   }
 }
+
+/**
+ * Deliver a single webhook registration's payload with retries.
+ * Updates the delivery log after each attempt.
+ */
+async function deliverWithRetry(registration, log, payloadStr) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) {
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt - 2);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    const result = await attemptDelivery(registration.url, registration.secret, payloadStr);
+
+    await updateDeliveryLog(log.id, {
+      attempts: attempt,
+      lastError: result.ok ? null : result.error,
+      status: result.ok ? "success" : (attempt < MAX_ATTEMPTS ? "pending" : "failed"),
+    });
+
+    if (result.ok) return;
+  }
+}
+
+/**
+ * Dispatch an event to all registered webhooks subscribed to that event.
+ * Fire-and-forget: errors are recorded in the delivery log, not thrown.
+ *
+ * @param {string} eventType - one of SUPPORTED_EVENTS
+ * @param {Object} data      - event-specific payload fields
+ */
+async function dispatch(eventType, data) {
+  if (!SUPPORTED_EVENTS.includes(eventType)) {
+    throw new Error(`Unknown event type: ${eventType}. Supported: ${SUPPORTED_EVENTS.join(", ")}`);
+  }
+
+  const registrations = await findRegistrationsByEvent(eventType);
+  if (registrations.length === 0) return;
+
+  const envelope = {
+    id: crypto.randomUUID(),
+    event: eventType,
+    timestamp: new Date().toISOString(),
+    data,
+  };
+  const payloadStr = JSON.stringify(envelope);
+
+  // Deliver to each registration concurrently (failures are independent)
+  await Promise.allSettled(
+    registrations.map(async (reg) => {
+      const log = await createDeliveryLog({
+        webhookId: reg.id,
+        event: eventType,
+        payload: payloadStr,
+      });
+      await deliverWithRetry(reg, log, payloadStr);
+    }),
+  );
+}
+
+module.exports = { dispatch, computeSignature, SUPPORTED_EVENTS };

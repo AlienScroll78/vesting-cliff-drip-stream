@@ -1,88 +1,112 @@
-/**
- * webhookValidator.js – Issue #552
- *
- * HMAC-SHA256 signature validation for incoming webhook callbacks.
- *
- * The webhook sender (our backend) signs every request body with the shared
- * WEBHOOK_SECRET and attaches the signature as:
- *
- *   X-Webhook-Signature: sha256=<hex>
- *
- * Consumers validate the incoming request by calling `validateWebhookSignature`.
- * This module also exposes an Express middleware factory `webhookSignatureMiddleware`
- * that can be applied to inbound webhook routes.
- */
-
-import { createHmac, timingSafeEqual } from "crypto";
-
-// ---------------------------------------------------------------------------
-// Core validation helper
-// ---------------------------------------------------------------------------
+"use strict";
 
 /**
- * Validates an HMAC-SHA256 webhook signature.
+ * webhookValidator.js — validates webhook URLs.
  *
- * @param {string}      secret         Shared webhook secret.
- * @param {string}      rawBody        Raw request body string (must be the exact
- *                                     bytes that were signed – do NOT parse first).
- * @param {string|undefined} signature Value of the `X-Webhook-Signature` header.
- * @returns {boolean}  `true` if the signature is valid.
+ * Rules:
+ *   1. Must use HTTPS scheme.
+ *   2. Must not target private/loopback IP ranges (RFC 1918, RFC 4193, loopback).
+ *   3. Must have a valid hostname.
  */
-export function validateWebhookSignature(secret, rawBody, signature) {
-  if (!signature || !secret || !rawBody) return false;
 
-  // Accept "sha256=<hex>" prefix or bare hex
-  const hex = signature.startsWith("sha256=") ? signature.slice(7) : signature;
+const dns = require("dns").promises;
 
-  const hmac = createHmac("sha256", secret);
-  hmac.update(rawBody, "utf8");
-  const expected = hmac.digest("hex");
+// Private / reserved IPv4 CIDR blocks
+const PRIVATE_IPV4_PATTERNS = [
+  /^127\./,                        // 127.0.0.0/8   loopback
+  /^10\./,                         // 10.0.0.0/8    RFC 1918
+  /^172\.(1[6-9]|2\d|3[01])\./,   // 172.16.0.0/12 RFC 1918
+  /^192\.168\./,                   // 192.168.0.0/16 RFC 1918
+  /^169\.254\./,                   // 169.254.0.0/16 link-local
+  /^0\./,                          // 0.0.0.0/8
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,  // 100.64.0.0/10 CGNAT
+];
+
+// Private IPv6 patterns
+const PRIVATE_IPV6_PATTERNS = [
+  /^::1$/,           // loopback
+  /^fc/i,            // fc00::/7 unique local
+  /^fd/i,
+  /^fe80/i,          // fe80::/10 link-local
+];
+
+function isPrivateIp(host) {
+  // Strip square brackets from IPv6 literals
+  const h = host.replace(/^\[(.+)\]$/, "$1");
+
+  for (const re of PRIVATE_IPV4_PATTERNS) {
+    if (re.test(h)) return true;
+  }
+  for (const re of PRIVATE_IPV6_PATTERNS) {
+    if (re.test(h)) return true;
+  }
+  return false;
+}
+
+/**
+ * Validate a webhook URL synchronously (no DNS resolution).
+ * Returns { valid: true } or { valid: false, reason: string }.
+ */
+function validateWebhookUrl(raw) {
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return { valid: false, reason: "URL is not valid" };
+  }
+
+  if (parsed.protocol !== "https:") {
+    return { valid: false, reason: "Webhook URL must use HTTPS" };
+  }
+
+  const host = parsed.hostname;
+  if (!host) {
+    return { valid: false, reason: "URL has no hostname" };
+  }
+
+  if (isPrivateIp(host)) {
+    return { valid: false, reason: "Webhook URL must not target a private or loopback IP address" };
+  }
+
+  // Reject bare 'localhost' regardless of casing
+  if (host.toLowerCase() === "localhost") {
+    return { valid: false, reason: "Webhook URL must not target localhost" };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Optionally resolve the hostname and re-check the resolved IPs.
+ * Call this for extra security; it is async due to DNS lookup.
+ */
+async function validateWebhookUrlDeep(raw) {
+  const sync = validateWebhookUrl(raw);
+  if (!sync.valid) return sync;
+
+  const { hostname } = new URL(raw);
+
+  // If it looks like a bare IP address skip the DNS step (already checked)
+  const isIpLiteral = /^\d+\.\d+\.\d+\.\d+$/.test(hostname) ||
+    hostname.startsWith("[");
+  if (isIpLiteral) return sync;
 
   try {
-    // Use timing-safe comparison to prevent timing attacks
-    return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(hex, "hex"));
-  } catch {
-    // Buffers were different lengths – invalid signature
-    return false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Express middleware factory
-// ---------------------------------------------------------------------------
-
-/**
- * Creates an Express middleware that validates the `X-Webhook-Signature` header
- * against the raw request body.
- *
- * Usage:
- *   router.post(
- *     "/webhooks/incoming",
- *     express.raw({ type: "application/json" }),  // must use raw body parser
- *     webhookSignatureMiddleware(process.env.WEBHOOK_SECRET),
- *     handler
- *   );
- *
- * @param {string} secret  Shared webhook secret.
- * @returns {import("express").RequestHandler}
- */
-export function webhookSignatureMiddleware(secret) {
-  return (req, res, next) => {
-    const signature = req.headers["x-webhook-signature"];
-
-    // req.body must be a Buffer when using express.raw()
-    const rawBody =
-      Buffer.isBuffer(req.body)
-        ? req.body.toString("utf8")
-        : typeof req.body === "string"
-          ? req.body
-          : JSON.stringify(req.body);
-
-    if (!validateWebhookSignature(secret, rawBody, signature)) {
-      res.status(401).json({ error: "Invalid webhook signature" });
-      return;
+    const addresses = await dns.resolve(hostname);
+    for (const addr of addresses) {
+      if (isPrivateIp(addr)) {
+        return {
+          valid: false,
+          reason: `Hostname resolves to a private IP address (${addr})`,
+        };
+      }
     }
+  } catch {
+    // DNS failure is not treated as invalid — the delivery attempt will fail
+    // naturally.  We only block confirmed private IPs.
+  }
 
-    next();
-  };
+  return { valid: true };
 }
+
+module.exports = { validateWebhookUrl, validateWebhookUrlDeep };

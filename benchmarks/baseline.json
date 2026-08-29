@@ -40,6 +40,10 @@
     "is_cliff_passed": {
       "cpu_instructions": 800000,
       "memory_bytes": 200000
+    },
+    "get_min_deposit": {
+      "cpu_instructions": 600000,
+      "memory_bytes": 150000
     }
   },
   "http_response_times": {

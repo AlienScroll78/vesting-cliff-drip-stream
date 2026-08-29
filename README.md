@@ -14,6 +14,8 @@ A production-ready Soroban smart contract that combines a **time-locked cliff** 
 
 Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
 
+For the formal lifecycle model, transition table, and error-to-state mapping, see [docs/flows.md](docs/flows.md).
+
 ```
 Token Flow
 ──────────────────────────────────────────────────────────────────────
@@ -42,6 +44,7 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ├── .cargo-mutants.toml            # Mutation testing exclusions & config
 ├── .gitignore
 ├── docs/
+│   ├── architecture.md            # Full-stack system architecture & Mermaid diagrams
 │   └── mutation/
 │       └── report.md              # Mutation testing results
 ├── scripts/
@@ -69,9 +72,25 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 
 
+## Architecture Overview
+
+A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
+
+```mermaid
+flowchart TD
+    UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
+    Wallet -->|"Submit Transaction"| RPC["Soroban RPC Node"]
+    RPC -->|"Execute Host Call"| Contract["VestingDrips Contract"]
+    Indexer["Backend Event Indexer"] -->|"Poll Events"| Horizon["Horizon API"]
+    Indexer -->|"Persist Activity"| DB[("PostgreSQL DB")]
+    UI -->|"Query Indexed Data"| API["Backend API Server"]
+    API --> DB
+```
+
 ## Architecture Decision Records
 
 Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
 
 ## Security
 
