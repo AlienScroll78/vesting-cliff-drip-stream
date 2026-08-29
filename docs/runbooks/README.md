@@ -15,6 +15,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 |---------|-------------|
 | [RDS Restore](./rds-restore.md) | Restore the production database from a snapshot |
 | [Disaster Recovery](./disaster-recovery.md) | Full system recovery — database, indexer re-sync, contract re-deploy |
+| [Migration Rollback](./migration-rollback.md) | Revert a database migration during an incident |
 
 ## Observability
 
