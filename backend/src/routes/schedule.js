@@ -36,7 +36,8 @@ async function scheduleHandler(req, res) {
   let config;
   try {
     config = loadConfig();
-    config.SOROBAN_RPC_URL = process.env.SOROBAN_RPC_URL;
+    // Prefer value from loadConfig(); fall back to env var if not included.
+    config.SOROBAN_RPC_URL = config.SOROBAN_RPC_URL || process.env.SOROBAN_RPC_URL;
     if (!config.SOROBAN_RPC_URL) throw new Error("Missing SOROBAN_RPC_URL");
   } catch (err) {
     res.writeHead(500, { "Content-Type": "application/json" });

@@ -7,6 +7,8 @@ const { exportSponsorHandler } = require("./routes/export");
 const { optOutHandler } = require("./routes/optOut");
 const { startAdminServer } = require("./admin/server.ts");
 const { scheduleNotificationJob } = require("./jobs/notificationJob.js");
+const { scheduleHandler } = require("./routes/schedule");
+const { versionsHandler } = require("./routes/versions");
 
 const app = express();
 app.use(express.json());
@@ -17,6 +19,10 @@ app.post("/auth/token", tokenHandler);
 
 app.get("/export/sponsor/:address", authMiddleware, exportSponsorHandler);
 app.post("/notify/opt-out", authMiddleware, optOutHandler);
+
+// Vesting schedule endpoints
+app.get("/schedule/:recipient", scheduleHandler);
+app.get("/streams/:recipient/versions", versionsHandler);
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
