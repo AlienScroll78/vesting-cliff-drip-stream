@@ -40,7 +40,7 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
-    metadata: &Option<String>,
+    total_deposit: i128,
 ) {
     let total_deposit = rate * (end_ledger - start_ledger) as i128;
     let data = StreamCreatedData {
@@ -90,9 +90,6 @@ pub fn emit_variable_stream_created(
 }
 
 /// Emitted when a new milestone vesting stream is created.
-///
-/// Topics: `["vc_ms_cr", recipient]`
-/// Data:   `(sponsor, token, total_deposited, end_ledger)`
 pub fn emit_milestone_stream_created(
     env: &Env,
     sponsor: &Address,

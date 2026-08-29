@@ -87,7 +87,7 @@ fn test_set_min_deposit_updates_threshold() {
 
     let admin = Address::generate(&env);
     // Set minimum to 500
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
     assert_eq!(client.get_min_deposit(), 500);
 }
 
@@ -103,7 +103,7 @@ fn test_custom_minimum_deposit_enforced() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     // Raise minimum to 500.
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
 
     // rate=10, total=40 → deposit=400, below new min of 500
     mint_to(&env, &token_id, &sponsor, 400);
@@ -127,7 +127,7 @@ fn test_stream_above_custom_minimum_succeeds() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     // Set minimum to 500.
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
 
     // rate=10, total=60 → deposit=600, above new min
     mint_to(&env, &token_id, &sponsor, 600);

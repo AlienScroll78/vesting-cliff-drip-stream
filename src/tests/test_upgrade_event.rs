@@ -44,7 +44,7 @@ fn test_initialize_twice_rejected() {
         .try_initialize(&attacker, &0u32, &treasury(&env))
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::AlreadyInitialized);
+    assert_eq!(err, Ok(VestingError::AlreadyInitialized));
 }
 
 /// `upgrade` must reject a caller that is not the stored admin.
@@ -59,7 +59,7 @@ fn test_upgrade_rejects_non_admin() {
 
     let mock_hash = BytesN::from_array(&env, &[7u8; 32]);
     let err = client.try_upgrade(&attacker, &mock_hash).unwrap_err().unwrap();
-    assert_eq!(err, VestingError::Unauthorized);
+    assert_eq!(err, Ok(VestingError::Unauthorized));
 }
 
 /// `upgrade` passes the admin gate (host rejects only on missing WASM).
@@ -100,7 +100,7 @@ fn test_transfer_admin_changes_authority() {
 
     // Old admin now unauthorized.
     let old_result = client.try_upgrade(&admin, &mock_hash).unwrap_err().unwrap();
-    assert_eq!(old_result, VestingError::Unauthorized);
+    assert_eq!(old_result, Ok(VestingError::Unauthorized));
 
     // New admin passes auth gate.
     let new_result = client.try_upgrade(&new_admin, &mock_hash);
@@ -128,5 +128,5 @@ fn test_transfer_admin_rejects_non_admin() {
         .try_transfer_admin(&attacker, &attacker)
         .unwrap_err()
         .unwrap();
-    assert_eq!(err, VestingError::Unauthorized);
+    assert_eq!(err, Ok(VestingError::Unauthorized));
 }

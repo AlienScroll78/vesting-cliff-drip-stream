@@ -102,7 +102,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None).unwrap();
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
 
         let adv = advance_before.min(cliff.saturating_sub(1));
         advance_ledger(&env, adv);
