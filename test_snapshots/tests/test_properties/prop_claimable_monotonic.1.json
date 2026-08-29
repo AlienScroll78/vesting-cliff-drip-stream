@@ -39,7 +39,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 22695
+                    "lo": 45150
                   }
                 }
               ]
@@ -70,14 +70,14 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 445
+                    "lo": 903
                   }
                 },
                 {
-                  "u32": 22
+                  "u32": 6
                 },
                 {
-                  "u32": 51
+                  "u32": 50
                 }
               ]
             }
@@ -98,7 +98,7 @@
                     {
                       "i128": {
                         "hi": 0,
-                        "lo": 22695
+                        "lo": 45150
                       }
                     }
                   ]
@@ -115,7 +115,7 @@
   ],
   "ledger": {
     "protocol_version": 22,
-    "sequence_number": 151,
+    "sequence_number": 150,
     "timestamp": 0,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 10,
@@ -223,10 +223,29 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "accumulated_pause_ledgers"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "claimed_amount"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 0
+                        }
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "cliff_ledger"
                       },
                       "val": {
-                        "u32": 122
+                        "u32": 106
                       }
                     },
                     {
@@ -234,7 +253,7 @@
                         "symbol": "end_ledger"
                       },
                       "val": {
-                        "u32": 151
+                        "u32": 150
                       }
                     },
                     {
@@ -247,13 +266,27 @@
                     },
                     {
                       "key": {
+                        "symbol": "paused_at_ledger"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "rate_per_ledger"
                       },
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 445
+                          "lo": 903
                         }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "sponsor"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                       }
                     },
                     {
@@ -297,7 +330,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ],
       [
@@ -329,7 +362,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ],
       [
@@ -442,7 +475,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 22695
+                          "lo": 45150
                         }
                       }
                     },
@@ -674,7 +707,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ]
     ]
