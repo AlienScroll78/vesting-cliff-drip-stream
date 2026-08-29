@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
 
 all: build
 
@@ -129,3 +129,22 @@ test-load:
 ## Run k6 load tests in dry-run mode (skips create/claim mutations)
 test-load-dryrun:
 	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run performance benchmarks and evaluate against baselines (see docs/performance.md)
+bench:
+	@mkdir -p benchmarks
+	cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
+		| grep '^BENCH' \
+		| sed 's/^BENCH //' \
+		| jq -s '{benchmarks: .}' > benchmarks/results.json
+	node scripts/check_perf.js --results benchmarks/results.json --baseline benchmarks/baseline.json
+
+## Run benchmarks and record results to benchmarks/results.json (see docs/performance.md)
+bench-update:
+	@mkdir -p benchmarks
+	cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
+		| grep '^BENCH' \
+		| sed 's/^BENCH //' \
+		| jq -s '{benchmarks: .}' > benchmarks/results.json
+	@echo "Benchmark results captured in benchmarks/results.json"
+

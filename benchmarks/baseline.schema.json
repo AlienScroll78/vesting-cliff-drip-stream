@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Performance Baseline Schema",
+  "description": "Schema for performance benchmark baselines and regression thresholds in vesting-cliff-drip-stream",
+  "type": "object",
+  "required": [
+    "description",
+    "updated",
+    "regression_threshold",
+    "wasm_instruction_counts",
+    "http_response_times",
+    "lighthouse"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "description": "Overview of benchmark purpose and update rules"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the last baseline update (YYYY-MM-DD)"
+    },
+    "regression_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Maximum allowable relative regression before CI gate failure (e.g. 0.10 for 10%)"
+    },
+    "wasm_instruction_counts": {
+      "type": "object",
+      "description": "Contract entry point CPU and memory upper bound baselines",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["cpu_instructions", "memory_bytes"],
+        "properties": {
+          "cpu_instructions": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Host-side CPU instruction cost upper bound"
+          },
+          "memory_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Host-side peak memory consumption bytes upper bound"
+          }
+        }
+      }
+    },
+    "http_response_times": {
+      "type": "object",
+      "description": "HTTP RPC response time percentiles in milliseconds",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["p50_ms", "p95_ms", "p99_ms"],
+        "properties": {
+          "p50_ms": {
+            "type": "number",
+            "minimum": 0,
+            "description": "50th percentile (median) response latency in milliseconds"
+          },
+          "p95_ms": {
+            "type": "number",
+            "minimum": 0,
+            "description": "95th percentile response latency in milliseconds"
+          },
+          "p99_ms": {
+            "type": "number",
+            "minimum": 0,
+            "description": "99th percentile response latency in milliseconds"
+          }
+        }
+      }
+    },
+    "lighthouse": {
+      "type": "object",
+      "description": "Frontend Lighthouse quality metric minimum score thresholds (0-100)",
+      "required": ["performance", "accessibility", "best_practices", "seo"],
+      "properties": {
+        "performance": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "accessibility": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "best_practices": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "seo": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    }
+  }
+}
