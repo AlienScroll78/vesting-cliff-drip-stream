@@ -4,6 +4,9 @@
   "include-v-in-tag": true,
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
+  "extra-files": [
+    "docs/api-changelog.md"
+  ],
   "changelog-sections": [
     {"type": "feat",      "section": "Features"},
     {"type": "fix",       "section": "Bug Fixes"},

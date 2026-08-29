@@ -293,7 +293,8 @@ See [docs/sbom.md](docs/sbom.md) for the full policy, allowed license list, and 
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a full history of notable changes.
+- [CHANGELOG.md](CHANGELOG.md) — Project-level changes and release history.
+- [API Changelog](docs/api-changelog.md) — Contract and backend API changes for integrators.
 
 ## License
 
