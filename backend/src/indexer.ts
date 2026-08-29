@@ -10,6 +10,7 @@
 
 import { Pool } from "pg";
 import { networkConfig } from "../config/network.js";
+import { publishEvent, type StreamEventType } from "./ws.js";
 
 const FINALITY_DEPTH = 3;
 const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_MS ?? "6000", 10);
@@ -137,6 +138,9 @@ export class EventIndexer {
 
   private async upsertEvents(events: any[]): Promise<void> {
     const client = await this.pool.connect();
+    // Collect successfully inserted events for WS notification (published after commit).
+    const inserted: Array<{ eventType: string; parsed: Record<string, any> }> = [];
+
     try {
       await client.query("BEGIN");
 
@@ -145,12 +149,13 @@ export class EventIndexer {
         const eventType = decodeTopicString(topics[0]) ?? "unknown";
         const parsed = parseEventValue(eventType, topics, e.value);
 
-        await client.query(
+        const result = await client.query(
           `INSERT INTO indexed_events
              (event_id, event_type, ledger, sponsor, recipient, token,
               rate, cliff_ledger, end_ledger, refund_amount, raw_value)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-           ON CONFLICT (event_id) DO NOTHING`,
+           ON CONFLICT (event_id) DO NOTHING
+           RETURNING event_id`,
           [
             e.id,
             eventType,
@@ -165,6 +170,11 @@ export class EventIndexer {
             JSON.stringify(e),
           ]
         );
+
+        // Only notify for rows that were actually inserted (not duplicates).
+        if (result.rowCount && result.rowCount > 0) {
+          inserted.push({ eventType, parsed });
+        }
       }
 
       await client.query("COMMIT");
@@ -173,6 +183,33 @@ export class EventIndexer {
       throw err;
     } finally {
       client.release();
+    }
+
+    // Push WS notifications after the transaction has committed so clients
+    // never see an event that was rolled back.
+    const KNOWN_TYPES = new Set<StreamEventType>([
+      "stream_created",
+      "tokens_claimed",
+      "stream_cancelled",
+      "stream_clawed_back",
+      "stream_drained",
+    ]);
+
+    for (const { eventType, parsed } of inserted) {
+      const recipient: string = parsed.recipient ?? "";
+      if (!recipient) continue;
+
+      // Normalise the decoded topic string to one of the known event types.
+      const knownType = Array.from(KNOWN_TYPES).find((t) =>
+        eventType.toLowerCase().includes(t)
+      ) as StreamEventType | undefined;
+
+      if (!knownType) continue;
+
+      const payload: Record<string, unknown> = { ...parsed };
+      delete payload.recipient; // recipient is already a top-level field in the WS envelope
+
+      publishEvent(knownType, recipient, payload);
     }
   }
 
