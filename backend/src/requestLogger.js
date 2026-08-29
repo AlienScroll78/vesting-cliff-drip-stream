@@ -90,12 +90,14 @@ export function requestLoggerMiddleware(req, res, next) {
   runWithIds({ requestId, traceId, correlationId }, () => {
     const startNs = process.hrtime.bigint();
 
+    const traceCtxOnReceive = getTraceContext();
     logger.info(
       {
         event:   'request_received',
         method:  req.method,
         path:    req.url,
         headers: sanitizeHeaders(req.headers),
+        ...(traceCtxOnReceive ? { trace_id: traceCtxOnReceive.trace_id, span_id: traceCtxOnReceive.span_id } : {}),
       },
       `${req.method} ${req.url}`,
     );
@@ -104,6 +106,7 @@ export function requestLoggerMiddleware(req, res, next) {
     const originalEnd = res.end.bind(res);
     res.end = function (...args) {
       const durationMs = Number(process.hrtime.bigint() - startNs) / 1e6;
+      const traceCtxOnComplete = getTraceContext();
       logger.info(
         {
           event:      'request_completed',
@@ -111,6 +114,7 @@ export function requestLoggerMiddleware(req, res, next) {
           path:       req.url,
           status:     res.statusCode,
           durationMs: Math.round(durationMs * 100) / 100,
+          ...(traceCtxOnComplete ? { trace_id: traceCtxOnComplete.trace_id, span_id: traceCtxOnComplete.span_id } : {}),
         },
         `${req.method} ${req.url} ${res.statusCode} ${Math.round(durationMs)}ms`,
       );

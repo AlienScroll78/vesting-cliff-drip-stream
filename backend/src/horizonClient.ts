@@ -57,9 +57,9 @@ export async function horizonGet<T = unknown>(
       kind: SpanKind.CLIENT,
       attributes: {
         'horizon.base_url': baseUrl,
-        'horizon.path':     path,
+        'horizon.path':     sanitisePath(path),
         'http.method':      'GET',
-        'http.url':         `${baseUrl}${path}`,
+        'http.url':         `${baseUrl}${sanitisePath(path)}`,
       },
     },
     async (span) => {
@@ -83,7 +83,14 @@ export async function horizonGet<T = unknown>(
   );
 }
 
-// ── Internal HTTP helper ──────────────────────────────────────────────────────
+/**
+ * Sanitise a URL path by replacing any Stellar-looking address segments
+ * (G... or C... 56-char base32 strings) with a placeholder so no addresses
+ * are recorded in span attributes.
+ */
+function sanitisePath(path: string): string {
+  return path.replace(/\/[GC][A-Z2-7]{55}/g, '/:address');
+}
 
 function httpGet<T>(url: string): Promise<HorizonResponse<T>> {
   // Read the current request_id from AsyncLocalStorage so we can forward it.

@@ -10,6 +10,7 @@
 
 import { Pool } from "pg";
 import { networkConfig } from "../config/network.js";
+import { withIndexerSpan, withHorizonSpan, withDbQuerySpan } from "./tracing.js";
 
 const FINALITY_DEPTH = 3;
 const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_MS ?? "6000", 10);
@@ -81,27 +82,30 @@ export class EventIndexer {
   }
 
   async tick(): Promise<void> {
-    try {
-      const cursor = await this.getCursor();
-      const { events, lastCursor, latestLedger } = await this.fetchEvents(cursor);
+    await withIndexerSpan("tick", async () => {
+      try {
+        const cursor = await this.getCursor();
+        const { events, lastCursor, latestLedger } = await this.fetchEvents(cursor);
 
-      if (events.length > 0) {
-        // Only index events that are at least FINALITY_DEPTH behind the chain tip.
-        const finalised = events.filter(
-          (e: any) => latestLedger - (e.ledger ?? 0) >= FINALITY_DEPTH
-        );
-        if (finalised.length > 0) {
-          await this.upsertEvents(finalised);
-          console.log(`[indexer] upserted ${finalised.length} events`);
+        if (events.length > 0) {
+          // Only index events that are at least FINALITY_DEPTH behind the chain tip.
+          const finalised = events.filter(
+            (e: any) => latestLedger - (e.ledger ?? 0) >= FINALITY_DEPTH
+          );
+          if (finalised.length > 0) {
+            await this.upsertEvents(finalised);
+            console.log(`[indexer] upserted ${finalised.length} events`);
+          }
         }
-      }
 
-      if (lastCursor) await this.saveCursor(lastCursor);
-    } catch (err) {
-      console.error("[indexer] tick error:", err);
-    } finally {
-      if (this.running) this.scheduleNext();
-    }
+        if (lastCursor) await this.saveCursor(lastCursor);
+      } catch (err) {
+        console.error("[indexer] tick error:", err);
+        throw err;
+      } finally {
+        if (this.running) this.scheduleNext();
+      }
+    });
   }
 
   private async fetchEvents(cursor: string): Promise<{
@@ -109,49 +113,52 @@ export class EventIndexer {
     lastCursor: string | null;
     latestLedger: number;
   }> {
-    const url = new URL(`${this.horizonUrl}/contracts/${this.contractId}/events`);
-    url.searchParams.set("limit", String(PAGE_LIMIT));
-    url.searchParams.set("order", "asc");
-    if (cursor) url.searchParams.set("cursor", cursor);
+    return withHorizonSpan("getContractEvents", async () => {
+      const url = new URL(`${this.horizonUrl}/contracts/${this.contractId}/events`);
+      url.searchParams.set("limit", String(PAGE_LIMIT));
+      url.searchParams.set("order", "asc");
+      if (cursor) url.searchParams.set("cursor", cursor);
 
-    const [eventsResp, ledgerResp] = await Promise.all([
-      fetch(url.toString()),
-      fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
-    ]);
+      const [eventsResp, ledgerResp] = await Promise.all([
+        fetch(url.toString()),
+        fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
+      ]);
 
-    if (!eventsResp.ok) throw new Error(`Horizon responded ${eventsResp.status}`);
+      if (!eventsResp.ok) throw new Error(`Horizon responded ${eventsResp.status}`);
 
-    const data: any = await eventsResp.json();
-    const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
-    const latestLedger: number =
-      ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
+      const data: any = await eventsResp.json();
+      const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
+      const latestLedger: number =
+        ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
 
-    const records: any[] = data._embedded?.records ?? [];
-    const lastCursor =
-      records.length > 0
-        ? (records[records.length - 1].paging_token as string)
-        : null;
+      const records: any[] = data._embedded?.records ?? [];
+      const lastCursor =
+        records.length > 0
+          ? (records[records.length - 1].paging_token as string)
+          : null;
 
-    return { events: records, lastCursor, latestLedger };
+      return { events: records, lastCursor, latestLedger };
+    });
   }
 
   private async upsertEvents(events: any[]): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query("BEGIN");
-
-      for (const e of events) {
-        const topics: string[] = e.topic ?? [];
-        const eventType = decodeTopicString(topics[0]) ?? "unknown";
-        const parsed = parseEventValue(eventType, topics, e.value);
-
-        await client.query(
-          `INSERT INTO indexed_events
+    const INSERT_SQL = `INSERT INTO indexed_events
              (event_id, event_type, ledger, sponsor, recipient, token,
               rate, cliff_ledger, end_ledger, refund_amount, raw_value)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-           ON CONFLICT (event_id) DO NOTHING`,
-          [
+           ON CONFLICT (event_id) DO NOTHING`;
+
+    return withDbQuerySpan(INSERT_SQL, async () => {
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN");
+
+        for (const e of events) {
+          const topics: string[] = e.topic ?? [];
+          const eventType = decodeTopicString(topics[0]) ?? "unknown";
+          const parsed = parseEventValue(eventType, topics, e.value);
+
+          await client.query(INSERT_SQL, [
             e.id,
             eventType,
             e.ledger ?? 0,
@@ -163,17 +170,17 @@ export class EventIndexer {
             parsed.end_ledger ?? null,
             parsed.refund_amount ?? null,
             JSON.stringify(e),
-          ]
-        );
-      }
+          ]);
+        }
 
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    });
   }
 
   private async getCursor(): Promise<string> {

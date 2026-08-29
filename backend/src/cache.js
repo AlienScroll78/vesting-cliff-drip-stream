@@ -8,7 +8,38 @@
  *
  * When REDIS_URL is absent the module falls back to a plain in-process
  * Map so the server starts without Redis in development / CI.
+ *
+ * Every cacheGet/cacheSet call is wrapped in an OTel span via withCacheSpan
+ * so that cache hit/miss rates are visible in distributed traces.
  */
+
+// Lazily import withCacheSpan from tracing.ts so that cache.js can be loaded
+// independently of whether the SDK has started (e.g. in unit tests).
+let _withCacheSpan = null;
+function getWithCacheSpan() {
+  if (_withCacheSpan !== null) return _withCacheSpan;
+  try {
+    // tracing.ts is a TS/ESM module; in tests the helper may be mocked.
+    // We use a dynamic require fallback so JS files can consume it too.
+    const mod = require("./tracing");
+    _withCacheSpan = mod.withCacheSpan ?? null;
+  } catch {
+    _withCacheSpan = undefined;
+  }
+  return _withCacheSpan;
+}
+
+/**
+ * Small shim so we don't need to guard every call site.
+ * Falls back to a pass-through when withCacheSpan is unavailable.
+ */
+async function tracedCacheOp(operation, key, fn) {
+  const span = getWithCacheSpan();
+  if (typeof span === "function") {
+    return span(operation, key, fn);
+  }
+  return fn();
+}
 
 const CACHE_TTL_MS = parseInt(process.env.CACHE_TTL_MS ?? "5000", 10);
 
@@ -66,37 +97,43 @@ function viewKey(recipient, ledger) {
 
 /**
  * Retrieve a cached view response.
+ * Records a cache.get span with a cache.hit=true/false attribute.
  * @param {string} key
  * @returns {Promise<string | null>}
  */
 async function cacheGet(key) {
-  const redis = getRedis();
-  if (redis) {
-    try {
-      return await redis.get(key);
-    } catch {
-      // fall through to local
+  return tracedCacheOp("get", key, async () => {
+    const redis = getRedis();
+    if (redis) {
+      try {
+        return await redis.get(key);
+      } catch {
+        // fall through to local
+      }
     }
-  }
-  return localGet(key);
+    return localGet(key);
+  });
 }
 
 /**
  * Store a view response.
+ * Records a cache.set span.
  * @param {string} key
  * @param {string} value  JSON-serialised payload
  */
 async function cacheSet(key, value) {
-  const redis = getRedis();
-  if (redis) {
-    try {
-      await redis.set(key, value, "PX", CACHE_TTL_MS);
-      return;
-    } catch {
-      // fall through to local
+  return tracedCacheOp("set", key, async () => {
+    const redis = getRedis();
+    if (redis) {
+      try {
+        await redis.set(key, value, "PX", CACHE_TTL_MS);
+        return;
+      } catch {
+        // fall through to local
+      }
     }
-  }
-  localSet(key, value);
+    localSet(key, value);
+  });
 }
 
 /**
