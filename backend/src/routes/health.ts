@@ -9,6 +9,7 @@
 
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
+import { horizonCircuitBreaker } from "../horizonCircuitBreaker.js";
 
 const START_TIME = Date.now();
 const VERSION = process.env.npm_package_version ?? process.env.SERVICE_VERSION ?? "unknown";
@@ -19,7 +20,12 @@ function uptimeSeconds(): number {
 
 /** GET /health — liveness (always 200) */
 export function healthHandler(_req: Request, res: Response): void {
-  res.json({ status: "ok", version: VERSION, uptime: uptimeSeconds() });
+  res.json({
+    status: "ok",
+    version: VERSION,
+    uptime: uptimeSeconds(),
+    horizon_circuit: horizonCircuitBreaker.getState(),
+  });
 }
 
 /** GET /ready — readiness (checks DB + RPC) */
