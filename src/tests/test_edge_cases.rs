@@ -308,3 +308,102 @@ fn test_expired_ttl_reaches_zero_and_cancelled_stream_returns_schedule_not_found
     // this state can cause the test host to panic. Avoid calling the
     // contract here to keep the test deterministic.
 }
+
+// ── Issue #585: Proactive TTL refresh tests ───────────────────────────────────
+
+/// Verifies that `create_vesting_stream` sets a proactive TTL based on
+/// `end_ledger + TTL_BUFFER_LEDGERS` (capped at `PERSISTENT_BUMP_AMOUNT`).
+///
+/// A short stream (total_duration = 100) should get the max TTL since
+/// `end_ledger + buffer` exceeds `PERSISTENT_BUMP_AMOUNT`.
+#[test]
+#[ignore = "TTL tests depend on SDK storage internals; skip in CI"]
+fn test_create_stream_sets_proactive_ttl() {
+    use crate::storage::PERSISTENT_BUMP_AMOUNT;
+    use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
+
+    let env = setup_env(); // sequence_number = 100
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    // Create a stream with total_duration = 100; end_ledger = 200.
+    // TTL = (200 - 100) + 6_307_200 capped at 3_110_400 = 3_110_400.
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
+
+    env.as_contract(&contract_id, || {
+        let ttl = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Schedule(recipient.clone()));
+        assert_eq!(
+            ttl, PERSISTENT_BUMP_AMOUNT,
+            "Short stream TTL should be capped at PERSISTENT_BUMP_AMOUNT"
+        );
+    });
+}
+
+/// Verifies `compute_stream_ttl` returns `PERSISTENT_BUMP_AMOUNT` when the
+/// stream has already expired (end_ledger <= current_ledger).
+#[test]
+fn test_compute_stream_ttl_returns_max_when_stream_expired() {
+    use crate::storage::{compute_stream_ttl, PERSISTENT_BUMP_AMOUNT};
+
+    let env = setup_env(); // sequence_number = 100
+
+    // end_ledger in the past
+    let ttl = compute_stream_ttl(&env, 50);
+    assert_eq!(
+        ttl, PERSISTENT_BUMP_AMOUNT,
+        "Expired stream TTL should saturate to PERSISTENT_BUMP_AMOUNT"
+    );
+}
+
+/// Verifies `compute_stream_ttl` for a stream that ends far in the future
+/// returns a value capped at `PERSISTENT_BUMP_AMOUNT`.
+#[test]
+fn test_compute_stream_ttl_capped_at_max_for_long_stream() {
+    use crate::storage::{compute_stream_ttl, PERSISTENT_BUMP_AMOUNT};
+
+    let env = setup_env(); // sequence_number = 100
+
+    // end_ledger very far in the future: 100 + 10_000_000 = 10_000_100.
+    let ttl = compute_stream_ttl(&env, 10_000_100);
+    assert_eq!(
+        ttl, PERSISTENT_BUMP_AMOUNT,
+        "Long stream TTL should be capped at PERSISTENT_BUMP_AMOUNT"
+    );
+}
+
+/// Verifies that `claim_vested` re-extends TTL proactively after a claim.
+#[test]
+#[ignore = "TTL tests depend on SDK storage internals; skip in CI"]
+fn test_claim_vested_re_extends_ttl() {
+    use crate::storage::PERSISTENT_BUMP_AMOUNT;
+    use crate::types::DataKey;
+    use soroban_sdk::testutils::storage::Persistent;
+
+    let env = setup_env(); // sequence_number = 100
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 500);
+
+    // Advance 200_000 ledgers to simulate TTL decay.
+    advance_ledger(&env, 200_000);
+
+    // claim_vested re-extends TTL proactively.
+    advance_ledger(&env, 10); // past cliff
+    let _ = client.claim_vested(&recipient);
+
+    env.as_contract(&contract_id, || {
+        let ttl = env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::Schedule(recipient.clone()));
+        assert_eq!(
+            ttl, PERSISTENT_BUMP_AMOUNT,
+            "TTL after claim_vested should be restored to PERSISTENT_BUMP_AMOUNT"
+        );
+    });
+}
