@@ -27,6 +27,7 @@
 import type { Request, Response } from "express";
 import { createClient } from "redis";
 import { pool } from "../db.js";
+import { AddressParamsSchema } from "../validation.js";
 
 const CACHE_TTL_SEC = 60;
 
@@ -54,7 +55,17 @@ async function getRedis(): Promise<ReturnType<typeof createClient> | null> {
 // ---------------------------------------------------------------------------
 
 export async function sponsorAnalyticsHandler(req: Request, res: Response): Promise<void> {
-  const { address } = req.params;
+  const paramsResult = AddressParamsSchema.safeParse(req.params);
+  if (!paramsResult.success) {
+    const fields = paramsResult.error.errors.map((issue) => ({
+      field: issue.path.length > 0 ? issue.path.join(".") : "_root",
+      message: issue.message,
+    }));
+    res.status(400).json({ error: "Validation failed", fields });
+    return;
+  }
+
+  const { address } = paramsResult.data;
 
   if (!address) {
     res.status(400).json({ error: "address required" });

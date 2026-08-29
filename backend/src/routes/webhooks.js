@@ -22,6 +22,21 @@ const {
 } = require("../webhookStore");
 const { SUPPORTED_EVENTS } = require("../webhookWorker");
 
+// Lazy-load Zod schemas to stay CJS-compatible (validation.ts is ESM).
+// We use a dynamic require via the compiled output, or fall back to inline
+// validation when the module is not available.
+let _zodSchemas = null;
+async function getZodSchemas() {
+  if (_zodSchemas) return _zodSchemas;
+  try {
+    // Works when transpiled; ts-node/tsx handles the ESM→CJS boundary.
+    _zodSchemas = await import("../validation.js");
+  } catch {
+    _zodSchemas = null;
+  }
+  return _zodSchemas;
+}
+
 /**
  * Read the full request body as a string.
  */
@@ -56,10 +71,26 @@ function json(res, status, payload) {
  *   { "id": "...", "url": "...", "events": [...], "secret": "..." }
  */
 async function registerWebhookHandler(req, res) {
-  const sponsorId = req.headers["x-sponsor-id"];
-  if (!sponsorId) {
-    return json(res, 400, { error: "X-Sponsor-Id header is required" });
+  // ── Header validation ───────────────────────────────────────────────────────
+  const schemas = await getZodSchemas();
+  if (schemas) {
+    const headerResult = schemas.WebhookHeaderSchema.safeParse(req.headers);
+    if (!headerResult.success) {
+      const fields = headerResult.error.errors.map((issue) => ({
+        field: issue.path.length > 0 ? issue.path.join(".") : "_root",
+        message: issue.message,
+      }));
+      return json(res, 400, { error: "Validation failed", fields });
+    }
+  } else {
+    // Fallback when Zod schemas unavailable
+    const sponsorId = req.headers["x-sponsor-id"];
+    if (!sponsorId) {
+      return json(res, 400, { error: "X-Sponsor-Id header is required" });
+    }
   }
+
+  const sponsorId = req.headers["x-sponsor-id"];
 
   let body;
   try {
@@ -75,29 +106,42 @@ async function registerWebhookHandler(req, res) {
     return json(res, 400, { error: "Invalid JSON" });
   }
 
+  // ── Body validation via Zod ─────────────────────────────────────────────────
+  if (schemas) {
+    const bodyResult = schemas.WebhookBodySchema.safeParse(parsed);
+    if (!bodyResult.success) {
+      const fields = bodyResult.error.errors.map((issue) => ({
+        field: issue.path.length > 0 ? issue.path.join(".") : "_root",
+        message: issue.message,
+      }));
+      return json(res, 400, { error: "Validation failed", fields });
+    }
+    // Use parsed and coerced data from Zod
+    parsed = bodyResult.data;
+  } else {
+    // Fallback manual validation
+    const { url, events } = parsed;
+    if (typeof url !== "string" || !url) {
+      return json(res, 422, { error: "url is required and must be a string" });
+    }
+    const urlCheck = validateWebhookUrl(url);
+    if (!urlCheck.valid) {
+      return json(res, 422, { error: urlCheck.reason });
+    }
+    if (!Array.isArray(events) || events.length === 0) {
+      return json(res, 422, {
+        error: `events must be a non-empty array. Supported: ${SUPPORTED_EVENTS.join(", ")}`,
+      });
+    }
+    const unknownEvents = events.filter((e) => !SUPPORTED_EVENTS.includes(e));
+    if (unknownEvents.length > 0) {
+      return json(res, 422, {
+        error: `Unknown event types: ${unknownEvents.join(", ")}. Supported: ${SUPPORTED_EVENTS.join(", ")}`,
+      });
+    }
+  }
+
   const { url, events, secret: userSecret } = parsed;
-
-  // Validate URL
-  if (typeof url !== "string" || !url) {
-    return json(res, 422, { error: "url is required and must be a string" });
-  }
-  const urlCheck = validateWebhookUrl(url);
-  if (!urlCheck.valid) {
-    return json(res, 422, { error: urlCheck.reason });
-  }
-
-  // Validate events
-  if (!Array.isArray(events) || events.length === 0) {
-    return json(res, 422, {
-      error: `events must be a non-empty array. Supported: ${SUPPORTED_EVENTS.join(", ")}`,
-    });
-  }
-  const unknownEvents = events.filter((e) => !SUPPORTED_EVENTS.includes(e));
-  if (unknownEvents.length > 0) {
-    return json(res, 422, {
-      error: `Unknown event types: ${unknownEvents.join(", ")}. Supported: ${SUPPORTED_EVENTS.join(", ")}`,
-    });
-  }
 
   // Use provided secret or generate a 32-byte hex secret
   const secret = typeof userSecret === "string" && userSecret.length > 0
