@@ -50,20 +50,15 @@ fn test_set_fee_and_fee_collection_success() {
 #[test]
 fn test_set_fee_exceeds_max_cap_fails() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
     let admin = Address::generate(&env);
     let treasury = Address::generate(&env);
 
-    // register_contract already calls initialize; set_fee with different admin
-    // We need to get the actual admin that was used in register_contract.
-    // Instead, use register_contract_raw and initialize ourselves.
-    let env2 = setup_env();
-    let contract_id2 = env2.register(crate::contract::VestingDrips, ());
-    let client2 = crate::contract::VestingDripsClient::new(&env2, &contract_id2);
-    client2.initialize(&admin, &0u32, &treasury);
+    let contract_id = env.register(crate::contract::VestingDrips, ());
+    let client = crate::contract::VestingDripsClient::new(&env, &contract_id);
+    client.initialize(&admin, &0u32, &treasury);
 
     // 501 bps (5.01%) exceeds max cap of 500 bps (5%)
-    let err = client2.try_set_fee(&admin, &501, &treasury).unwrap_err();
+    let err = client.try_set_fee(&admin, &501, &treasury).unwrap_err();
     assert_eq!(err, Ok(VestingError::InvalidRate));
 }
 
