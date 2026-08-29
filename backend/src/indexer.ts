@@ -145,11 +145,20 @@ export class EventIndexer {
         const eventType = decodeTopicString(topics[0]) ?? "unknown";
         const parsed = parseEventValue(eventType, topics, e.value);
 
+        // Deduplication: extract transaction_hash and event_index from the
+        // Horizon event record for the secondary uniqueness check in addition
+        // to the primary event_id conflict guard.
+        const transactionHash: string | null = e.transaction_hash ?? null;
+        const eventIndex: number | null =
+          e.event_index != null ? Number(e.event_index) : null;
+        const pagingToken: string | null = e.paging_token ?? null;
+
         await client.query(
           `INSERT INTO indexed_events
              (event_id, event_type, ledger, sponsor, recipient, token,
-              rate, cliff_ledger, end_ledger, refund_amount, raw_value)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+              rate, cliff_ledger, end_ledger, refund_amount, raw_value,
+              paging_token, transaction_hash, event_index)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            ON CONFLICT (event_id) DO NOTHING`,
           [
             e.id,
@@ -163,6 +172,9 @@ export class EventIndexer {
             parsed.end_ledger ?? null,
             parsed.refund_amount ?? null,
             JSON.stringify(e),
+            pagingToken,
+            transactionHash,
+            eventIndex,
           ]
         );
       }
