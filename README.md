@@ -6,6 +6,8 @@ A production-ready Soroban smart contract that combines a **time-locked cliff** 
 
 > Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
 >
+> Setting up a local development environment? See the [Developer Onboarding Guide](docs/developer-onboarding.md) for step-by-step instructions.
+>
 > Have a question? Check the [FAQ](docs/faq.md) for common answers about stream lifecycle, claiming, token support, and fees.
 
 ---
