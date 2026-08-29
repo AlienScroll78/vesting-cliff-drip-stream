@@ -38,6 +38,14 @@ describe("GET /health", () => {
     expect(typeof body.uptime).toBe("number");
     expect(body.version).toBeDefined();
   });
+
+  it("includes horizon_circuit state in response", () => {
+    const { res, json } = makeRes();
+    healthHandler(req, res);
+    const body = json.mock.calls[0][0];
+    expect(body).toHaveProperty("horizon_circuit");
+    expect(["closed", "open", "half-open"]).toContain(body.horizon_circuit);
+  });
 });
 
 describe("GET /ready", () => {
