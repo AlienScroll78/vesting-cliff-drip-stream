@@ -1,0 +1,177 @@
+/* =========================================================
+   Skeleton loading screen styles — Issue #540 CSS Modules
+   Scoped via CSS Modules to prevent global class conflicts.
+   ========================================================= */
+
+/* Base skeleton block */
+.skeleton {
+  display: block;
+  background: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    #e2e8f0 0%,
+    #f1f5f9 40%,
+    #e8edf2 60%,
+    #e2e8f0 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm, 0.25rem);
+}
+
+/* Shape variants */
+.skeletonRect {
+  composes: skeleton;
+  border-radius: var(--radius-base, 0.5rem);
+}
+
+.skeletonCircle {
+  composes: skeleton;
+  border-radius: 9999px;
+}
+
+.skeletonText {
+  composes: skeleton;
+  border-radius: 4px;
+  height: 0.875em;
+  margin-bottom: 0.25em;
+}
+
+/* Shimmer keyframe */
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect reduced-motion: fall back to slow opacity pulse */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeletonRect,
+  .skeletonCircle,
+  .skeletonText {
+    animation: skeletonPulse 2s ease-in-out infinite;
+    background-image: none;
+  }
+
+  @keyframes skeletonPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+/* ─── Layout helpers ──────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* ─── Stream card skeleton ────────────────────────────────────────────────── */
+
+.streamCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+/* ─── Stream detail skeleton ──────────────────────────────────────────────── */
+
+.streamDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+  min-width: 320px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.statCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  background: #fbfcfd;
+}
+
+/* ─── Transaction history table skeleton ─────────────────────────────────── */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e3eaee;
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+/* ─── Form skeleton ───────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+  min-width: 300px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
