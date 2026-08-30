@@ -15,6 +15,7 @@ Each ADR documents the context that forced a decision, what was decided, and the
 | [0004](0004-error-code-numbering.md) | Error Code Numbering | Accepted |
 | [0005](0005-ttl-persistent-storage-strategy.md) | TTL and Persistent Storage Strategy | Accepted |
 | [0006](0006-checked-arithmetic-strategy.md) | Checked Arithmetic Strategy and Overflow Boundary Documentation | Accepted |
+| [0007](0007-pause-resume-design.md) | Pause/Resume Design | Proposed |
 
 ## Adding a New ADR
 
