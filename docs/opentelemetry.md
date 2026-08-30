@@ -154,3 +154,136 @@ The sampler is a `ParentBasedSampler` wrapping `TraceIdRatioBasedSampler`, so:
 - [OpenTelemetry Node.js SDK](https://opentelemetry.io/docs/instrumentation/js/getting-started/nodejs/)
 - [W3C TraceContext](https://www.w3.org/TR/trace-context/)
 - [Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)
+
+
+---
+
+## Structured Logging & Correlation IDs
+
+All backend log output is JSON-structured for CloudWatch Logs Insights ingestion and uses [pino](https://getpino.io) as the underlying logger.
+
+### Correlation ID fields
+
+Every log line emitted during an HTTP request includes three correlation fields:
+
+| Field            | Source                                               | Header                  |
+|------------------|------------------------------------------------------|-------------------------|
+| `request_id`     | UUID v4 generated per incoming HTTP request          | `X-Request-ID`          |
+| `trace_id`       | W3C `traceId` from the active OpenTelemetry span     | `traceparent`           |
+| `correlation_id` | Caller-supplied value, or `request_id` as fallback   | `X-Correlation-Id`      |
+
+The fields are injected automatically into every `logger.*` call via `AsyncLocalStorage` — route handlers and downstream services do not need to pass IDs explicitly.
+
+### Log format
+
+```json
+{
+  "level":          "info",
+  "time":           "2026-08-29T20:45:33.426Z",
+  "service":        "vesting-backend",
+  "version":        "1.0.0",
+  "request_id":     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "trace_id":       "4bf92f3577b34da6a3ce929d0e0e4736",
+  "correlation_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "event":          "request_received",
+  "method":         "GET",
+  "path":           "/api/v1/schedules/GABCDEF...",
+  "msg":            "GET /api/v1/schedules/GABCDEF..."
+}
+```
+
+Fields produced at request completion:
+
+```json
+{
+  "level":          "info",
+  "time":           "2026-08-29T20:45:33.501Z",
+  "service":        "vesting-backend",
+  "version":        "1.0.0",
+  "request_id":     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "trace_id":       "4bf92f3577b34da6a3ce929d0e0e4736",
+  "correlation_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "event":          "request_completed",
+  "method":         "GET",
+  "path":           "/api/v1/schedules/GABCDEF...",
+  "status":         200,
+  "durationMs":     75.4,
+  "msg":            "GET /api/v1/schedules/GABCDEF... 200 75ms"
+}
+```
+
+Database query log line (emitted at `debug` level):
+
+```json
+{
+  "level":            "debug",
+  "time":             "2026-08-29T20:45:33.480Z",
+  "service":          "vesting-backend",
+  "request_id":       "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "trace_id":         "4bf92f3577b34da6a3ce929d0e0e4736",
+  "correlation_id":   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "event":            "db_query",
+  "db.system":        "postgresql",
+  "db.query":         "SELECT * FROM vesting_streams WHERE recipient = $1",
+  "db.row_count":     1,
+  "db.duration_ms":   3.2,
+  "msg":              "db query"
+}
+```
+
+### How propagation works
+
+```
+HTTP request arrives
+       │
+       ▼
+requestLoggerMiddleware
+  ├── Reads / generates request_id  (UUID v4)
+  ├── Reads correlation_id          (X-Correlation-Id header, or request_id)
+  ├── Reads trace_id                (active OTel span's traceId, or null)
+  ├── Sets X-Request-ID response header
+  ├── Sets X-Correlation-Id response header
+  └── Calls runWithIds({ requestId, traceId, correlationId }, next)
+              │
+              ▼  AsyncLocalStorage context is active for all code below
+       Route handler
+              │
+              ├── logger.info(...)      ← request_id / trace_id injected automatically
+              │
+              ├── query('SELECT ...')   ← same IDs injected automatically
+              │
+              └── horizonGet(...)       ← X-Request-ID forwarded as outbound header
+```
+
+### Configuration
+
+| Env var      | Default  | Description                                      |
+|--------------|----------|--------------------------------------------------|
+| `LOG_LEVEL`  | `info`   | Minimum log level: `debug`, `info`, `warn`, `error` |
+| `LOG_PRETTY` | `false`  | Set to `true` for human-readable output in dev   |
+
+### CloudWatch Logs Insights queries
+
+Fetch all logs for a single request:
+
+```
+fields @timestamp, level, event, msg, status, durationMs
+| filter request_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+| sort @timestamp asc
+```
+
+Correlate with a distributed trace:
+
+```
+fields @timestamp, level, event, msg
+| filter trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+| sort @timestamp asc
+```
+
+Find slow requests (> 500 ms):
+
+```
+fields @timestamp, request_id, method, path, durationMs
+| filter event = "request_completed" and durationMs > 500
+| sort durationMs desc
+```
