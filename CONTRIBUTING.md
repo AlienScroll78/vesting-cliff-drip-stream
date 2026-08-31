@@ -385,7 +385,7 @@ See [`tests/load/README.md`](tests/load/README.md) for running k6 and Locust loa
 
 **TypeScript / CSS**
 - Match the style of the surrounding file.
-- No new dependencies without discussion in an issue first.
+- No new dependencies without discussion in an issue first. See the [SBOM & License Compliance](docs/sbom.md#contributor-guide--adding-dependencies) guide for how to add dependencies correctly.
 
 **Commit messages** — [Conventional Commits](https://www.conventionalcommits.org/):
 
