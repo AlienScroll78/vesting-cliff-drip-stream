@@ -744,9 +744,16 @@ impl VestingDrips {
     /// Compliance clawback: the original sponsor recovers **all** remaining tokens
     /// from the contract vault, bypassing cliff state.
     ///
+    /// # Required checks (Issue #584)
+    /// 1. The `sponsor` must be the same address that created the stream.
+    /// 2. The `reason` string must be ≤ 256 bytes (UTF-8).
+    /// 3. The token must support the SAC clawback flag (`AUTH_CLAWBACK_ENABLED_FLAG`).
+    ///
     /// # Errors
-    /// * `ScheduleNotFound`     – No stream exists for `recipient`.
-    /// * `ClawbackNotSupported` – Token does not support SAC clawback.
+    /// * `ScheduleNotFound`            – No stream exists for `recipient`.
+    /// * `Unauthorized`                – `sponsor` is not the stream's original funder.
+    /// * `ReasonTooLong`               – `reason` exceeds 256 bytes.
+    /// * `TokenDoesNotSupportClawback` – Token does not have the SAC clawback flag enabled.
     pub fn clawback_stream(
         env: Env,
         sponsor: Address,
@@ -758,16 +765,30 @@ impl VestingDrips {
         let schedule = storage::get_schedule(&env, &recipient)
             .ok_or(VestingError::ScheduleNotFound)?;
 
-        let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
-            * schedule.rate_per_ledger;
+        // Verify the caller is the original sponsor of this stream (Issue #584).
+        if schedule.sponsor != sponsor {
+            return Err(VestingError::Unauthorized);
+        }
 
+        // Enforce reason string length ≤ 256 bytes (Issue #584).
+        const MAX_REASON_BYTES: u32 = 256;
+        if reason.len() > MAX_REASON_BYTES {
+            return Err(VestingError::ReasonTooLong);
+        }
+
+        // Verify the token supports the SAC clawback flag before transferring
+        // tokens (Issue #584). A zero-amount probe call to try_clawback is used
+        // to detect flag support without mutating state.
         let sac_admin_client = token::StellarAssetClient::new(&env, &schedule.token);
         if sac_admin_client
             .try_clawback(&env.current_contract_address(), &0_i128)
             .is_err()
         {
-            return Err(VestingError::ClawbackNotSupported);
+            return Err(VestingError::TokenDoesNotSupportClawback);
         }
+
+        let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128
+            * schedule.rate_per_ledger;
 
         if remaining > 0 {
             let token_client = token::Client::new(&env, &schedule.token);
@@ -1055,6 +1076,36 @@ impl VestingDrips {
             StreamStatus::Expired
         };
         Some(status)
+    }
+
+    /// Returns the full lifecycle [`StreamStatus`] for `recipient` (issue #583).
+    ///
+    /// Unlike `get_status`, this function:
+    /// - Returns `StreamStatus::NotFound` instead of `None` when no schedule exists.
+    /// - Handles the `Paused` state when the sponsor has paused the stream.
+    /// - Returns all 6 possible states: `PreCliff`, `Active`, `Expired`, `Cancelled`,
+    ///   `Paused`, and `NotFound`.
+    ///
+    /// This is the recommended view for client-side lifecycle state management.
+    pub fn stream_status(env: Env, recipient: Address) -> StreamStatus {
+        let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
+            return StreamStatus::NotFound;
+        };
+
+        // Check paused state first — a paused stream may be in PreCliff or Active
+        // territory but should always report Paused until resumed.
+        if schedule.paused_at_ledger.is_some() {
+            return StreamStatus::Paused;
+        }
+
+        let current = env.ledger().sequence();
+        if current < schedule.cliff_ledger {
+            StreamStatus::PreCliff
+        } else if current < schedule.end_ledger {
+            StreamStatus::Active
+        } else {
+            StreamStatus::Expired
+        }
     }
 
     /// Returns consolidated statistics for `recipient`'s fixed-rate vesting stream.

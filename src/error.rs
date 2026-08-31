@@ -93,4 +93,17 @@ pub enum VestingError {
     /// value before retrying. Do not store sensitive data in metadata as it
     /// is persisted on-chain and publicly visible.
     MetadataTooLong = 20,
+
+    /// **Code 21** — The token does not have the SAC clawback flag enabled.
+    ///
+    /// `clawback_stream` is only available on tokens where the Stellar Asset
+    /// Contract issuer has set `AUTH_CLAWBACK_ENABLED_FLAG`. Use `cancel_stream`
+    /// to recover tokens from non-clawback-enabled token streams.
+    TokenDoesNotSupportClawback = 21,
+
+    /// **Code 22** — The clawback `reason` string exceeds 256 bytes.
+    ///
+    /// Reason strings are stored on-chain in the emitted event. Trim the reason
+    /// to at most 256 UTF-8 bytes before retrying.
+    ReasonTooLong = 22,
 }

@@ -132,3 +132,147 @@ fn test_clawback_at_end_returns_zero_remaining() {
     let err = client.clawback_stream(&sponsor, &recipient, &reason).unwrap_err();
     assert_eq!(err, VestingError::ScheduleNotFound.into());
 }
+
+// ── Issue #584: Additional hardening tests ─────────────────────────────────────
+
+#[test]
+fn test_clawback_wrong_sponsor_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let wrong_sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // A different address attempting to clawback should fail with Unauthorized.
+    let reason = String::from_str(&env, "impersonation attempt");
+    let err = client
+        .clawback_stream(&wrong_sponsor, &recipient, &reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::Unauthorized.into());
+}
+
+#[test]
+fn test_clawback_reason_too_long_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // Build a reason string of 257 bytes (1 over the 256-byte limit).
+    let long_reason = String::from_str(&env, &"x".repeat(257));
+    let err = client
+        .clawback_stream(&sponsor, &recipient, &long_reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::ReasonTooLong.into());
+}
+
+#[test]
+fn test_clawback_reason_exactly_256_bytes_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // Exactly 256 bytes should succeed.
+    let max_reason = String::from_str(&env, &"a".repeat(256));
+    client
+        .clawback_stream(&sponsor, &recipient, &max_reason)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_none());
+}
+
+// ── Issue #584: Additional hardening tests ─────────────────────────────────────
+
+#[test]
+fn test_clawback_wrong_sponsor_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let wrong_sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // A different address attempting to clawback should fail with Unauthorized.
+    let reason = String::from_str(&env, "impersonation attempt");
+    let err = client
+        .clawback_stream(&wrong_sponsor, &recipient, &reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::Unauthorized.into());
+}
+
+#[test]
+fn test_clawback_reason_too_long_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // Build a reason string of 257 bytes (1 over the 256-byte limit).
+    let long_reason = String::from_str(&env, &"x".repeat(257));
+    let err = client
+        .clawback_stream(&sponsor, &recipient, &long_reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::ReasonTooLong.into());
+}
+
+#[test]
+fn test_clawback_reason_exactly_256_bytes_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
+
+    // Exactly 256 bytes should succeed.
+    let max_reason = String::from_str(&env, &"a".repeat(256));
+    client
+        .clawback_stream(&sponsor, &recipient, &max_reason)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_none());
+}
