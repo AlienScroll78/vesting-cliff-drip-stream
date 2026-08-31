@@ -240,6 +240,12 @@ pub enum DataKey {
 
     /// Storage key for configured protocol treasury address.
     Treasury,
+
+    /// Instance-level configuration: maximum cliff ratio in basis points (default 5000 = 50%).
+    ConfigMaxCliffRatio,
+
+    /// Instance-level configuration: minimum rate per ledger (default 1).
+    ConfigMinRate,
 }
 
 /// Human-readable status of a vesting stream.
