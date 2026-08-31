@@ -2,6 +2,12 @@
 
 Operational procedures for the vesting-cliff-drip-stream production infrastructure.
 
+## Contract
+
+| Runbook | When to use |
+|---------|-------------|
+| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary |
+
 ## Infrastructure
 
 | Runbook | When to use |
