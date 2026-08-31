@@ -421,3 +421,99 @@ The allowlist starts empty on any deployment. An empty list means permissive mod
 - [Choosing the Right Storage Type](https://developers.stellar.org/docs/build/guides/storage/choosing-the-right-storage)
 - [Stellar Lab — Network Limits (live fee parameters)](https://lab.stellar.org/network-limits)
 - Contract source: `src/storage.rs`, `src/types.rs`
+
+---
+
+## Multi-Token Stream Storage (issue #587)
+
+Multi-token streams follow **Option A** from `docs/design/multi-token.md`: one
+independent persistent entry per `(recipient, token)` pair. Entry sizes remain
+bounded, and TTL management is fully per-entry.
+
+### DataKey variant
+
+```rust
+pub enum DataKey {
+    Schedule(Address),                   // single-token (existing)
+    MultiSchedule(Address, Address),     // (recipient, token) — multi-token
+}
+```
+
+| Variant | Key type | Value type | Cardinality |
+|---|---|---|---|
+| `MultiSchedule(recipient, token)` | `(Address, Address)` | `MultiTokenSchedule` | one entry per `(recipient, token)` pair |
+
+### MultiTokenSchedule layout
+
+```rust
+pub struct MultiTokenSchedule {
+    pub allocations: Vec<TokenAllocation>, // list of (token, rate_per_ledger) pairs
+    pub start_ledger: u32,
+    pub cliff_ledger: u32,
+    pub end_ledger: u32,
+    pub last_claimed_ledger: u32,
+}
+
+pub struct TokenAllocation {
+    pub token: Address,       // 32-byte contract ID
+    pub rate_per_ledger: i128, // 16 bytes
+}
+```
+
+The `allocations` vec is duplicated across every `(recipient, token)` entry
+for the same stream. For N tokens per stream:
+
+| N | Approximate size per entry |
+|---|---|
+| 1 | ~250 bytes |
+| 2 | ~320 bytes |
+| 5 | ~530 bytes |
+| 10 | ~780 bytes |
+
+All sizes remain well under the 64 KB Soroban per-entry limit.
+
+### Key composition rationale
+
+Using a composite key `(recipient, token)` rather than `recipient` alone means:
+
+- Each entry has a predictable, bounded size regardless of how many tokens are
+  in the stream.
+- TTL is managed independently per token — one token's entry expiring does not
+  affect others.
+- Partial cancellation or per-token operations are possible in future without
+  a storage migration.
+
+### API entry points and storage operations
+
+| Function | Storage ops |
+|---|---|
+| `create_multi_token_stream` | `set_multi_schedule` × N (one per token) |
+| `claim_multi_token_vested` | `get_multi_schedule` + `set_multi_schedule` × N (or `remove` if done) |
+| `cancel_multi_token_stream` | `get_multi_schedule` + `remove_multi_schedule` × N |
+| `get_multi_schedule` | `get_multi_schedule` (read only) |
+
+### TTL bump policy
+
+The same constants apply as for single-token entries:
+
+```rust
+const PERSISTENT_LEDGER_THRESHOLD: u32 = 259_200; // ~30 days
+const PERSISTENT_BUMP_AMOUNT: u32 = 518_400;       // ~60 days
+```
+
+Every `get_multi_schedule` and `set_multi_schedule` call extends the TTL of the
+accessed `(recipient, token)` entry. The bump is conditional: no rent fee is
+charged if TTL already exceeds the 30-day threshold.
+
+### Cost estimate
+
+For a 2-token stream (~320 bytes per entry, 2 entries total):
+
+| Transaction | Approximate cost |
+|---|---|
+| `create_multi_token_stream` (N=2) | ~0.10–0.16 XLM (2 × create cost) |
+| `claim_multi_token_vested` (N=2) | ~0.02–0.06 XLM |
+| `cancel_multi_token_stream` (N=2) | ~0.02–0.06 XLM |
+
+Costs scale linearly with N. Always simulate via `stellar transaction simulate`
+for exact fees before submission.

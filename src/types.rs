@@ -218,6 +218,47 @@ pub struct MilestoneSchedule {
     pub total_claimed: i128,
 }
 
+/// A single token allocation within a multi-token vesting stream.
+///
+/// Each entry pairs a SAC token address with a per-ledger emission rate.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenAllocation {
+    /// SAC-compatible token contract address.
+    pub token: Address,
+    /// Tokens of this denomination released per ledger (must be > 0).
+    pub rate_per_ledger: i128,
+}
+
+/// Vesting schedule for a stream that vests multiple SAC tokens simultaneously.
+///
+/// Persisted in contract storage under a composite key `(recipient, token)`
+/// — one entry per `(recipient, token)` pair — following Option A from the
+/// multi-token design doc. This keeps entry sizes bounded and TTL management
+/// per-entry.
+///
+/// # Storage key
+/// `DataKey::MultiSchedule(recipient, token)`
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MultiTokenSchedule {
+    /// The allocations (token + rate) vested by this stream.
+    pub allocations: Vec<TokenAllocation>,
+
+    /// Ledger sequence at which the stream was created.
+    pub start_ledger: u32,
+
+    /// Ledger sequence the recipient must wait for before any claim is valid.
+    pub cliff_ledger: u32,
+
+    /// Ledger sequence at which the stream ends (no more accrual after this).
+    pub end_ledger: u32,
+
+    /// Tracks the last ledger up to which tokens have been claimed.
+    /// Initialised to `start_ledger` so accrual is calculated correctly on first claim.
+    pub last_claimed_ledger: u32,
+}
+
 /// Storage key variants used for keying contract data.
 #[contracttype]
 #[derive(Clone)]

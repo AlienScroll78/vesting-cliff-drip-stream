@@ -206,3 +206,70 @@ pub fn emit_allowlist_updated(env: &Env, admin: &Address, token: &Address, added
         (token.clone(), added),
     );
 }
+
+// ── Multi-token events ────────────────────────────────────────────────────────
+
+/// Emitted when a new multi-token vesting stream is created.
+///
+/// Topics: `["vmt_create", recipient]`
+/// Data:   `(sponsor, allocations, start_ledger, cliff_ledger, end_ledger)`
+pub fn emit_multi_stream_created(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    allocations: &Vec<TokenAllocation>,
+    start_ledger: u32,
+    cliff_ledger: u32,
+    end_ledger: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vmt_crt"), recipient.clone()),
+        (
+            sponsor.clone(),
+            allocations.clone(),
+            start_ledger,
+            cliff_ledger,
+            end_ledger,
+        ),
+    );
+}
+
+/// Emitted when a recipient claims all vested tokens from a multi-token stream.
+///
+/// Topics: `["vmt_claim", recipient]`
+/// Data:   `(ledger_claimed_through)`
+///
+/// The per-token amounts are implicit from the stored allocations and can be
+/// reconstructed off-chain from the ledger range.
+pub fn emit_multi_tokens_claimed(
+    env: &Env,
+    recipient: &Address,
+    ledger_claimed_through: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vmt_clm"), recipient.clone()),
+        ledger_claimed_through,
+    );
+}
+
+/// Emitted when a multi-token vesting stream is fully exhausted.
+///
+/// Topics: `["vmt_done", recipient]`
+/// Data:   `()` — no additional payload; completion is self-explanatory.
+pub fn emit_multi_stream_completed(env: &Env, recipient: &Address) {
+    env.events().publish(
+        (symbol_short!("vmt_don"), recipient.clone()),
+        (),
+    );
+}
+
+/// Emitted when a sponsor cancels a multi-token vesting stream.
+///
+/// Topics: `["vmt_cancel", recipient]`
+/// Data:   `(sponsor)`
+pub fn emit_multi_stream_cancelled(env: &Env, recipient: &Address, sponsor: &Address) {
+    env.events().publish(
+        (symbol_short!("vmt_cnl"), recipient.clone()),
+        sponsor.clone(),
+    );
+}
