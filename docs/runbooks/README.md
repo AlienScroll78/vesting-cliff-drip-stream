@@ -22,6 +22,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [CloudWatch Logs](./cloudwatch-logs.md) | Query application logs, set up alarms, export log data |
+| [Cost Monitoring](./cost-monitoring.md) | AWS cost anomaly alerts, budget notifications, and Slack relay |
 
 ---
 

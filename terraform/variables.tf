@@ -38,3 +38,9 @@ variable "cost_alert_emails" {
   description = "Email recipients for budget and Cost Explorer anomaly alerts."
   type        = set(string)
 }
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for cost alert relay to #ops channel."
+  type        = string
+  sensitive   = true
+}
