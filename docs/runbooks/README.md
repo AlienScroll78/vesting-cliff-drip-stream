@@ -15,6 +15,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 |---------|-------------|
 | [RDS Restore](./rds-restore.md) | Restore the production database from a snapshot |
 | [Disaster Recovery](./disaster-recovery.md) | Full system recovery — database, indexer re-sync, contract re-deploy |
+| [Backfill Stream Events](./backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or a decoder bug fix |
 
 ## Observability
 

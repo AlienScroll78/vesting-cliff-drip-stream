@@ -1,75 +1,115 @@
-"use strict";
-
 /**
  * requestLogger.js — HTTP request/response logging middleware.
  *
  * Wraps each request in:
- *   1. A new correlation ID (X-Correlation-Id header or generated UUID).
- *   2. An AsyncLocalStorage context so downstream log calls include the ID.
- *   3. Structured log lines on request arrival and response completion.
+ *   1. A unique request_id (UUID v4) — echoed as X-Request-ID response header.
+ *   2. A correlation_id taken from X-Correlation-Id (or same UUID as fallback).
+ *   3. A trace_id extracted from the active OpenTelemetry span (if any).
+ *   4. An AsyncLocalStorage context so all downstream log calls include the IDs.
+ *   5. Structured JSON log lines on request arrival and response completion.
  *
- * Sensitive headers (Authorization, X-Api-Key) are not logged.
+ * Log fields emitted on every line during a request:
+ *   request_id     — stable UUID for this HTTP request
+ *   trace_id       — W3C traceId from the active OTel span (when tracing is active)
+ *   correlation_id — caller-supplied logical correlation (X-Correlation-Id header)
  *
- * Usage:
- *   const { requestLoggerMiddleware } = require('./requestLogger');
- *   // In your HTTP createServer handler:
+ * Sensitive headers (Authorization, X-Api-Key, cookie) are not logged.
+ *
+ * Usage (Express):
+ *   import { requestLoggerMiddleware } from './requestLogger.js';
+ *   app.use(requestLoggerMiddleware);
+ *
+ * Usage (plain http.Server):
  *   requestLoggerMiddleware(req, res, () => actualHandler(req, res));
  */
 
-const { randomUUID } = require("crypto");
-const { logger, runWithCorrelationId } = require("./logger");
+import { randomUUID } from 'crypto';
+import { logger, runWithIds } from './logger.js';
+
+// Optional: read trace_id from the active OTel span without hard-coupling to
+// @opentelemetry/api.  If the package is absent (e.g. unit tests without tracing
+// set up) we silently fall back to null.
+let otelTrace = null;
+try {
+  otelTrace = (await import('@opentelemetry/api')).trace;
+} catch {
+  // tracing not available — proceed without trace_id
+}
+
+/** Extract the W3C traceId from the currently active OTel span, if any. */
+function getActiveTraceId() {
+  if (!otelTrace) return null;
+  try {
+    const spanCtx = otelTrace.getActiveSpan()?.spanContext();
+    return spanCtx?.isValid ? spanCtx.traceId : null;
+  } catch {
+    return null;
+  }
+}
 
 const SENSITIVE_HEADERS = new Set([
-  "authorization",
-  "x-api-key",
-  "cookie",
-  "x-sponsor-id",
+  'authorization',
+  'x-api-key',
+  'cookie',
+  'x-sponsor-id',
 ]);
 
 function sanitizeHeaders(headers) {
   const out = {};
   for (const [k, v] of Object.entries(headers)) {
-    out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? "[REDACTED]" : v;
+    out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '[REDACTED]' : v;
   }
   return out;
 }
 
 /**
- * Middleware that logs each request/response pair with timing.
+ * Express-compatible middleware that assigns correlation identifiers to every
+ * request and wraps the async chain in an AsyncLocalStorage context so that
+ * all log calls made during request handling automatically include the IDs.
  *
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse}  res
- * @param {Function} next - call to continue to the actual handler
+ * @param {Function} next
  */
-function requestLoggerMiddleware(req, res, next) {
-  const correlationId = req.headers["x-correlation-id"] ?? randomUUID();
+export function requestLoggerMiddleware(req, res, next) {
+  // Generate a fresh UUID for this specific HTTP request.
+  const requestId = req.headers['x-request-id'] ?? randomUUID();
 
-  // Echo the correlation ID back to the client
-  res.setHeader("X-Correlation-Id", correlationId);
+  // Honour a caller-supplied logical correlation ID; fall back to requestId.
+  const correlationId = req.headers['x-correlation-id'] ?? requestId;
 
-  runWithCorrelationId(correlationId, () => {
+  // Best-effort extraction of the W3C traceId from the OTel span that the
+  // HTTP instrumentation has already started for this request.
+  const traceId = getActiveTraceId();
+
+  // Echo both identifiers in the response so the caller can correlate.
+  res.setHeader('X-Request-ID',    requestId);
+  res.setHeader('X-Correlation-Id', correlationId);
+
+  // Propagate all three IDs through the full async chain for this request.
+  runWithIds({ requestId, traceId, correlationId }, () => {
     const startNs = process.hrtime.bigint();
 
     logger.info(
       {
-        event: "request_received",
-        method: req.method,
-        path: req.url,
+        event:   'request_received',
+        method:  req.method,
+        path:    req.url,
         headers: sanitizeHeaders(req.headers),
       },
       `${req.method} ${req.url}`,
     );
 
-    // Intercept res.end to capture status + timing
+    // Intercept res.end to capture status + timing.
     const originalEnd = res.end.bind(res);
     res.end = function (...args) {
       const durationMs = Number(process.hrtime.bigint() - startNs) / 1e6;
       logger.info(
         {
-          event: "request_completed",
-          method: req.method,
-          path: req.url,
-          status: res.statusCode,
+          event:      'request_completed',
+          method:     req.method,
+          path:       req.url,
+          status:     res.statusCode,
           durationMs: Math.round(durationMs * 100) / 100,
         },
         `${req.method} ${req.url} ${res.statusCode} ${Math.round(durationMs)}ms`,
@@ -80,5 +120,3 @@ function requestLoggerMiddleware(req, res, next) {
     next();
   });
 }
-
-module.exports = { requestLoggerMiddleware };
