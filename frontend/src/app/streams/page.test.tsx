@@ -89,8 +89,8 @@ describe("SponsorStreamsPage", () => {
     vi.spyOn(useStreamsModule, "useStreams").mockReturnValue(makeHook());
     render(<SponsorStreamsPage />);
     await userEvent.click(screen.getByTestId("cancel-btn-1"));
-    // #378 — dismiss button is now "Keep Stream" (spec-compliant affirmation label)
-    await userEvent.click(screen.getByText(/keep stream/i));
+    // #550 — dismiss button is "Go back" (two-step confirmation gate)
+    await userEvent.click(screen.getByText(/go back/i));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
