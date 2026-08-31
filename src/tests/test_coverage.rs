@@ -26,7 +26,7 @@ fn test_create_deposit_overflow_from_rate_mul() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &i128::MAX, &10, &20)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &i128::MAX, &10, &20, &None)
         .unwrap_err();
     assert_eq!(err, VestingError::DepositOverflow.into());
 }
@@ -45,7 +45,7 @@ fn test_create_deposit_overflow_from_cliff_add() {
 
     // cliff_duration = u32::MAX will overflow u32 when added to start_ledger 100
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &u32::MAX, &u32::MAX)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &u32::MAX, &u32::MAX, &None)
         .unwrap_err();
     // InvalidDuration fires first (total <= cliff when both are MAX), or DepositOverflow
     // Either is an expected error path; just assert it's one of the two.
@@ -69,7 +69,7 @@ fn test_create_deposit_overflow_from_total_add() {
     // cliff_duration=1, total_duration=u32::MAX → total > cliff so InvalidDuration
     // won't fire; cliff_ledger = 101 (ok), end_ledger = 100 + u32::MAX overflows
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &1, &u32::MAX)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &1, &u32::MAX, &None)
         .unwrap_err();
     assert_eq!(err, VestingError::DepositOverflow.into());
 }
@@ -89,7 +89,7 @@ fn test_cancel_at_end_ledger_zero_sponsor_refund() {
     mint_to(&env, &token_id, &sponsor, 200);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &20)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &20, &None)
         .unwrap();
 
     // Advance exactly to end_ledger (20 ledgers).

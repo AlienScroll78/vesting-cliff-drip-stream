@@ -46,6 +46,7 @@ fn test_stream_created_event_has_all_fields() {
         &rate,
         &cliff_duration,
         &total_duration,
+        &None,
     );
 
     // Retrieve all events (requires testutils::Events trait in scope).

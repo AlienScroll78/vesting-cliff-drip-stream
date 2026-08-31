@@ -119,7 +119,7 @@ pub fn create_vesting_stream<'a>(
     let deposit = rate * total_duration as i128;
     let (token_id, token_client) = setup_token(env, sponsor, deposit);
     client
-        .create_vesting_stream(sponsor, recipient, &token_id, &rate, &cliff_duration, &total_duration);
+        .create_vesting_stream(sponsor, recipient, &token_id, &rate, &cliff_duration, &total_duration, &None);
     (token_id, token_client)
 }
 

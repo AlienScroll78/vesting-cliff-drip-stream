@@ -50,7 +50,7 @@ fn create_stream<'a>(
     let (token_id, _) = create_token(env, sponsor);
     mint_to(env, &token_id, sponsor, 2_000);
     client
-        .create_vesting_stream(sponsor, recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(sponsor, recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 }
 
@@ -71,7 +71,7 @@ fn bench_create_vesting_stream() {
 
     env.budget().reset_default();
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     let cpu = env.budget().cpu_instruction_cost();

@@ -49,7 +49,7 @@ fn setup_drain_stream(
     mint_to(env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     (contract_id, client, sponsor, recipient, token_id)

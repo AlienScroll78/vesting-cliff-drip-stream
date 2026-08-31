@@ -161,7 +161,7 @@ fn test_regression_negative_rate_rejected() {
     let (token_id, _) = setup_token(&env, &sponsor, 1_000);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &50, &100)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &50, &100, &None)
         .unwrap_err();
     assert_eq!(err, Ok(VestingError::InvalidRate));
 }

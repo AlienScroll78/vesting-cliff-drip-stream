@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional stream label (`metadata: Option<String>`) on `VestingSchedule`. Sponsors can attach a human-readable label (e.g. `"Q1 Grant"`) at creation time for off-chain indexing and display. Empty strings are normalised to `None`; values longer than 256 UTF-8 bytes are rejected with `MetadataTooLong` (error code 20). The label is immutable after stream creation. (#15)
 - `StreamCreated` events now carry the full schedule payload (`token`, `rate`, `start_ledger`, `cliff_ledger`, `end_ledger`, `total_deposit`) so off-chain indexers can reconstruct stream state from events alone.
 - Admin-controlled token allowlisting for `create_vesting_stream` with `add_allowed_token`, `remove_allowed_token`, `get_allowed_tokens`, and `TokenNotAllowed` error handling.
 - Schedule versioning with a monotonically increasing `version` counter stored in `VestingSchedule` and surfaced via `get_schedule`.

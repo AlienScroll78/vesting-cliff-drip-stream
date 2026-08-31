@@ -106,7 +106,7 @@ fn test_create_stream_fails_if_not_initialized() {
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, VestingError::NotInitialized);
@@ -126,7 +126,7 @@ fn test_create_stream_succeeds_after_initialize() {
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
         .unwrap();
 }
 

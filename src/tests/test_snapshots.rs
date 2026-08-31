@@ -64,7 +64,7 @@ fn make_stream() -> TestStream<'static> {
     let (token, _) = create_token(env, &sponsor);
     mint_to(env, &token, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     TestStream { env: unsafe { std::ptr::read(env) }, client, sponsor, recipient, token }
 }
@@ -135,7 +135,7 @@ fn snapshot_event_stream_created() {
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
 
     assert_event_snapshot(&env, "event_stream_created.snap", "vc_create");
@@ -152,7 +152,7 @@ fn snapshot_event_tokens_claimed() {
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     advance_ledger(&env, 50); // reach cliff
     client.claim_vested(&recipient, &None).unwrap();
@@ -171,7 +171,7 @@ fn snapshot_event_stream_completed() {
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     advance_ledger(&env, 500); // past end_ledger
     client.claim_vested(&recipient, &None).unwrap(); // full claim triggers vc_done
@@ -190,7 +190,7 @@ fn snapshot_event_stream_cancelled() {
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     client.cancel_stream(&sponsor, &recipient).unwrap();
 
