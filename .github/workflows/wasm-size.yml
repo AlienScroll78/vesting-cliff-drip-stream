@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  WASM_SIZE_LIMIT_KB: "100"
+  WASM_SIZE_LIMIT_KB: "95"
 
 jobs:
   wasm-size:
