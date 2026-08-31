@@ -1293,7 +1293,7 @@ All errors are returned as `u32` in the XDR `ScError::Contract` envelope. Code 0
 | 1 | `ScheduleNotFound` | `claim_vested`, `cancel_stream`, `clawback_stream`, `migrate_schedule`, `emergency_drain`, `drain_expired_stream` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | `claim_vested` | `current_ledger` < `cliff_ledger` |
 | 3 | `InvalidDuration` | `create_vesting_stream` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `create_vesting_stream`, `set_min_deposit` | `rate` ≤ 0 or `min_deposit` ≤ 0 |
+| 4 | `InvalidRate` | `create_vesting_stream`, `initialize` | `rate` ≤ 0, or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | `create_vesting_stream`, `drain_expired_stream`, `emergency_drain` | `rate × total_duration` overflows `i128`, or ledger addition overflows `u32` |
 | 6 | `ScheduleAlreadyExists` | `create_vesting_stream` | Stream already exists for recipient |
 | 7 | `NothingToClaim` | `claim_vested` | Claimable amount is 0 at current ledger |
@@ -1301,10 +1301,21 @@ All errors are returned as `u32` in the XDR `ScError::Contract` envelope. Code 0
 | 9 | `TransferFailed` | `create_vesting_stream`, `claim_vested`, `cancel_stream`, `emergency_drain` | Token transfer call failed |
 | 10 | `DrainDelayNotExpired` | `emergency_drain`, `drain_expired_stream` | The 1-year delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `create_vesting_stream` | `sponsor` and `recipient` are the same address |
-| 12 | `AlreadyInitialized` | `initialize` | Admin has already been set |
-| 13 | `Unauthorized` | `upgrade`, `transfer_admin`, `migrate_schedule` | Caller is not the contract admin |
-| 14 | `DepositBelowMinimum` | `create_vesting_stream` | `total_deposit` < configured minimum |
-| 15 | `ClawbackNotSupported` | `clawback_stream` | Token does not support SAC clawback |
+| 12 | `InvalidCliffDuration` | `create_vesting_stream` | `cliff_duration` is zero; a cliff must have positive length |
+| 13 | `AlreadyInitialized` | `initialize` | `initialize` has already been called on this contract instance |
+| 14 | `RecipientNotAllowed` | `create_vesting_stream` | Recipient address is not on the configured allowlist |
+| 15 | `StreamPaused` | `claim_vested` | Claim attempted on a stream that is currently paused |
+| 16 | `BatchTooLarge` | `create_vesting_stream` (batch) | Batch size exceeds the maximum of 20 |
+| 17 | `RateTooLow` | `create_vesting_stream` | `rate × total_duration` is below the configured minimum deposit |
+| 18 | `NotInitialized` | `create_vesting_stream`, `create_variable_rate_stream` | `initialize` has not yet been called |
+| 19 | `InvalidSegments` | `create_variable_rate_stream` | Segments are empty, exceed 10, out of order, or contain non-positive rates |
+| 20 | `MetadataTooLong` | `create_vesting_stream` | `metadata` string exceeds 256 UTF-8 bytes |
+| 21 | `Unauthorized` | `upgrade`, `transfer_admin`, `migrate_schedule`, `set_fee` | Caller is not the contract admin or original sponsor |
+| 22 | `DepositBelowMinimum` | `create_vesting_stream`, `create_variable_rate_stream` | `total_deposit` < configured minimum (`get_min_deposit`) |
+| 23 | `StreamAlreadyPaused` | `pause_stream` | Stream is already in a paused state |
+| 24 | `StreamNotPaused` | `resume_stream` | Stream is not currently paused |
+| 25 | `VersionOverflow` | `claim_vested`, `cancel_stream` | Version counter has reached `u32::MAX` |
+| 26 | `ClawbackNotSupported` | `clawback_stream` | Token does not support SAC clawback flag |
 
 ### Safe Deposit Boundary
 

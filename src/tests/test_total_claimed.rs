@@ -6,6 +6,7 @@
 //! - It accumulates correctly across multiple sequential claims.
 //! - `get_schedule` returns the updated value after each claim.
 //! - `get_stats` reflects the same value.
+//! - `get_total_claimed` view returns the same value.
 
 #![cfg(test)]
 
@@ -18,14 +19,23 @@ use crate::{
 
 use super::super::tests::token_helper::{create_token, mint_to};
 
+/// Helper: registers the contract AND calls initialize.
+fn make_initialized_client(env: &soroban_sdk::Env) -> VestingDripsClient {
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(env, &contract_id);
+    let admin = Address::generate(env);
+    let treasury = Address::generate(env);
+    client.initialize(&admin, &0u32, &treasury);
+    client
+}
+
 // ── Initialisation ────────────────────────────────────────────────────────────
 
 /// `total_claimed` must be `0` immediately after stream creation.
 #[test]
 fn test_total_claimed_init_zero() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_initialized_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -42,6 +52,13 @@ fn test_total_claimed_init_zero() {
         schedule.total_claimed, 0,
         "total_claimed must be 0 immediately after create"
     );
+
+    // get_total_claimed view must also return 0.
+    assert_eq!(
+        client.get_total_claimed(&recipient),
+        0,
+        "get_total_claimed must return 0 immediately after create"
+    );
 }
 
 // ── Single claim ──────────────────────────────────────────────────────────────
@@ -50,8 +67,7 @@ fn test_total_claimed_init_zero() {
 #[test]
 fn test_total_claimed_after_single_claim() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_initialized_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -73,6 +89,13 @@ fn test_total_claimed_after_single_claim() {
         schedule.total_claimed, 600,
         "total_claimed must equal the amount returned by claim_vested"
     );
+
+    // get_total_claimed view must match.
+    assert_eq!(
+        client.get_total_claimed(&recipient),
+        600,
+        "get_total_claimed must match schedule.total_claimed"
+    );
 }
 
 // ── Multi-claim accumulation ──────────────────────────────────────────────────
@@ -81,8 +104,7 @@ fn test_total_claimed_after_single_claim() {
 #[test]
 fn test_total_claimed_accumulates_across_multiple_claims() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_initialized_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -101,6 +123,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.total_claimed, 500, "after claim 1");
+    assert_eq!(client.get_total_claimed(&recipient), 500);
 
     // ── Claim 2: 30 more ledgers (ledger 180) ────────────────────────────────
     advance_ledger(&env, 30);
@@ -109,6 +132,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.total_claimed, 800, "after claim 2 (500 + 300)");
+    assert_eq!(client.get_total_claimed(&recipient), 800);
 
     // ── Claim 3: 70 more ledgers (ledger 250) ────────────────────────────────
     advance_ledger(&env, 70);
@@ -117,14 +141,14 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.total_claimed, 1_500, "after claim 3 (800 + 700)");
+    assert_eq!(client.get_total_claimed(&recipient), 1_500);
 }
 
 /// `total_claimed` reaches the full deposit when the stream is fully consumed.
 #[test]
 fn test_total_claimed_equals_deposit_after_full_claim() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_initialized_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -155,6 +179,13 @@ fn test_total_claimed_equals_deposit_after_full_claim() {
         client.get_schedule(&recipient).is_none(),
         "schedule removed after full claim"
     );
+
+    // get_total_claimed returns 0 after stream removal.
+    assert_eq!(
+        client.get_total_claimed(&recipient),
+        0,
+        "get_total_claimed returns 0 when stream is fully claimed and removed"
+    );
 }
 
 // ── get_stats consistency ─────────────────────────────────────────────────────
@@ -163,8 +194,7 @@ fn test_total_claimed_equals_deposit_after_full_claim() {
 #[test]
 fn test_total_claimed_consistent_in_get_stats() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let client = make_initialized_client(&env);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -179,6 +209,7 @@ fn test_total_claimed_consistent_in_get_stats() {
     // Before any claim: both should be 0.
     let stats = client.get_stats(&recipient).unwrap();
     assert_eq!(stats.total_claimed, 0);
+    assert_eq!(client.get_total_claimed(&recipient), 0);
 
     // After a claim: stats.total_claimed must match schedule.total_claimed.
     advance_ledger(&env, 30); // past cliff (120+20=120 → ledger 130)
@@ -189,10 +220,51 @@ fn test_total_claimed_consistent_in_get_stats() {
 
     assert_eq!(stats.total_claimed, claimed);
     assert_eq!(stats.total_claimed, schedule.total_claimed);
+    assert_eq!(client.get_total_claimed(&recipient), claimed);
+
     // Consistency: deposited == claimed + remaining
     assert_eq!(
         stats.total_deposited,
         stats.total_claimed + stats.remaining,
         "total_deposited must equal total_claimed + remaining"
     );
+}
+
+// ── No overflow for max-rate long-duration streams ────────────────────────────
+
+/// `total_claimed` does not overflow for a high-rate stream.
+///
+/// Uses the maximum safe rate (i128::MAX / total_duration) to ensure
+/// that arithmetic is safe and total_claimed accumulates correctly.
+#[test]
+fn test_total_claimed_no_overflow_high_rate() {
+    let env = setup_env();
+    let client = make_initialized_client(&env);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Use a moderate large rate that won't overflow but tests i128 arithmetic.
+    // rate=1_000_000_000, total=100, cliff=10 → deposit=100_000_000_000
+    let rate: i128 = 1_000_000_000;
+    let total: u32 = 100;
+    let deposit = rate * total as i128;
+    mint_to(&env, &token_id, &sponsor, deposit);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &total, &None)
+        .unwrap();
+
+    // Advance to cliff.
+    advance_ledger(&env, 10);
+    let claimed = client.claim_vested(&recipient).unwrap();
+    assert_eq!(claimed, rate * 10);
+
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.total_claimed, rate * 10);
+    assert_eq!(client.get_total_claimed(&recipient), rate * 10);
+
+    // total_claimed must not exceed deposit.
+    assert!(schedule.total_claimed <= deposit);
 }

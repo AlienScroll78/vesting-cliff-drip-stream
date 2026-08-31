@@ -22,6 +22,9 @@ fn test_stream_created_event_has_all_fields() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);

@@ -37,6 +37,15 @@ fn env_at(sequence: u32) -> Env {
     env
 }
 
+fn make_initialized_client(env: &Env) -> VestingDripsClient {
+    let cid = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(env, &cid);
+    let admin = Address::generate(env);
+    let treasury = Address::generate(env);
+    client.initialize(&admin, &0u32, &treasury);
+    client
+}
+
 // ── F1: any (rate, total_duration) that would overflow returns DepositOverflow ─
 
 proptest! {
@@ -52,8 +61,7 @@ proptest! {
         prop_assume!(total_duration > cliff_duration);
 
         let env = env_at(100);
-        let cid = env.register(VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &cid);
+        let client = make_initialized_client(&env);
         let sponsor = Address::generate(&env);
         let recipient = Address::generate(&env);
         let (token, _) = create_token(&env, &sponsor);
@@ -79,8 +87,7 @@ proptest! {
     #[test]
     fn f2_max_rate_always_overflows(total_duration in 2_u32..=10_000_u32) {
         let env = env_at(100);
-        let cid = env.register(VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &cid);
+        let client = make_initialized_client(&env);
         let sponsor = Address::generate(&env);
         let recipient = Address::generate(&env);
         let (token, _) = create_token(&env, &sponsor);
@@ -103,8 +110,7 @@ proptest! {
         let boundary_rate = i128::MAX / total_duration as i128;
 
         let env = env_at(100);
-        let cid = env.register(VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &cid);
+        let client = make_initialized_client(&env);
         let sponsor = Address::generate(&env);
         let recipient = Address::generate(&env);
         let (token, _) = create_token(&env, &sponsor);
@@ -118,16 +124,14 @@ proptest! {
         );
         prop_assert!(ok.is_ok(), "boundary_rate={boundary_rate} total_duration={total_duration} should succeed");
 
-        // boundary_rate + 1 should overflow
-        let env2 = env_at(100);
-        let cid2 = env2.register(VestingDrips, ());
-        let client2 = VestingDripsClient::new(&env2, &cid2);
-        let sponsor2 = Address::generate(&env2);
-        let recipient2 = Address::generate(&env2);
-        let (token2, _) = create_token(&env2, &sponsor2);
-
-        // Only test if boundary_rate + 1 actually overflows the multiplication.
+        // boundary_rate + 1 should overflow — only test if multiplication actually overflows.
         if (boundary_rate + 1).checked_mul(total_duration as i128).is_none() {
+            let env2 = env_at(100);
+            let client2 = make_initialized_client(&env2);
+            let sponsor2 = Address::generate(&env2);
+            let recipient2 = Address::generate(&env2);
+            let (token2, _) = create_token(&env2, &sponsor2);
+
             let err = client2.create_vesting_stream(
                 &sponsor2, &recipient2, &token2,
                 &(boundary_rate + 1), &1, &total_duration,
@@ -149,8 +153,7 @@ proptest! {
         prop_assume!(total_duration <= cliff_duration); // guaranteed InvalidDuration
 
         let env = env_at(100);
-        let cid = env.register(VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &cid);
+        let client = make_initialized_client(&env);
         let sponsor = Address::generate(&env);
         let recipient = Address::generate(&env);
         let (token, _) = create_token(&env, &sponsor);
@@ -175,10 +178,11 @@ proptest! {
         extra in 1_u32..=500_u32,
     ) {
         let total_duration = cliff_duration + extra;
+        // Ensure deposit meets min_deposit (default 100).
+        prop_assume!(rate * total_duration as i128 >= 100);
 
         let env = env_at(100);
-        let cid = env.register(VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &cid);
+        let client = make_initialized_client(&env);
         let sponsor = Address::generate(&env);
         let recipient = Address::generate(&env);
         let (token, _) = create_token(&env, &sponsor);
