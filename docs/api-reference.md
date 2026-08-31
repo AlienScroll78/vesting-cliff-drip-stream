@@ -6,6 +6,8 @@ Contract ID is referred to as `$VESTING_CONTRACT` throughout the CLI examples.
 All amounts are in the token's smallest unit (stroops for XLM-based SAC tokens).
 Ledger sequences are `u32` values from `env.ledger().sequence()`.
 
+> 📋 **Looking for version-by-version API history?** See the [API Changelog](api-changelog.md) for breaking changes, additions, deprecations, and fixes.
+
 ---
 
 ## Table of Contents
