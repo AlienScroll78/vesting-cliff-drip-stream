@@ -1,53 +1,64 @@
-import { defineConfig, Plugin } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-
-/**
- * SW_VERSION is stamped into public/sw.js at build time so every production
- * deployment gets a fresh cache key, invalidating stale app-shell assets.
- * In dev mode the string stays as "dev" to avoid cache churn during HMR.
- */
-const swVersion =
-  process.env.NODE_ENV === 'production' ? `v${Date.now()}` : 'dev'
-
-/**
- * Custom Vite plugin: replaces the bare __SW_VERSION__ identifier inside
- * public/sw.js during the build. Vite copies public/ files verbatim without
- * running them through the define transform, so we need this extra step.
- */
-function swVersionPlugin(): Plugin {
-  return {
-    name: 'sw-version-stamp',
-    apply: 'build',
-    generateBundle(_options, bundle) {
-      const swAsset = bundle['sw.js']
-      if (swAsset && swAsset.type === 'asset' && typeof swAsset.source === 'string') {
-        swAsset.source = swAsset.source.replace(
-          /typeof __SW_VERSION__ !== 'undefined' \? __SW_VERSION__ : 'dev'/g,
-          JSON.stringify(swVersion)
-        )
-      }
-    },
-  }
-}
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+import path from "path";
 
 export default defineConfig({
-  plugins: [react(), swVersionPlugin()],
-
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+    alias: { "@": path.resolve(__dirname, "./src") },
   },
-
-  define: {
-    // Makes __SW_VERSION__ available to any bundled module (e.g., if the
-    // registration helper in App.tsx ever needs to read the version).
-    __SW_VERSION__: JSON.stringify(swVersion),
-  },
-
-  build: {
-    target: 'es2017',
-    sourcemap: true,
-  },
-})
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      includeAssets: ["favicon-16.svg", "favicon-32.svg", "favicon-180.svg", "logo.svg"],
+      manifest: {
+        name: "VestingStream",
+        short_name: "VestingStream",
+        description: "Cliff + drip vesting on Stellar",
+        theme_color: "#1d6ae5",
+        background_color: "#f9fafb",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
+        scope: "/",
+        icons: [
+          {
+            src: "favicon-180.svg",
+            sizes: "180x180",
+            type: "image/svg+xml",
+            purpose: "any maskable",
+          },
+          {
+            src: "favicon-32.svg",
+            sizes: "32x32",
+            type: "image/svg+xml",
+          },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff,woff2}"],
+        navigateFallback: "/offline.html",
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/horizon-testnet\.stellar\.org\//,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "horizon-api",
+              expiration: { maxAgeSeconds: 60 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/api\.coingecko\.com\//,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "coingecko-api",
+              expiration: { maxAgeSeconds: 300 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
+});

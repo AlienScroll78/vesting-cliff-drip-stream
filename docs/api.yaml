@@ -1,0 +1,1012 @@
+openapi: 3.0.3
+info:
+  title: Vesting Cliff Drip Stream API
+  version: 1.1.0
+  description: >
+    Backend proxy layer for the Vesting Cliff Drip Stream smart contract.
+    Batches Soroban view calls, caches results for ~3 ledger seconds, and
+    abstracts Horizon interaction from the browser client.
+
+paths:
+  # ── Health & Readiness ────────────────────────────────────────────────────
+
+  /health:
+    get:
+      summary: Liveness probe
+      description: >
+        Returns 200 if the process is alive. Used by container orchestrators
+        (ECS, Kubernetes) as a liveness check.
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: 1.2.3
+                uptime: 86400
+
+  /health/horizon:
+    get:
+      summary: Horizon connectivity check
+      description: >
+        Checks whether the Stellar Horizon endpoint is reachable and
+        responding. Returns degraded status if Horizon is unreachable.
+      operationId: getHorizonHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Horizon is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HorizonHealthResponse'
+              example:
+                status: healthy
+                endpoints:
+                  - https://horizon-testnet.stellar.org
+        '503':
+          description: Horizon is unreachable or degraded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HorizonHealthResponse'
+              example:
+                status: degraded
+                endpoints:
+                  - https://horizon-testnet.stellar.org
+
+  /health/horizon/circuit-breaker:
+    get:
+      summary: Horizon circuit breaker status
+      description: >
+        Returns the current state of the Horizon circuit breaker
+        (closed, open, or half-open). Plain text response.
+      operationId: getCircuitBreakerStatus
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Circuit breaker state.
+          content:
+            text/plain:
+              schema:
+                type: string
+                enum: [closed, open, half-open]
+              example: closed
+
+  # ── OpenAPI Spec ──────────────────────────────────────────────────────────
+
+  /api/openapi.json:
+    get:
+      summary: Raw OpenAPI spec
+      description: >
+        Returns the full OpenAPI 3.0 specification as JSON. Used by
+        Swagger UI and code generators.
+      operationId: getOpenApiSpec
+      tags:
+        - Meta
+      responses:
+        '200':
+          description: OpenAPI 3.0 specification.
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ── Schedule Queries ──────────────────────────────────────────────────────
+
+  /api/v1/schedules/{recipient}:
+    get:
+      summary: Get a vesting schedule by recipient
+      description: >
+        Returns the full vesting schedule for a Stellar recipient address,
+        including computed fields (`claimable_amount`, `is_cliff_passed`) for
+        the current ledger.
+
+        Responses are cached for approximately 3 seconds.
+        Rate limited to 60 requests per minute per IP.
+      operationId: getScheduleByRecipient
+      tags:
+        - Schedules
+      parameters:
+        - in: path
+          name: recipient
+          required: true
+          schema:
+            type: string
+            pattern: '^G[A-Z2-7]{55}$'
+            example: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+          description: Stellar public key (G-address) of the stream recipient.
+      responses:
+        '200':
+          description: Vesting schedule found.
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum requests per minute.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in the current window.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Seconds until the rate limit window resets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VestingScheduleResponse'
+              example:
+                recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+                token: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+                rate_per_ledger: 10
+                start_ledger: 1000
+                cliff_ledger: 1100
+                end_ledger: 2000
+                last_claimed_ledger: 1000
+                claimable_amount: 1000
+                is_cliff_passed: true
+        '400':
+          description: Invalid Stellar address supplied in the path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Invalid Stellar address
+        '404':
+          description: No vesting schedule found for the given recipient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Schedule not found
+        '429':
+          description: Rate limit exceeded (60 requests per minute per IP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Too many requests
+        '500':
+          description: Unexpected server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Internal server error
+
+  /api/v1/schedules:
+    get:
+      summary: Paginated schedules for a sponsor
+      description: >
+        Returns a paginated list of vesting streams for the authenticated
+        sponsor. Requires a valid JWT where the `sub` claim matches the
+        `sponsor` query parameter.
+      operationId: listSchedules
+      tags:
+        - Schedules
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: sponsor
+          required: true
+          schema:
+            type: string
+            pattern: '^G[A-Z2-7]{55}$'
+          description: Stellar public key of the sponsor.
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, pre_cliff, expired, cancelled]
+          description: Filter by stream status.
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum:
+              - cliff_asc
+              - cliff_desc
+              - end_asc
+              - end_desc
+              - claimable_asc
+              - claimable_desc
+              - recipient_asc
+              - recipient_desc
+          description: Sort field and direction.
+          default: cliff_asc
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+          default: 1
+          description: Page number.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          default: 25
+          description: Items per page.
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Opaque cursor for cursor-based pagination.
+      responses:
+        '200':
+          description: Paginated schedule list.
+          headers:
+            X-Cache:
+              schema:
+                type: string
+                enum: [HIT, MISS]
+              description: Redis cache status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulesListResponse'
+              example:
+                items:
+                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+                    sponsor: GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+                    token: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+                    rate_per_ledger: "10"
+                    start_ledger: 1000
+                    cliff_ledger: 1100
+                    end_ledger: 2000
+                    status: active
+                    cancelled_at: null
+                    claimable_amount: "500"
+                    created_at: "2026-07-01T12:00:00.000Z"
+                total: 1
+                page: 1
+                limit: 25
+                next_cursor: null
+                prev_cursor: null
+        '400':
+          description: Missing or invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: sponsor query parameter is required
+        '401':
+          description: Missing or invalid JWT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unauthorized
+        '403':
+          description: JWT wallet address does not match sponsor parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: JWT wallet address does not match sponsor parameter
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Internal server error
+
+  /api/v1/schedules/export:
+    get:
+      summary: Export streams as CSV or JSON
+      description: >
+        Streams a CSV or JSON file for all vesting streams owned by the
+        authenticated sponsor. Supports optional date range filtering.
+        Rate limited to one export per minute per sponsor.
+      operationId: exportSchedules
+      tags:
+        - Schedules
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, json]
+          default: json
+          description: Export format.
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+          description: Filter streams created on or after this ISO 8601 date.
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+          description: Filter streams created on or before this ISO 8601 date.
+      responses:
+        '200':
+          description: Exported stream data.
+          content:
+            text/csv:
+              schema:
+                type: string
+                description: CSV file with stream data.
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleItem'
+        '400':
+          description: Invalid format or date parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: format must be 'csv' or 'json'
+        '401':
+          description: Missing or invalid JWT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unauthorized
+        '429':
+          description: Rate limit exceeded (one export per minute).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Rate limit exceeded. Only one export per minute is allowed.
+                retry_after_seconds: 60
+
+  /api/v1/schedules/sponsor/{sponsor}:
+    get:
+      summary: Get schedules by sponsor (legacy Horizon-based)
+      description: >
+        Returns paginated schedule summaries for streams created by the
+        given sponsor. Uses Horizon event stream under the hood.
+      operationId: getSchedulesBySponsor
+      tags:
+        - Schedules
+      parameters:
+        - in: path
+          name: sponsor
+          required: true
+          schema:
+            type: string
+            pattern: '^G[A-Z2-7]{55}$'
+          description: Stellar public key of the sponsor.
+        - in: query
+          name: page
+          schema:
+            type: integer
+          default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+          default: 20
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Horizon paging token.
+      responses:
+        '200':
+          description: Sponsor schedule list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SponsorScheduleItem'
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  next_cursor:
+                    type: string
+                    nullable: true
+              example:
+                items:
+                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+                    sponsor: GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+                    token: ""
+                    ledger: 1000
+                    event_id: "12345"
+                page: 1
+                limit: 20
+                next_cursor: "12345"
+        '502':
+          description: Horizon unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: horizon unavailable
+        '500':
+          description: Internal server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Internal server error
+
+  # ── Admin API ─────────────────────────────────────────────────────────────
+
+  /admin/indexer/status:
+    get:
+      summary: Indexer status
+      description: >
+        Returns the current state of the event indexer including the last
+        indexed ledger, chain tip, and lag. Secured by HTTP Basic Auth.
+        Internal network only — not exposed through public ingress.
+      operationId: getAdminIndexerStatus
+      tags:
+        - Admin
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Indexer status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexerStatusResponse'
+              example:
+                status: ok
+                lastIndexedLedger: 51203447
+                chainTipLedger: 51203450
+                lag: 3
+                lastReindexFrom: null
+                network: testnet
+        '401':
+          description: Missing Basic Auth credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unauthorized
+        '403':
+          description: Invalid credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Forbidden
+
+  /admin/metrics:
+    get:
+      summary: Prometheus metrics
+      description: >
+        Returns operational metrics in Prometheus text exposition format.
+        Includes default Node.js process metrics and custom gauges
+        (indexer lag, reindex count). Internal network only.
+      operationId: getAdminMetrics
+      tags:
+        - Admin
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Prometheus metrics text.
+          content:
+            text/plain:
+              schema:
+                type: string
+                description: Prometheus text exposition format.
+              example: |
+                # HELP indexer_lag_ledgers Number of ledgers the indexer is behind the chain tip
+                # TYPE indexer_lag_ledgers gauge
+                indexer_lag_ledgers 3
+        '401':
+          description: Missing Basic Auth credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Unauthorized
+
+  /api/v1/admin/drain:
+    post:
+      summary: Drain expired streams
+      description: >
+        Scans for expired streams and submits drain transactions. Supports
+        dry-run mode. Returns counts of scanned, eligible, and submitted streams.
+      operationId: adminDrain
+      tags:
+        - Admin
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  description: If true, return eligible streams without submitting drain transactions.
+                  default: false
+      responses:
+        '200':
+          description: Drain result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DrainResponse'
+              example:
+                scanned: 10
+                eligible: 2
+                submitted: 2
+                dry_run: false
+                streams:
+                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+                    amount: 5000
+
+  # ── Public Metrics ────────────────────────────────────────────────────────
+
+  /api/v1/metrics:
+    get:
+      summary: Operational metrics
+      description: >
+        Returns JSON-formatted operational metrics including Redis cache
+        hit/miss ratios. Intended for internal dashboards; for Prometheus
+        scraping use the admin `/admin/metrics` endpoint.
+      operationId: getMetrics
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Service metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+              example:
+                service: vesting-backend
+                timestamp: "2026-08-01T12:00:00.000Z"
+                cache:
+                  hits: 15230
+                  misses: 4210
+                  total: 19440
+                  hitRate: 0.783
+
+  # ── WebSocket ─────────────────────────────────────────────────────────────
+
+  /ws/claimable:
+    get:
+      summary: Real-time claimable balance updates
+      description: >
+        WebSocket endpoint for streaming real-time claimable balance
+        updates. Clients send a JSON subscribe message with a recipient
+        address, and receive periodic balance updates. Secured via the
+        same origin policy as the REST API.
+
+        **Protocol:**
+        1. Connect to `ws://host/ws/claimable`
+        2. Send: `{"action":"subscribe","recipient":"G..."}`
+        3. Receive: `{"recipient":"G...","claimable_amount":"500","ledger":1020000}`
+        4. Send: `{"action":"unsubscribe","recipient":"G..."}` to stop updates
+
+      operationId: wsClaimable
+      tags:
+        - WebSocket
+      responses:
+        '101':
+          description: WebSocket upgrade successful.
+        '400':
+          description: Invalid WebSocket upgrade request.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT token obtained from the `/auth/token` endpoint. The `sub` claim
+        must match the Stellar public key of the authenticated user.
+    basicAuth:
+      type: http
+      scheme: basic
+      description: >
+        HTTP Basic Auth for admin endpoints. Internal network only.
+
+  schemas:
+    VestingScheduleResponse:
+      type: object
+      description: >
+        Full vesting schedule for a recipient, including computed fields for
+        the current ledger sequence.
+      required:
+        - recipient
+        - token
+        - rate_per_ledger
+        - start_ledger
+        - cliff_ledger
+        - end_ledger
+        - last_claimed_ledger
+        - claimable_amount
+        - is_cliff_passed
+      properties:
+        recipient:
+          type: string
+          pattern: '^G[A-Z2-7]{55}$'
+          description: Stellar public key of the stream recipient.
+          example: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+        token:
+          type: string
+          pattern: '^C[A-Z2-7]{55}$'
+          description: Stellar contract ID of the SAC token being vested.
+          example: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+        rate_per_ledger:
+          type: integer
+          format: int64
+          description: Number of tokens released per ledger (stroops for XLM-based SAC tokens).
+          example: 10
+        start_ledger:
+          type: integer
+          format: int64
+          description: Ledger sequence number at stream creation.
+          example: 1000
+        cliff_ledger:
+          type: integer
+          format: int64
+          description: Ledger sequence number at which the cliff is reached and tokens unlock.
+          example: 1100
+        end_ledger:
+          type: integer
+          format: int64
+          description: Ledger sequence number at which the stream fully vests.
+          example: 2000
+        last_claimed_ledger:
+          type: integer
+          format: int64
+          description: Ledger sequence through which tokens have already been claimed.
+          example: 1000
+        claimable_amount:
+          type: integer
+          format: int64
+          description: >
+            Number of tokens currently claimable. Returns 0 if the cliff has
+            not been reached. Computed as
+            `(min(current_ledger, end_ledger) − last_claimed_ledger) × rate_per_ledger`.
+          example: 1000
+        is_cliff_passed:
+          type: boolean
+          description: >
+            Whether `current_ledger >= cliff_ledger`. When false, `claimable_amount`
+            is always 0 and `claim_vested` will return `CliffNotReached`.
+          example: true
+
+    SchedulesListResponse:
+      type: object
+      description: Paginated list of vesting schedules for a sponsor.
+      required:
+        - items
+        - total
+        - page
+        - limit
+        - next_cursor
+        - prev_cursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduleItem'
+        total:
+          type: integer
+          description: Total number of matching streams.
+          example: 1
+        page:
+          type: integer
+          description: Current page number.
+          example: 1
+        limit:
+          type: integer
+          description: Items per page.
+          example: 25
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page.
+          example: null
+        prev_cursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the previous page.
+          example: null
+
+    ScheduleItem:
+      type: object
+      description: A single vesting stream entry in a paginated list.
+      required:
+        - recipient
+        - sponsor
+        - rate_per_ledger
+        - start_ledger
+        - cliff_ledger
+        - end_ledger
+        - status
+        - claimable_amount
+        - created_at
+      properties:
+        recipient:
+          type: string
+          description: Stellar public key of the stream recipient.
+          example: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+        sponsor:
+          type: string
+          description: Stellar public key of the stream sponsor.
+          example: GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+        token:
+          type: string
+          nullable: true
+          description: SAC token contract address.
+          example: CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+        rate_per_ledger:
+          type: string
+          description: Tokens released per ledger (string for i128 precision).
+          example: "10"
+        start_ledger:
+          type: integer
+          format: int64
+          description: Ledger at stream creation.
+          example: 1000
+        cliff_ledger:
+          type: integer
+          format: int64
+          description: Ledger where cliff is reached.
+          example: 1100
+        end_ledger:
+          type: integer
+          format: int64
+          description: Ledger where stream ends.
+          example: 2000
+        status:
+          type: string
+          enum: [active, pre_cliff, expired, cancelled]
+          description: Current lifecycle status.
+          example: active
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO 8601 timestamp if the stream was cancelled.
+          example: null
+        claimable_amount:
+          type: string
+          description: Tokens currently claimable (string for i128 precision).
+          example: "500"
+        created_at:
+          type: string
+          format: date-time
+          description: ISO 8601 creation timestamp.
+          example: "2026-07-01T12:00:00.000Z"
+
+    SponsorScheduleItem:
+      type: object
+      description: Schedule summary from Horizon event stream (legacy endpoint).
+      properties:
+        recipient:
+          type: string
+          description: Recipient Stellar address.
+          example: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+        sponsor:
+          type: string
+          description: Sponsor Stellar address.
+          example: GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+        token:
+          type: string
+          description: Token contract address.
+          example: ""
+        ledger:
+          type: integer
+          description: Ledger sequence of the event.
+          example: 1000
+        event_id:
+          type: string
+          description: Horizon event ID.
+          example: "12345"
+
+    HealthResponse:
+      type: object
+      description: Liveness probe response.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          description: Always "ok" when the process is alive.
+          example: ok
+        version:
+          type: string
+          description: Service version from package.json.
+          example: 1.2.3
+        uptime:
+          type: integer
+          description: Process uptime in seconds.
+          example: 86400
+
+    HorizonHealthResponse:
+      type: object
+      description: Horizon connectivity check response.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+          description: Horizon connectivity status.
+          example: healthy
+        endpoints:
+          type: array
+          items:
+            type: string
+          description: Horizon endpoint URLs checked.
+          example:
+            - https://horizon-testnet.stellar.org
+
+    IndexerStatusResponse:
+      type: object
+      description: Indexer status for admin monitoring.
+      required:
+        - status
+        - lastIndexedLedger
+        - chainTipLedger
+        - lag
+        - network
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+          description: Current indexer health.
+          example: ok
+        lastIndexedLedger:
+          type: integer
+          format: int64
+          description: Last ledger successfully ingested.
+          example: 51203447
+        chainTipLedger:
+          type: integer
+          format: int64
+          description: Current Stellar network chain tip.
+          example: 51203450
+        lag:
+          type: integer
+          description: Number of ledgers the indexer is behind.
+          example: 3
+        lastReindexFrom:
+          type: integer
+          format: int64
+          nullable: true
+          description: Ledger of the last manual reindex request.
+          example: null
+        network:
+          type: string
+          description: Stellar network name.
+          example: testnet
+
+    DrainResponse:
+      type: object
+      description: Admin drain operation result.
+      required:
+        - scanned
+        - eligible
+        - submitted
+        - dry_run
+        - streams
+      properties:
+        scanned:
+          type: integer
+          description: Total expired streams scanned.
+          example: 10
+        eligible:
+          type: integer
+          description: Streams eligible for drain.
+          example: 2
+        submitted:
+          type: integer
+          description: Drain transactions submitted.
+          example: 2
+        dry_run:
+          type: boolean
+          description: Whether this was a dry run.
+          example: false
+        streams:
+          type: array
+          items:
+            type: object
+            properties:
+              recipient:
+                type: string
+              amount:
+                type: integer
+          description: Drained streams with amounts.
+          example:
+            - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+              amount: 5000
+
+    MetricsResponse:
+      type: object
+      description: Operational metrics response.
+      required:
+        - service
+        - timestamp
+        - cache
+      properties:
+        service:
+          type: string
+          description: Service identifier.
+          example: vesting-backend
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the metrics snapshot.
+          example: "2026-08-01T12:00:00.000Z"
+        cache:
+          type: object
+          properties:
+            hits:
+              type: integer
+              description: Total cache hits.
+              example: 15230
+            misses:
+              type: integer
+              description: Total cache misses.
+              example: 4210
+            total:
+              type: integer
+              description: Total cache requests.
+              example: 19440
+            hitRate:
+              type: number
+              format: float
+              description: Cache hit ratio (0.0–1.0).
+              example: 0.783
+
+    ErrorResponse:
+      type: object
+      description: Standard error envelope returned for 4xx and 5xx responses.
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+          example: Schedule not found

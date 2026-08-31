@@ -1,0 +1,26 @@
+{
+  "name": "vesting-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --loader tsx src/server.ts",
+    "test": "node --test --import tsx tests/schedules.test.ts",
+    "migrate": "node-pg-migrate up --migration-file-language ts",
+    "migrate:down": "node-pg-migrate down --migration-file-language ts",
+    "migrate:down:all": "node-pg-migrate down --count 999 --migration-file-language ts"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "express-rate-limit": "^7.0.0",
+    "pg": "^8.13.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.10",
+    "vitest": "^2.1.9"
+  }
+}
