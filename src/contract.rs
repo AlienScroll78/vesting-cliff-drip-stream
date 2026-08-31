@@ -535,14 +535,20 @@ impl VestingDrips {
         // Increment version before state mutation (Issue #318).
         schedule.increment_version()?;
 
+        // Reentrancy guard: acquire lock before the outbound token transfer
+        // and release immediately after (Issue #13).
+        if storage::is_locked(&env) {
+            return Err(VestingError::Reentrancy);
+        }
+        storage::acquire_lock(&env);
         let token_client = token::Client::new(&env, &schedule.token);
-        token_client
-            .try_transfer(
-                &env.current_contract_address(),
-                &recipient,
-                &claimable_amount,
-            )
-            .map_err(|_| VestingError::TransferFailed)?;
+        let transfer_result = token_client.try_transfer(
+            &env.current_contract_address(),
+            &recipient,
+            &claimable_amount,
+        );
+        storage::release_lock(&env);
+        transfer_result.map_err(|_| VestingError::TransferFailed)?;
 
         let active_end = current_ledger.min(schedule.end_ledger);
         schedule.last_claimed_ledger = active_end;
@@ -605,14 +611,19 @@ impl VestingDrips {
             return Err(VestingError::NothingToClaim);
         }
 
+        // Reentrancy guard (Issue #13).
+        if storage::is_locked(&env) {
+            return Err(VestingError::Reentrancy);
+        }
+        storage::acquire_lock(&env);
         let token_client = token::Client::new(&env, &schedule.token);
-        token_client
-            .try_transfer(
-                &env.current_contract_address(),
-                &recipient,
-                &claimable_amount,
-            )
-            .map_err(|_| VestingError::TransferFailed)?;
+        let transfer_result = token_client.try_transfer(
+            &env.current_contract_address(),
+            &recipient,
+            &claimable_amount,
+        );
+        storage::release_lock(&env);
+        transfer_result.map_err(|_| VestingError::TransferFailed)?;
 
         let active_end = current_ledger.min(schedule.end_ledger);
         schedule.last_claimed_ledger = active_end;
@@ -673,18 +684,28 @@ impl VestingDrips {
         };
 
         if recipient_share > 0 {
-            token_client
-                .try_transfer(
-                    &env.current_contract_address(),
-                    &recipient,
-                    &recipient_share,
-                )
-                .map_err(|_| VestingError::TransferFailed)?;
+            // Reentrancy guard (Issue #13).
+            if storage::is_locked(&env) {
+                return Err(VestingError::Reentrancy);
+            }
+            storage::acquire_lock(&env);
+            let r1 = token_client.try_transfer(
+                &env.current_contract_address(),
+                &recipient,
+                &recipient_share,
+            );
+            storage::release_lock(&env);
+            r1.map_err(|_| VestingError::TransferFailed)?;
         }
         if sponsor_refund > 0 {
-            token_client
-                .try_transfer(&env.current_contract_address(), &sponsor, &sponsor_refund)
-                .map_err(|_| VestingError::TransferFailed)?;
+            if storage::is_locked(&env) {
+                return Err(VestingError::Reentrancy);
+            }
+            storage::acquire_lock(&env);
+            let r2 = token_client
+                .try_transfer(&env.current_contract_address(), &sponsor, &sponsor_refund);
+            storage::release_lock(&env);
+            r2.map_err(|_| VestingError::TransferFailed)?;
         }
 
         storage::remove_schedule(&env, &recipient);
