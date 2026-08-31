@@ -17,6 +17,37 @@
 
 import { AsyncLocalStorage } from 'async_hooks';
 
+// Lazily resolve the OTel API so this module loads even when the SDK has not
+// been initialised (e.g. during unit tests that don't boot tracing.ts).
+let _otelApi = null;
+function getOtelApi() {
+  if (_otelApi !== null) return _otelApi;
+  try {
+    _otelApi = require("@opentelemetry/api");
+  } catch {
+    _otelApi = undefined; // package not available
+  }
+  return _otelApi;
+}
+
+/**
+ * Return the active trace_id and span_id strings, or null if there is no
+ * active span or the OTel API is unavailable.
+ */
+function getTraceContext() {
+  const api = getOtelApi();
+  if (!api) return null;
+  try {
+    const span = api.trace.getActiveSpan();
+    if (!span) return null;
+    const ctx = span.spanContext();
+    if (!api.trace.isSpanContextValid(ctx)) return null;
+    return { trace_id: ctx.traceId, span_id: ctx.spanId };
+  } catch {
+    return null;
+  }
+}
+
 let pino;
 try {
   pino = (await import('pino')).default;
@@ -141,6 +172,7 @@ function buildPinoLogger() {
         const entry = typeof msgOrObj === 'string'
           ? { message: msgOrObj }
           : { ...msgOrObj, message: msg ?? msgOrObj.message };
+        const traceCtx = getTraceContext();
         process.stdout.write(
           JSON.stringify({
             timestamp: new Date().toISOString(),
