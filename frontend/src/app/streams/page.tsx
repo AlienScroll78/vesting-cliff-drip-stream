@@ -541,10 +541,13 @@ export default function SponsorStreamsPage() {
   return (
     <main id="main-content" className="page">
       <header className="header">
-        <h1>My Streams</h1>
-        <a href="/" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
-          ← Back
-        </a>
+        <h1>Streams</h1>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <a href="/" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
+            ← Back
+          </a>
+          <WalletButton />
+        </div>
       </header>
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
