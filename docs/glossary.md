@@ -282,6 +282,12 @@ The core data struct stored in [persistent storage](#persistent-storage) for eac
 
 ---
 
+### Variable Rate
+
+A stream configuration where the token accrual [rate](#rate) changes over the lifetime of the stream rather than remaining constant. Instead of a single `rate` value, a variable-rate stream stores a schedule of `(effective_ledger, rate_per_ledger)` pairs; the claimable amount at any ledger is computed by summing each segment: `Σ rate_i × (min(current, end_i) − start_i)`. Variable-rate streams enable use cases such as step-vesting (rate doubles after one year) or decay schedules (rate halves every quarter). Because each rate segment can introduce sub-unit remainders when ledger counts are uneven, variable-rate streams are the primary source of [dust](#dust). The current contract implements a fixed rate only; variable rate is the planned extension tracked in the feature roadmap.
+
+---
+
 ### WASM (WebAssembly)
 
 A portable binary instruction format. Soroban contracts are compiled from Rust to WASM (`wasm32-unknown-unknown` target) before deployment. The compiled `.wasm` file is what gets uploaded on-chain.

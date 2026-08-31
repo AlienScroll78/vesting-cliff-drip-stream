@@ -68,7 +68,7 @@ Accrual stops at `end_ledger`. The recipient can still call `claim_vested` after
 
 **Q: Can the rate be changed after a stream is created?**
 
-No. `rate_per_ledger` is immutable once the stream is created. There is no `update_stream` entry-point. To change the rate you must cancel the existing stream (subject to the refund rules above) and create a new one.
+No. `rate_per_ledger` is immutable once the stream is created. There is no `update_stream` entry-point. To change the rate you must cancel the existing stream (subject to the refund rules above) and create a new one. See [variable rate](glossary.md#variable-rate) for a planned extension that allows step-based rate schedules to be defined at creation time.
 
 ---
 
@@ -99,7 +99,13 @@ Only the original **sponsor** (the address that called `create_vesting_stream`).
 
 **Q: Is there a way to pause a stream?**
 
-No pause mechanism exists. The contract has no admin key and no pause entry-point. The only options are cancel-and-recreate or wait.
+No pause mechanism exists. The contract has no admin key and no pause entry-point. The only options are cancel-and-recreate or wait. For milestone-based release (where tokens unlock on discrete events rather than time), see [milestone stream](glossary.md#milestone-stream).
+
+---
+
+**Q: What happens to tokens after the stream expires and the recipient stops claiming?**
+
+The tokens remain locked in the [vault](glossary.md#vault). After approximately one year (~1 year of [ledgers](glossary.md#ledger)) past `end_ledger` — the [drain delay](glossary.md#drain-delay) — anyone can call `drain_expired_stream` to return unclaimed tokens to the sponsor.
 
 ---
 
@@ -131,7 +137,7 @@ No. The rate is a single `i128` value (tokens per ledger) set at creation and fi
 
 **Q: How often should a recipient call `claim_vested`?**
 
-As often or as rarely as you like — there is no penalty for waiting. Each call collects all accrued tokens since the last claim in a single transfer. Waiting costs nothing beyond the opportunity cost of having tokens sit in the contract.
+As often or as rarely as you like — there is no penalty for waiting. Each call collects all accrued tokens since the last claim in a single transfer. Waiting costs nothing beyond the opportunity cost of having tokens sit in the contract. If you use automated claiming bots, ensure you track the submitted transaction sequence number as an [idempotency key](glossary.md#idempotency-key) to avoid duplicate submissions on network timeout.
 
 ---
 
@@ -205,13 +211,19 @@ Fee-on-transfer tokens will cause the deposited amount to be less than intended,
 
 **Q: Who pays the transaction fees?**
 
-The transaction submitter pays Stellar network fees (the base fee in stroops). For `create_vesting_stream` the sponsor typically submits and pays. For `claim_vested` the recipient submits and pays. There are no protocol-level fees charged by this contract itself.
+The transaction submitter pays Stellar network fees (the base fee in stroops). For `create_vesting_stream` the sponsor typically submits and pays. For `claim_vested` the recipient submits and pays. Any [protocol fee](glossary.md#protocol-fee) configured by the contract admin is deducted from the claimable amount at transfer time; the default is 0 bps (no fee).
 
 ---
 
 **Q: How expensive is `create_vesting_stream` in fees?**
 
 The operation performs one token `transfer` (sponsor → contract vault) and one persistent storage write plus a TTL bump. Expect a higher fee than a simple payment due to the storage write, but still well within typical Soroban resource budgets. Run `stellar contract invoke --fee <amount>` with a generous fee on testnet to measure the actual resource consumption for your specific inputs.
+
+---
+
+**Q: Can a tiny amount of tokens get left over in the vault?**
+
+Yes — this is called [dust](glossary.md#dust). It can arise from [variable rate](glossary.md#variable-rate) streams where segment boundaries don't divide evenly. Dust is swept to the recipient on the final `claim_vested` call, or recovered by the sponsor after the [drain delay](glossary.md#drain-delay) via `drain_expired_stream`.
 
 ---
 
@@ -381,7 +393,7 @@ Three possible causes: (1) The stream's storage TTL expired (possible for stream
 
 **Q: Can the contract be upgraded or paused by a hidden admin?**
 
-No. The contract has no `upgrade`, `pause`, or admin entry-point. Once deployed, behaviour is fixed by the WASM bytecode. There is no owner key.
+No. The contract has no `upgrade`, `pause`, or admin entry-point. Once deployed, behaviour is fixed by the WASM bytecode. There is no owner key. Note: if an [allowlist](glossary.md#allowlist) is configured, only whitelisted recipient addresses can be targeted by `create_vesting_stream`, but this does not affect existing streams.
 
 ---
 
