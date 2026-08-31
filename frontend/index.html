@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Create Vesting Stream</title>
+  <!-- #539 — PWA manifest & theme -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#3182ce" />
   <link rel="stylesheet" href="print.css" media="print" />
   <!-- no-FOUC: apply dark class before first paint -->
   <script>
@@ -362,6 +365,16 @@
     preview.style.display = 'block';
     preview.scrollIntoView({ behavior: 'smooth' });
   });
+
+  // #539 — register service worker for offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .then(function (reg) { console.info('[SW] registered, scope:', reg.scope); })
+        .catch(function (err) { console.warn('[SW] registration failed:', err); });
+    });
+  }
 </script>
 
 </body>
