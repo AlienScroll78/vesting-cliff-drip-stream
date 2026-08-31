@@ -171,6 +171,18 @@ stellar contract id asset --asset native --network testnet
 
 ---
 
+**Q: Can a stream vest multiple tokens at once?**
+
+No. Each `VestingSchedule` is bound to a single `token` address set at creation. The contract has one vault per stream, and the [rate](glossary.md#rate) is denominated in that token's base unit. To stream multiple tokens to the same recipient, deploy separate contract instances or create separate streams on multiple contract deployments — one per token. A multi-token design is tracked in [docs/design/multi-token.md](design/multi-token.md).
+
+---
+
+**Q: What is the minimum deposit and why does it exist?**
+
+The [minimum deposit](glossary.md#minimum-deposit) is a configurable threshold (default 100 tokens) that `rate × total_duration` must meet or exceed when calling [`create_vesting_stream`](api-reference.md#create_vesting_stream). It exists to prevent [dust](glossary.md#dust)-level streams that would consume persistent storage and ledger resources disproportionate to the tokens at stake. Violation returns error code 14 (`DepositBelowMinimum`). The threshold is stored in [instance storage](glossary.md#instance-storage) and can be updated by the contract admin via [`set_min_deposit`](api-reference.md#set_min_deposit). Check the current value with [`get_min_deposit`](api-reference.md#get_min_deposit) before stream creation.
+
+---
+
 **Q: Are NFTs or non-fungible assets supported?**
 
 No. The contract works with fungible amounts expressed as `i128`. NFTs do not expose the SAC fungible token interface.
