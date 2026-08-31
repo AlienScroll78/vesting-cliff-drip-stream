@@ -16,8 +16,6 @@ mod test_total_claimed;
 mod test_variable_rate;
 mod test_versioning;
 mod test_views;
-mod test_dust;
-mod test_variable_rate;
 mod test_initialize;
 mod test_sponsor_streams;
 mod test_invalid_token;
@@ -29,7 +27,7 @@ pub use soroban_sdk::{
 
 use crate::{
     contract::{VestingDrips, VestingDripsClient},
-    types::VestingSchedule,
+    types::{VestingSchedule, RATE_DECIMALS},
 };
 use token_helper::{create_token, mint_to};
 
@@ -109,6 +107,10 @@ pub fn setup_token<'a>(
 
 /// Creates a vesting stream with the given parameters.
 ///
+/// `rate` is in **whole tokens per ledger** (not scaled). The helper scales
+/// it by `RATE_DECIMALS` internally, so all existing test assertions that
+/// check token balances in whole units continue to work.
+///
 /// Mints exactly `rate * total_duration` tokens to the sponsor first.
 /// Returns `(token_id, token_client)`.
 pub fn create_vesting_stream<'a>(
@@ -120,6 +122,7 @@ pub fn create_vesting_stream<'a>(
     cliff_duration: u32,
     total_duration: u32,
 ) -> (Address, soroban_sdk::token::TokenClient<'a>) {
+    // deposit = rate (whole tokens) * total_duration
     let deposit = rate * total_duration as i128;
     let (token_id, token_client) = setup_token(env, sponsor, deposit);
     client

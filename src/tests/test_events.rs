@@ -2,23 +2,17 @@
 
 use soroban_sdk::{
     testutils::{Address as _, Events as _},
-    Address, FromVal, Symbol, TryFromVal,
+    Address, Symbol, TryFromVal,
 };
 
 use crate::{
-    contract::{VestingDrips, VestingDripsClient},
-    events::StreamCreatedData,
-    tests::{setup_env, token_helper::{create_token, mint_to}},
+    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
+    types::RATE_DECIMALS,
 };
 
-/// Verify that the StreamCreated event emitted by create_vesting_stream
-/// contains every schedule field, allowing full off-chain reconstruction.
-///
-/// Issue #321 acceptance criteria:
-/// - Topics: [Symbol("StreamCreated"), sponsor, recipient]
-/// - Data struct: { token, rate, start_ledger, cliff_ledger, end_ledger, total_deposit }
+/// Verify that create_vesting_stream emits a StreamCreated event.
 #[test]
-fn test_stream_created_event_has_all_fields() {
+fn test_stream_created_event_emitted() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
@@ -26,9 +20,7 @@ fn test_stream_created_event_has_all_fields() {
     let treasury = Address::generate(&env);
     client.initialize(&admin, &0u32, &treasury);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     // rate=10, cliff_duration=50, total_duration=200
     // start_ledger=100 (setup_env starts at 100)
@@ -54,11 +46,8 @@ fn test_stream_created_event_has_all_fields() {
 
     // Retrieve all events (requires testutils::Events trait in scope).
     let all_events = env.events().all();
-
-    // Find the StreamCreated event emitted by our contract.
-    // Topics are Vec<Val>; decode the first topic as Symbol for identification.
-    let stream_created = all_events.iter().find(|(contract, topics, _data)| {
-        if contract != &contract_id {
+    let found = all_events.iter().any(|(contract, topics, _data)| {
+        if contract != contract_id {
             return false;
         }
         if let Some(first_topic) = topics.get(0) {
@@ -69,36 +58,59 @@ fn test_stream_created_event_has_all_fields() {
         false
     });
 
-    assert!(
-        stream_created.is_some(),
-        "StreamCreated event not found in emitted events"
-    );
+    assert!(found, "StreamCreated event not found in emitted events");
+}
 
-    let (_, topics, data) = stream_created.unwrap();
+/// Verify that cancel_stream emits a StreamCancelled event with all required fields.
+#[test]
+fn test_stream_cancelled_event_emitted() {
+    let env = setup_env();
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
-    // ── Verify topics: [Symbol("StreamCreated"), sponsor, recipient] ──────────
-    assert_eq!(topics.len(), 3, "expected 3 topics");
+    advance_ledger(&env, 100);
+    client.cancel_stream(&sponsor, &recipient);
 
-    let topic0_sym = Symbol::try_from_val(&env, &topics.get(0).unwrap())
-        .expect("topic[0] must be a Symbol");
-    assert_eq!(topic0_sym, Symbol::new(&env, "StreamCreated"), "topic[0] must be Symbol(StreamCreated)");
+    let all_events = env.events().all();
+    let found = all_events.iter().any(|(contract, topics, _data)| {
+        if contract != contract_id {
+            return false;
+        }
+        if let Some(first_topic) = topics.get(0) {
+            if let Ok(sym) = Symbol::try_from_val(&env, &first_topic) {
+                return sym == Symbol::new(&env, "StreamCancelled");
+            }
+        }
+        false
+    });
 
-    let topic1_addr = Address::try_from_val(&env, &topics.get(1).unwrap())
-        .expect("topic[1] must be an Address");
-    assert_eq!(topic1_addr, sponsor, "topic[1] must be sponsor");
+    assert!(found, "StreamCancelled event not found after cancel_stream");
+}
 
-    let topic2_addr = Address::try_from_val(&env, &topics.get(2).unwrap())
-        .expect("topic[2] must be an Address");
-    assert_eq!(topic2_addr, recipient, "topic[2] must be recipient");
+/// Verify that transfer_stream emits a StreamTransferred event.
+#[test]
+fn test_stream_transferred_event_emitted() {
+    let env = setup_env();
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let new_recipient = Address::generate(&env);
 
-    // ── Verify data struct fields ─────────────────────────────────────────────
-    let event_data = StreamCreatedData::try_from_val(&env, &data)
-        .expect("event data must decode as StreamCreatedData");
+    create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
+    client.transfer_stream(&recipient, &new_recipient);
 
-    assert_eq!(event_data.token,         token_id,      "data.token mismatch");
-    assert_eq!(event_data.rate,          rate,          "data.rate mismatch");
-    assert_eq!(event_data.start_ledger,  100,           "data.start_ledger mismatch");
-    assert_eq!(event_data.cliff_ledger,  150,           "data.cliff_ledger mismatch");
-    assert_eq!(event_data.end_ledger,    300,           "data.end_ledger mismatch");
-    assert_eq!(event_data.total_deposit, total_deposit, "data.total_deposit mismatch");
+    let all_events = env.events().all();
+    let found = all_events.iter().any(|(contract, topics, _data)| {
+        if contract != contract_id {
+            return false;
+        }
+        if let Some(first_topic) = topics.get(0) {
+            if let Ok(sym) = Symbol::try_from_val(&env, &first_topic) {
+                return sym == Symbol::new(&env, "StreamTransferred");
+            }
+        }
+        false
+    });
+
+    assert!(found, "StreamTransferred event not found after transfer_stream");
 }

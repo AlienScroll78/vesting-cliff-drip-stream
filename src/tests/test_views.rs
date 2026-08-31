@@ -3,7 +3,6 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::VestingDripsClient,
     tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
     types::StreamStatus,
 };
@@ -77,14 +76,14 @@ fn test_get_status_active() {
 }
 
 #[test]
-fn test_get_status_completed() {
+fn test_get_status_expired() {
     let env = setup_env();
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 200);
-    assert_eq!(client.get_status(&recipient), Some(StreamStatus::Completed));
+    assert_eq!(client.get_status(&recipient), Some(StreamStatus::Expired));
 }
 
 #[test]
@@ -96,3 +95,20 @@ fn test_get_status_none_when_no_schedule() {
     assert_eq!(client.get_status(&recipient), None);
 }
 
+#[test]
+fn test_claimable_amount_nonexistent_returns_zero() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let random = Address::generate(&env);
+
+    assert_eq!(client.claimable_amount(&random), 0);
+}
+
+#[test]
+fn test_is_cliff_passed_nonexistent_returns_false() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let random = Address::generate(&env);
+
+    assert!(!client.is_cliff_passed(&random));
+}

@@ -28,6 +28,7 @@ fn test_cancel_before_cliff_full_refund() {
     advance_ledger(&env, 20);
     client.cancel_stream(&sponsor, &recipient);
 
+    // Full deposit refunded: 200 * 10 = 2000
     assert_eq!(tc.balance(&sponsor), 2_000);
     assert_eq!(tc.balance(&recipient), 0);
     assert!(client.get_schedule(&recipient).is_none());
@@ -40,6 +41,8 @@ fn test_cancel_after_cliff_splits_tokens() {
     let (sponsor, recipient, token_id) = make_stream(&env, &client);
     let tc = token_client(&env, &token_id);
 
+    // At ledger 200 (start=100, cliff=150): earned = 100 ledgers * 10 = 1000
+    // remaining = 100 ledgers * 10 = 1000
     advance_ledger(&env, 100);
     client.cancel_stream(&sponsor, &recipient);
 
@@ -65,6 +68,7 @@ fn test_cancel_one_ledger_before_cliff_full_refund() {
     let (sponsor, recipient, token_id) = make_stream(&env, &client);
     let tc = token_client(&env, &token_id);
 
+    // ledger 149 < cliff_ledger 150
     advance_ledger(&env, 49);
     client.cancel_stream(&sponsor, &recipient);
 
@@ -80,6 +84,7 @@ fn test_cancel_exactly_at_cliff_splits_tokens() {
     let (sponsor, recipient, token_id) = make_stream(&env, &client);
     let tc = token_client(&env, &token_id);
 
+    // At cliff_ledger 150: earned = 50 * 10 = 500
     advance_ledger(&env, 50);
     client.cancel_stream(&sponsor, &recipient);
 
@@ -95,6 +100,7 @@ fn test_cancel_one_ledger_after_cliff_splits_tokens() {
     let (sponsor, recipient, token_id) = make_stream(&env, &client);
     let tc = token_client(&env, &token_id);
 
+    // At ledger 151: earned = 51 * 10 = 510
     advance_ledger(&env, 51);
     client.cancel_stream(&sponsor, &recipient);
 
@@ -102,4 +108,3 @@ fn test_cancel_one_ledger_after_cliff_splits_tokens() {
     assert_eq!(tc.balance(&sponsor), 1_490);
     assert!(client.get_schedule(&recipient).is_none());
 }
-

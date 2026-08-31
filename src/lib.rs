@@ -1,13 +1,17 @@
 //! # Vesting Cliff Drip Stream
 //!
 //! A Soroban smart contract that introduces a time-locked cliff period to a
-//! linear token streaming model. Designed for long-term contributor retention.
+//! linear token streaming model with fixed-point rate precision.
 //!
 //! ## How It Works
 //! 1. A sponsor deposits the full token allocation upfront into the contract vault.
 //! 2. The recipient cannot claim anything until the `cliff_ledger` is reached.
 //! 3. Once the cliff passes, all tokens accrued since `start_ledger` unlock instantly.
 //! 4. Remaining tokens continue to drip linearly per ledger until `end_ledger`.
+//!
+//! ## Fixed-Point Rates (Issue #5)
+//! `rate_per_ledger` is stored scaled by `RATE_DECIMALS = 10_000_000`.
+//! Pass `rate = 10_000_000` for 1 token/ledger, `rate = 5_000_000` for 0.5/ledger.
 
 #![no_std]
 #![cfg_attr(not(test), deny(missing_docs))]
@@ -23,7 +27,7 @@ mod events;
 mod storage;
 mod types;
 
-pub use contract::{calculate_total_deposit, compute_variable_claimable, StreamStats, VestingDrips};
+pub use contract::{calculate_total_deposit, StreamStats, VestingDrips};
 pub use error::VestingError;
 pub use events::StreamCreatedData;
 pub use types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule};
