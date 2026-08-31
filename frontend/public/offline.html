@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline — VestingStream</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+      opacity: 0.8;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #63b3ed;
+      margin-bottom: 0.75rem;
+    }
+
+    p {
+      font-size: 1rem;
+      color: #a0aec0;
+      max-width: 420px;
+      line-height: 1.6;
+      margin-bottom: 0.5rem;
+    }
+
+    .card {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 12px;
+      padding: 2.5rem 2rem;
+      max-width: 480px;
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    .retry-btn {
+      display: inline-block;
+      margin-top: 1.75rem;
+      background: #3182ce;
+      color: #fff;
+      border: none;
+      padding: 0.65rem 1.75rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+    }
+    .retry-btn:hover { background: #2b6cb0; }
+
+    .status {
+      margin-top: 1.25rem;
+      font-size: 0.82rem;
+      color: #4a5568;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon" aria-hidden="true">📡</div>
+    <h1>You're offline</h1>
+    <p>
+      VestingStream couldn't reach the network. Please check your internet
+      connection and try again.
+    </p>
+    <p>
+      Your cached data is still available — reconnect to submit transactions
+      or view live stream updates.
+    </p>
+    <button class="retry-btn" onclick="window.location.reload()">
+      Retry connection
+    </button>
+    <p class="status" id="online-status" aria-live="polite"></p>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('online-status');
+
+    function updateStatus() {
+      if (navigator.onLine) {
+        statusEl.textContent = '✓ Back online — reloading…';
+        setTimeout(() => window.location.replace('/'), 800);
+      }
+    }
+
+    window.addEventListener('online', updateStatus);
+    // Check immediately in case the page was loaded while briefly offline
+    updateStatus();
+  </script>
+</body>
+</html>

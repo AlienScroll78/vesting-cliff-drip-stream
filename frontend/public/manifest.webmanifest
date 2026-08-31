@@ -1,0 +1,22 @@
+{
+  "name": "VestingStream",
+  "short_name": "VestingStream",
+  "description": "Cliff + linear drip token vesting on Stellar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#3182ce",
+  "icons": [
+    {
+      "src": "/favicon-32.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/favicon-180.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

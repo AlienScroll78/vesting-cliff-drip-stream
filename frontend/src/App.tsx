@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
@@ -13,8 +13,29 @@ import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animatio
 // #120 — onboarding tour
 import { useOnboardingTour } from './useOnboardingTour'
 
+// #539 — register service worker for offline support
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .then((registration) => {
+          console.info('[SW] registered, scope:', registration.scope)
+        })
+        .catch((err) => {
+          console.warn('[SW] registration failed:', err)
+        })
+    })
+  }
+}
+
 function App() {
   const [count, setCount] = useState(0)
+
+  // #539 — register SW once on mount
+  useEffect(() => {
+    registerServiceWorker()
+  }, [])
   // demo: simulate an error code returned from the contract
   const [errorCode, setErrorCode] = useState<number | null>(null)
 
