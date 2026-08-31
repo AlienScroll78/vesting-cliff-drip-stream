@@ -4,6 +4,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { VestingTimeline } from "@/components/VestingTimeline";
+import { StreamDetailSkeleton } from "@/components/Skeletons";
 import { VestingStream } from "@/types";
 import { useWallet } from "@/contexts/WalletContext";
 
@@ -50,7 +51,11 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   }, []);
 
   if (stream === undefined) {
-    return <main className="page"><p>Loading…</p></main>;
+    return (
+      <main className="page" aria-busy="true">
+        <StreamDetailSkeleton />
+      </main>
+    );
   }
 
   if (stream === null) {
