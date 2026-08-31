@@ -1,32 +1,149 @@
 {
   "appTitle": "Vesting Streams",
-  "connectWallet": "Connect Wallet",
-  "disconnectWallet": "Disconnect",
+
+  "nav": {
+    "dashboard": "Dashboard",
+    "create": "Create",
+    "history": "History",
+    "settings": "Settings",
+    "myStreams": "My Streams",
+    "compareStreams": "Compare Streams",
+    "back": "← Back"
+  },
+
+  "wallet": {
+    "connect": "Connect Wallet",
+    "disconnect": "Disconnect",
+    "connected": "Connected",
+    "address": "Address",
+    "copyAddress": "Copy address",
+    "copied": "Copied!"
+  },
+
   "claim": "Claim",
   "claimTokens": "Claim Tokens",
   "claimableBalance": "Claimable balance",
+  "claiming": "Claiming…",
+  "claimSubmitted": "Claim submitted! ✓",
+  "cliffNotReached": "Cliff not reached",
+  "retry": "Retry",
+
   "cancel": "Cancel",
   "confirm": "Confirm",
   "close": "Close",
+  "dismiss": "Dismiss",
+  "back": "Back",
+  "search": "Search",
+  "loading": "Loading…",
+  "error": "Error",
+  "submit": "Submit",
+  "export": "Export",
+  "exportCsv": "Export CSV",
+  "newStream": "+ New Stream",
+  "cancelCreate": "✕ Cancel",
+
   "status": {
     "active": "Active",
     "precliff": "Pre-cliff",
     "completed": "Completed",
     "cancelled": "Cancelled"
   },
+
   "legend": "Status legend",
-  "streams": "Your streams",
-  "noStreams": "No streams yet",
-  "createStream": "Create a stream",
-  "rate": "Rate (tokens / ledger)",
-  "cliffDuration": "Cliff duration (ledgers)",
-  "totalDuration": "Total duration (ledgers)",
-  "recipient": "Recipient",
-  "sponsor": "Sponsor",
-  "txPending": "Transaction pending…",
-  "txConfirmed": "Transaction confirmed",
-  "txFailed": "Transaction failed",
-  "viewOnExplorer": "View on explorer",
+
+  "streams": {
+    "title": "Your streams",
+    "myStreams": "My Streams",
+    "noStreams": "No streams yet",
+    "create": "Create a stream",
+    "all": "All",
+    "filterByStatus": "Filter by status",
+    "filterByToken": "Filter by token",
+    "allTokens": "All tokens",
+    "sortBy": "Sort by",
+    "viewCard": "Card view",
+    "viewTable": "Table view",
+    "claimableAmount": "Claimable",
+    "cliffDate": "Cliff date",
+    "endDate": "End date",
+    "recipient": "Recipient",
+    "token": "Token",
+    "rate": "Rate / ledger",
+    "cliffLedger": "Cliff ledger",
+    "endLedger": "End ledger",
+    "actions": "Actions",
+    "selectAll": "Select all cancellable streams",
+    "selectStream": "Select stream for {{address}}",
+    "cancelStream": "Cancel stream for {{address}}",
+    "bulkSelected": "{{count}} stream selected",
+    "bulkSelected_plural": "{{count}} streams selected",
+    "cancelSelected": "Cancel selected",
+    "clearSelection": "Clear selection",
+    "confirmBulkCancel": "Cancel {{count}} stream?",
+    "confirmBulkCancel_plural": "Cancel {{count}} streams?",
+    "bulkCancelWarning": "This action will cancel all selected streams. Claimable tokens (post-cliff) will be sent to recipients; the remainder will be refunded to you.",
+    "confirmCancel": "Confirm cancel",
+    "page": "Page {{page}} of {{total}}",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "ascending": "ascending",
+    "descending": "descending"
+  },
+
+  "stream": {
+    "create": "Create Vesting Stream",
+    "rate": "Rate (tokens / ledger)",
+    "cliffDuration": "Cliff duration (ledgers)",
+    "totalDuration": "Total duration (ledgers)",
+    "recipient": "Recipient",
+    "sponsor": "Sponsor",
+    "token": "Token",
+    "totalDeposit": "Total deposit",
+    "totalVested": "Total vested",
+    "timeline": "Toggle vesting timeline chart",
+    "cliffUnlock": "Cliff unlock"
+  },
+
+  "horizon": {
+    "degraded": "Degraded",
+    "offline": "Offline",
+    "degradedMsg": "Response is slow ({{latency}} ms). Transactions may be delayed.",
+    "offlineMsg": "Cannot reach Horizon. Transactions are currently unavailable.",
+    "lastChecked": "Last checked: {{time}}",
+    "statusPage": "Status page ↗",
+    "recheck": "↺ Recheck",
+    "dismissFor5Min": "Dismiss for 5 minutes"
+  },
+
+  "tx": {
+    "pending": "Transaction pending…",
+    "confirmed": "Transaction confirmed",
+    "failed": "Transaction failed",
+    "viewOnExplorer": "View on explorer",
+    "estimatingFee": "⏳ Estimating fee…",
+    "feeUnavailable": "⚠️ Fee estimate unavailable",
+    "fee": "Estimated fee: {{amount}} XLM"
+  },
+
+  "bottomSheet": {
+    "youCanClaim": "You can claim",
+    "tokensLocked": "Tokens locked until cliff",
+    "cliffNotReached": "🔒 Cliff not reached",
+    "unlockIn": "Tokens unlock in approximately {{duration}} ({{ledgers}} ledgers remaining)",
+    "tokensStillLocked": "Your tokens are still locked until the cliff.",
+    "dragToClose": "Drag down or tap to close"
+  },
+
+  "cancel": "Cancel",
+
+  "cancelModal": {
+    "title": "Cancel Stream",
+    "warning": "Cancelling will stop token dripping immediately.",
+    "recipientReceives": "Recipient receives",
+    "sponsorRefund": "You receive back",
+    "cliffNotReachedRefund": "Cliff not yet reached — full deposit refunded to you."
+  },
+
   "admin": {
     "title": "Admin Panel",
     "indexerStatus": "Indexer Status",
@@ -39,6 +156,51 @@
     "enterToken": "Enter admin token",
     "submit": "Submit"
   },
+
+  "history": {
+    "title": "Transaction History",
+    "noHistory": "No transactions yet.",
+    "type": {
+      "claim": "Claim",
+      "create": "Create",
+      "cancel": "Cancel"
+    }
+  },
+
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "darkMode": "Dark mode",
+    "analytics": "Analytics",
+    "optOut": "Opt out of analytics"
+  },
+
+  "accessibility": {
+    "skipToContent": "Skip to main content",
+    "copyRecipient": "Copy recipient address",
+    "pagination": "Pagination"
+  },
+
   "skipToContent": "Skip to main content",
-  "language": "Language"
+  "language": "Language",
+
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "notFound": "Not found",
+    "cliffNotReached": "Cliff not reached yet. Come back after the cliff date.",
+    "nothingToClaim": "Nothing to claim at this time."
+  },
+
+  "dates": {
+    "minutes": "{{count}} minute",
+    "minutes_plural": "{{count}} minutes",
+    "hours": "{{count}} hour",
+    "hours_plural": "{{count}} hours",
+    "days": "{{count}} day",
+    "days_plural": "{{count}} days"
+  },
+
+  "mobile": {
+    "swipeToClose": "Swipe down to close"
+  }
 }
