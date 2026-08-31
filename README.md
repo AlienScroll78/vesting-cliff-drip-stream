@@ -115,6 +115,7 @@ A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) run
 | [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
 | [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
 | [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
+| [Backfill Stream Events](docs/runbooks/backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or decoder fix |
 
 See the full [runbooks index](docs/runbooks/README.md) for all operational procedures.
 

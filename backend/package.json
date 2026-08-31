@@ -13,11 +13,14 @@
   "dependencies": {
     "express": "^4.19.0",
     "express-rate-limit": "^7.0.0",
+    "pg": "^8.13.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "^24.0.0"
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.10",
+    "vitest": "^2.1.9"
   }
 }

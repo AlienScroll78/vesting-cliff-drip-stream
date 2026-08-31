@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci
 
 all: build
 
@@ -58,6 +58,32 @@ fuzz:
 	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/create_vesting_stream/
 	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/claim_vested/
 	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/metadata_validation/
+
+## Run fuzz targets in CI mode – 10-minute wall-clock budget per target.
+## Runs create_vesting_stream first (with the full structured corpus), then
+## claim_vested and metadata_validation at 60 s each.
+## Usage: make fuzz-ci
+## Requires: nightly Rust toolchain, cargo-fuzz installed.
+fuzz-ci:
+	mkdir -p fuzz/artifacts/create_vesting_stream fuzz/artifacts/claim_vested fuzz/artifacts/metadata_validation
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream \
+		fuzz/corpus/create_vesting_stream \
+		-- \
+		-max_total_time=600 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/create_vesting_stream/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested \
+		fuzz/corpus/claim_vested \
+		-- \
+		-max_total_time=60 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/claim_vested/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation \
+		fuzz/corpus/metadata_validation \
+		-- \
+		-max_total_time=60 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/metadata_validation/
 
 ## Build rustdoc; fails on any missing-doc warning (mirrors CI)
 doc:
