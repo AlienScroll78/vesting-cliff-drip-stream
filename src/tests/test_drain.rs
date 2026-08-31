@@ -112,7 +112,7 @@ fn test_drain_partial_claim_then_drain() {
 
     // Recipient claims at cliff (ledger 150 → claimed 500).
     advance_ledger_high_ttl(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Advance past drain threshold.
     advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 151);

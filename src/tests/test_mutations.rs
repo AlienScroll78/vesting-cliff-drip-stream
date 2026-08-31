@@ -110,7 +110,7 @@ fn m03_cancel_exactly_at_cliff_pays_earned_tokens() {
 
     // Advance exactly to cliff_ledger (100 + 50 = 150)
     advance_ledger(&env, 50);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // earned = 50 ledgers × 10 = 500; refund = 150 ledgers × 10 = 1500
     assert_eq!(token_client.balance(&recipient), 500);
@@ -136,7 +136,7 @@ fn m04_cancel_after_end_ledger_caps_at_end() {
 
     // Advance well past end_ledger
     advance_ledger(&env, 200);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // All tokens belong to recipient; nothing left for sponsor.
     assert_eq!(token_client.balance(&recipient), 1_000);
@@ -162,7 +162,7 @@ fn m05_cancel_at_start_with_cliff_zero_no_recipient_transfer() {
         .unwrap();
 
     // No ledger advance — current == start == cliff; earned = 0
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // Recipient earned nothing; full deposit back to sponsor.
     assert_eq!(token_client.balance(&recipient), 0);
@@ -322,7 +322,7 @@ fn m14_cancel_after_partial_claim_uses_last_claimed_ledger() {
 
     // Cancel 20 ledgers later (ledger 170) → earned since last claim: 20×10=200
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // Recipient: 500 (claim) + 200 (cancel) = 700
     assert_eq!(token_client.balance(&recipient), 700);

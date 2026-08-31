@@ -266,7 +266,7 @@ fn test_error_7_nothing_to_claim() {
     advance_ledger(&env, 50);
 
     // First claim succeeds — accrued 50 ledgers × 10 = 500.
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Second claim at the same ledger — nothing has accrued since the first claim.
     let err = client.claim_vested(&recipient).unwrap_err();

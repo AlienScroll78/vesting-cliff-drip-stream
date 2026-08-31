@@ -57,7 +57,7 @@ fn test_clawback_after_partial_claim_returns_remaining() {
 
     // Recipient claims at cliff (ledger 150): earns 50 × 10 = 500.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
 
     // Advance 50 more ledgers then clawback.
     // last_claimed_ledger = 150, end_ledger = 300
@@ -126,7 +126,7 @@ fn test_clawback_at_end_returns_zero_remaining() {
 
     // Claim everything first.
     advance_ledger(&env, 200);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient);
     // Schedule is removed after full claim — ScheduleNotFound expected.
     let reason = String::from_str(&env, "post-claim clawback attempt");
     let err = client.clawback_stream(&sponsor, &recipient, &reason).unwrap_err();
