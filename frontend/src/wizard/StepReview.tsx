@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ledgersToDuration } from './useWizard'
+import { ledgersToDuration, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -14,11 +14,14 @@ type State = 'idle' | 'submitting' | 'success' | 'error'
 export function StepReview({ data, onNext, onBack, onDone }: Props) {
   const [state, setState] = useState<State>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+  const [txHash, setTxHash] = useState<string | null>(null)
 
   const cliff = Number(data.cliffDuration)
   const total = Number(data.totalDuration)
   const rate = Number(data.rate)
   const deposit = rate * total
+
+  const overflow = isDepositOverflow(rate, total)
 
   const costBreakdown = useMemo(() => {
     const cliffTokens = rate * cliff
@@ -27,9 +30,13 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
   }, [rate, cliff, total, deposit])
 
   async function submit() {
+    if (overflow) return
     setState('submitting')
     try {
+      // TODO: call create_vesting_stream via Freighter and obtain real tx hash
       await new Promise(r => setTimeout(r, 1200))
+      const mockHash = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'
+      setTxHash(mockHash)
       setState('success')
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Transaction failed')
@@ -38,6 +45,10 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
   }
 
   if (state === 'success') {
+    const network = data.walletAddress ? 'testnet' : 'testnet'
+    const explorerBase = network === 'mainnet'
+      ? 'https://stellar.expert/explorer/public/tx/'
+      : 'https://stellar.expert/explorer/testnet/tx/'
     return (
       <div style={{ ...styles.card, alignItems: 'center', textAlign: 'center' }}>
         <div style={styles.successIcon}>✓</div>
@@ -45,11 +56,23 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
         <p style={styles.sub}>
           Tokens are now locked. The recipient can claim after the cliff.
         </p>
+        {txHash && (
+          <a
+            href={`${explorerBase}${txHash}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: '0.8rem', color: 'var(--color-active)', fontFamily: 'monospace', wordBreak: 'break-all' }}
+            data-testid="tx-explorer-link"
+          >
+            View on Stellar Expert ↗
+          </a>
+        )}
         <button
           type="button"
           className="btn btn-primary btn-full"
           onClick={onDone}
           data-testid="wizard-done-btn"
+          style={{ marginTop: '1rem' }}
         >
           Done
         </button>
@@ -92,6 +115,23 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
         </div>
       </div>
 
+      {overflow && (
+        <div
+          role="alert"
+          data-testid="overflow-warning"
+          style={{
+            padding: '0.75rem',
+            background: '#fef2f2',
+            border: '1px solid var(--color-cancelled)',
+            borderRadius: 'var(--radius)',
+            fontSize: '0.85rem',
+            color: 'var(--color-cancelled)',
+          }}
+        >
+          ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration.
+        </div>
+      )}
+
       <div style={styles.warningBox}>
         ⚠️ The full deposit of <strong>{deposit.toLocaleString()} {data.tokenSymbol || 'tokens'}</strong> will be
         transferred from your wallet on confirmation. Once submitted you cannot undo the deposit.
@@ -116,7 +156,7 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
         <button
           type="button"
           className="btn btn-primary"
-          disabled={state === 'submitting'}
+          disabled={state === 'submitting' || overflow}
           onClick={submit}
           data-testid="wizard-submit-btn"
         >

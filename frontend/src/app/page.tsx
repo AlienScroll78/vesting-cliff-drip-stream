@@ -15,6 +15,7 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
+import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
 // #389 — keyboard navigation & focus management
@@ -326,18 +327,7 @@ export default function Home() {
         )}
 
         {showCreate && (
-          <section
-            style={{
-              marginTop: "1rem",
-              padding: "1.25rem",
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius)",
-            }}
-          >
-            <h2 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>Create Vesting Stream</h2>
-            <StreamCreateForm onSuccess={() => setShowCreate(false)} />
-          </section>
+          <CreateStreamWizard onClose={() => setShowCreate(false)} />
         )}
 
         <StreamList />

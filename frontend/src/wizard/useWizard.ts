@@ -58,9 +58,9 @@ export interface WizardFormData {
   recipient: string
   tokenAddress: string
   tokenSymbol: string
-  rate: string
-  cliffDuration: string
-  totalDuration: string
+  rate: string          // tokens per ledger, raw input
+  cliffDuration: string // ledgers
+  totalDuration: string // ledgers
   walletAddress: string
 }
 
@@ -76,12 +76,32 @@ const INITIAL_DATA: WizardFormData = {
 
 const LEDGERS_PER_SECOND = 0.2
 
+/** i128::MAX value for overflow detection */
+export const I128_MAX = BigInt('170141183460469231731687303715884105727')
+
+/** Convert a ledger count to a human-readable duration string. */
 export function ledgersToDuration(ledgers: number): string {
   const seconds = ledgers / LEDGERS_PER_SECOND
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h`
-  return `${Math.round(seconds / 86400)}d`
+  if (seconds < 86400 * 30) return `${Math.round(seconds / 86400)}d`
+  if (seconds < 86400 * 365) return `${(seconds / (86400 * 30)).toFixed(1)}mo`
+  return `${(seconds / (86400 * 365)).toFixed(1)}yr`
+}
+
+/**
+ * Client-side equivalent of Rust checked_mul: returns true when
+ * rate * totalDuration would overflow i128.
+ */
+export function isDepositOverflow(rate: number, totalDuration: number): boolean {
+  if (rate <= 0 || totalDuration <= 0) return false
+  try {
+    const deposit = BigInt(Math.floor(rate)) * BigInt(Math.floor(totalDuration))
+    return deposit > I128_MAX
+  } catch {
+    return true
+  }
 }
 
 function getStepFromHash(): number {

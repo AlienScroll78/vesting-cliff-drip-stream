@@ -29,7 +29,7 @@ export function CreateStreamWizard({ onClose }: Props) {
       style={styles.overlay}
       onClick={e => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div style={styles.panel}>
+      <div style={styles.panel} role="document">
         <div style={styles.header}>
           <h1 style={styles.title}>Create stream</h1>
           {onClose && (
@@ -107,6 +107,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    maxHeight: '90vh',
+    overflowY: 'auto',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -116,6 +118,8 @@ const styles: Record<string, React.CSSProperties> = {
   close: {
     background: 'none', border: 'none', cursor: 'pointer',
     fontSize: '1rem', color: '#6b7280', padding: '0.25rem',
+    minWidth: '44px', minHeight: '44px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   body: { padding: '0 1.5rem 1.5rem' },
 }

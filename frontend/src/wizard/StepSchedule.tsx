@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Tooltip } from '../Tooltip'
-import { ledgersToDuration, scheduleSchema } from './useWizard'
+import { ledgersToDuration, scheduleSchema, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -43,10 +43,11 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
   const cliff = Number(data.cliffDuration)
   const total = Number(data.totalDuration)
   const deposit = rate && total ? (rate * total).toLocaleString() : '—'
+  const overflow = data.rate && data.totalDuration ? isDepositOverflow(rate, total) : false
 
   const debouncedDeposit = useDebounce(deposit, 300)
 
-  const canContinue = result.success
+  const canContinue = result.success && !overflow
 
   const handleBlur = useCallback((field: string) => {
     setBlurred(prev => new Set(prev).add(field))
@@ -128,6 +129,23 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
           </span>
         )}
       </p>
+
+      {overflow && (
+        <div
+          role="alert"
+          data-testid="overflow-warning"
+          style={{
+            padding: '0.75rem',
+            background: '#fef2f2',
+            border: '1px solid var(--color-cancelled)',
+            borderRadius: 'var(--radius)',
+            fontSize: '0.85rem',
+            color: 'var(--color-cancelled)',
+          }}
+        >
+          ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration before continuing.
+        </div>
+      )}
 
       <div style={styles.actions}>
         <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
