@@ -124,6 +124,46 @@ const configSchema = z.object({
   /** Enable CORS for all origins (useful in development). @default false */
   corsAllOrigins: booleanString.default('false'),
 
+  // ── Rate limiting (Issue #551) ────────────────────────────────────────────
+
+  /** Max requests per IP per window. @default 100 */
+  rateLimitIpMax: z
+    .string()
+    .default('100')
+    .transform(Number)
+    .pipe(z.number().int().positive()),
+
+  /** Max requests per API key per window. @default 1000 */
+  rateLimitKeyMax: z
+    .string()
+    .default('1000')
+    .transform(Number)
+    .pipe(z.number().int().positive()),
+
+  /**
+   * Max write requests (create/cancel/claim) per IP per window.
+   * Applies a stricter limit to mutation endpoints.
+   * @default 10
+   */
+  rateLimitWriteMax: z
+    .string()
+    .default('10')
+    .transform(Number)
+    .pipe(z.number().int().positive()),
+
+  /** Rate-limit window size in seconds. @default 60 */
+  rateLimitWindowSec: z
+    .string()
+    .default('60')
+    .transform(Number)
+    .pipe(z.number().int().positive()),
+
+  /** Comma-separated IPs that bypass rate limiting. @default "" */
+  rateLimitBypassIps: z.string().default('').pipe(csvArray),
+
+  /** Comma-separated API keys that bypass rate limiting. @default "" */
+  rateLimitBypassKeys: z.string().default('').pipe(csvArray),
+
   // ── Logging ───────────────────────────────────────────────────────────────
   /** Minimum log level. @default "info" */
   logLevel: z
@@ -160,6 +200,12 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env) {
     jwtExpiresIn:         env.JWT_EXPIRES_IN,
     corsAllOrigins:       env.CORS_ALL_ORIGINS,
     logLevel:             env.LOG_LEVEL,
+    rateLimitIpMax:       env.RATE_LIMIT_IP_MAX,
+    rateLimitKeyMax:      env.RATE_LIMIT_KEY_MAX,
+    rateLimitWriteMax:    env.RATE_LIMIT_WRITE_MAX,
+    rateLimitWindowSec:   env.RATE_LIMIT_WINDOW_SEC,
+    rateLimitBypassIps:   env.RATE_LIMIT_BYPASS_IPS,
+    rateLimitBypassKeys:  env.RATE_LIMIT_BYPASS_KEYS,
   });
 
   if (!result.success) {
