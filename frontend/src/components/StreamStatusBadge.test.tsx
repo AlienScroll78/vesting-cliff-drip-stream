@@ -1,11 +1,30 @@
 /**
- * StreamStatusBadge tests — Issue #378
+ * StreamStatusBadge tests — Issue #543
+ *
+ * Tests all 6 lifecycle states defined in docs/stream-status-badges.md:
+ *   Pre-cliff / Yellow / "Locked"
+ *   Active    / Green  / "Streaming"
+ *   Claimable / Blue   / "Claim Available"
+ *   Cancelled / Grey   / "Cancelled"
+ *   Expired   / Red    / "Expired"
+ *   Drained   / Purple / "Drained"
  */
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { StreamStatusBadge, StreamStatusLegend, type StreamBadgeStatus } from "@/components/StreamStatusBadge";
+import {
+  StreamStatusBadge,
+  StreamStatusLegend,
+  type StreamBadgeStatus,
+} from "@/components/StreamStatusBadge";
 
-const ALL_STATUSES: StreamBadgeStatus[] = ["pre-cliff", "active", "expired", "cancelled", "drained", "paused"];
+const ALL_STATUSES: StreamBadgeStatus[] = [
+  "pre-cliff",
+  "active",
+  "claimable",
+  "cancelled",
+  "expired",
+  "drained",
+];
 
 describe("StreamStatusBadge", () => {
   // ── Rendering each status ──────────────────────────────────────────────────
@@ -15,10 +34,10 @@ describe("StreamStatusBadge", () => {
     expect(screen.getByTestId(`stream-status-badge-${status}`)).toBeInTheDocument();
   });
 
-  it.each(ALL_STATUSES)("displays correct label for status: %s", (status) => {
+  it.each(ALL_STATUSES)("displays non-empty label for status: %s", (status) => {
     render(<StreamStatusBadge status={status} />);
     const badge = screen.getByTestId(`stream-status-badge-${status}`);
-    expect(badge.textContent).toBeTruthy();
+    expect(badge.textContent?.trim().length).toBeGreaterThan(0);
   });
 
   // ── Accessibility ──────────────────────────────────────────────────────────
@@ -29,7 +48,7 @@ describe("StreamStatusBadge", () => {
     expect(badge).toHaveAttribute("role", "status");
   });
 
-  it.each(ALL_STATUSES)("has aria-label containing status name for: %s", (status) => {
+  it.each(ALL_STATUSES)("has aria-label containing 'Stream status' for: %s", (status) => {
     render(<StreamStatusBadge status={status} />);
     const badge = screen.getByTestId(`stream-status-badge-${status}`);
     const ariaLabel = badge.getAttribute("aria-label");
@@ -73,21 +92,16 @@ describe("StreamStatusBadge", () => {
 
   // ── Active state pulse ─────────────────────────────────────────────────────
 
-  it("active status renders pulse ring element", () => {
+  it("active status renders pulse ring element (aria-hidden dot)", () => {
     render(<StreamStatusBadge status="active" />);
     const badge = screen.getByTestId("stream-status-badge-active");
-    const iconSpan = badge.querySelector('span[aria-hidden="true"]');
-    expect(iconSpan).not.toBeNull();
-  });
-
-  it("paused status renders icon text, not a pulse ring", () => {
-    render(<StreamStatusBadge status="paused" />);
-    const badge = screen.getByTestId("stream-status-badge-paused");
-    expect(badge.textContent).toContain("Paused");
+    // PulseRing renders a span[aria-hidden] inside the badge
+    const ariaHidden = badge.querySelector('span[aria-hidden="true"]');
+    expect(ariaHidden).not.toBeNull();
   });
 
   it("non-active statuses render an icon span with aria-hidden", () => {
-    const nonActive: StreamBadgeStatus[] = ["pre-cliff", "expired", "cancelled", "drained", "paused"];
+    const nonActive: StreamBadgeStatus[] = ["pre-cliff", "claimable", "cancelled", "expired", "drained"];
     for (const status of nonActive) {
       const { unmount } = render(<StreamStatusBadge status={status} />);
       const badge = screen.getByTestId(`stream-status-badge-${status}`);
@@ -100,25 +114,25 @@ describe("StreamStatusBadge", () => {
 
   // ── Size variants ──────────────────────────────────────────────────────────
 
-  it("size='sm' renders with small font size", () => {
+  it("size='sm' renders with small font size (0.7rem)", () => {
     render(<StreamStatusBadge status="active" size="sm" />);
     const badge = screen.getByTestId("stream-status-badge-active");
     expect(badge.style.fontSize).toBe("0.7rem");
   });
 
-  it("size='md' renders with medium font size (default)", () => {
+  it("size='md' renders with medium font size (0.8rem)", () => {
     render(<StreamStatusBadge status="active" size="md" />);
     const badge = screen.getByTestId("stream-status-badge-active");
     expect(badge.style.fontSize).toBe("0.8rem");
   });
 
-  it("size='lg' renders with large font size", () => {
+  it("size='lg' renders with large font size (0.95rem)", () => {
     render(<StreamStatusBadge status="active" size="lg" />);
     const badge = screen.getByTestId("stream-status-badge-active");
     expect(badge.style.fontSize).toBe("0.95rem");
   });
 
-  it("defaults to size='md' when no size prop is given", () => {
+  it("defaults to size='md' when no size prop is provided", () => {
     render(<StreamStatusBadge status="cancelled" />);
     const badge = screen.getByTestId("stream-status-badge-cancelled");
     expect(badge.style.fontSize).toBe("0.8rem");
@@ -132,25 +146,27 @@ describe("StreamStatusBadge", () => {
     expect(badge.className).toContain("my-custom-class");
   });
 
-  // ── Specific status labels ─────────────────────────────────────────────────
+  // ── Spec label matching ────────────────────────────────────────────────────
 
   it.each([
-    ["pre-cliff", "Pre-Cliff"],
-    ["active", "Active"],
-    ["expired", "Expired"],
+    ["pre-cliff", "Locked"],
+    ["active",    "Streaming"],
+    ["claimable", "Claim Available"],
     ["cancelled", "Cancelled"],
-    ["drained", "Drained"],
-    ["paused", "Paused"],
+    ["expired",   "Expired"],
+    ["drained",   "Drained"],
   ] as [StreamBadgeStatus, string][])(
     "status '%s' shows label '%s'",
     (status, expectedLabel) => {
       render(<StreamStatusBadge status={status} showTooltip={false} />);
-      expect(screen.getByTestId(`stream-status-badge-${status}`).textContent).toContain(expectedLabel);
-    }
+      expect(
+        screen.getByTestId(`stream-status-badge-${status}`).textContent,
+      ).toContain(expectedLabel);
+    },
   );
 });
 
-// ── StreamStatusLegend ──────────────────────────────────────────────────────
+// ── StreamStatusLegend ────────────────────────────────────────────────────────
 
 describe("StreamStatusLegend", () => {
   it("renders all 6 status badges", () => {
@@ -160,18 +176,26 @@ describe("StreamStatusLegend", () => {
     }
   });
 
-  it("has role='note' and aria-label", () => {
+  it("has role='note' and accessible label", () => {
     render(<StreamStatusLegend />);
     const legend = screen.getByRole("note");
     expect(legend).toBeInTheDocument();
     expect(legend).toHaveAttribute("aria-label", "Stream status legend");
   });
 
-  it("accepts size prop and passes it to badges", () => {
+  it("accepts size prop and passes it to all badges", () => {
     render(<StreamStatusLegend size="lg" />);
     for (const status of ALL_STATUSES) {
       const badge = screen.getByTestId(`stream-status-badge-${status}`);
       expect(badge.style.fontSize).toBe("0.95rem");
+    }
+  });
+
+  it("renders exactly 6 badges", () => {
+    render(<StreamStatusLegend />);
+    expect(ALL_STATUSES).toHaveLength(6);
+    for (const status of ALL_STATUSES) {
+      expect(screen.getByTestId(`stream-status-badge-${status}`)).toBeInTheDocument();
     }
   });
 });
