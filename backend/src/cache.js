@@ -1,8 +1,8 @@
 /**
  * Redis-backed cache for view-function responses (Issue #29).
  *
- * Cache key format : `view:<recipient>:<ledger>`
- * TTL              : CACHE_TTL_MS (default 5 000 ms ≈ one ledger close)
+ * Cache key format : `view:<recipient>:<fn>`
+ * Default TTL      : CACHE_TTL_MS (default 5 000 ms ≈ one ledger close)
  *
  * When REDIS_URL is absent the module falls back to a plain in-process
  * Map so the server starts without Redis in development / CI.
@@ -56,8 +56,8 @@ function localGet(key) {
   return entry.value;
 }
 
-function localSet(key, value) {
-  _local.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+function localSet(key, value, ttlMs) {
+  _local.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
 function localDel(pattern) {
@@ -66,12 +66,17 @@ function localDel(pattern) {
   }
 }
 
+// ── Metrics counters ──────────────────────────────────────────────────────────
+
+let _hits = 0;
+let _misses = 0;
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Build a cache key for a view response scoped to one ledger.
+ * Build a cache key for a view response scoped to a recipient and function.
  * @param {string} recipient
- * @param {number} ledger
+ * @param {string} fn  - view function name (e.g. "get_schedule")
  */
 export function viewKey(recipient, ledger) {
   return `view:${recipient}:${ledger}`;
@@ -85,13 +90,14 @@ export function viewKey(recipient, ledger) {
  */
 export async function cacheGet(key) {
   const redis = getRedis();
+  let value = null;
   if (redis) {
     try {
       const val = await redis.get(key);
       if (val !== null) { _stats.hits++; return val; }
       _stats.misses++;
     } catch {
-      // fall through to local
+      value = localGet(key);
     }
     return localGet(key);
   });
@@ -101,13 +107,14 @@ export async function cacheGet(key) {
  * Store a view response.
  * Records a cache.set span.
  * @param {string} key
- * @param {string} value  JSON-serialised payload
+ * @param {string} value   JSON-serialised payload
+ * @param {number} [ttlMs] TTL in milliseconds (defaults to CACHE_TTL_MS)
  */
 export async function cacheSet(key, value) {
   const redis = getRedis();
   if (redis) {
     try {
-      await redis.set(key, value, "PX", CACHE_TTL_MS);
+      await redis.set(key, value, "PX", ttlMs);
       return;
     } catch {
       // fall through to local
@@ -117,7 +124,8 @@ export async function cacheSet(key, value) {
 }
 
 /**
- * Invalidate all cached entries for a recipient (called on claim / cancel).
+ * Invalidate all cached entries for a recipient (called on claim / cancel /
+ * any state-changing stream event).
  * @param {string} recipient
  */
 export async function cacheInvalidate(recipient) {
