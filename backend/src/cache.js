@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Redis-backed cache for view-function responses (Issue #29).
  *
@@ -10,22 +8,29 @@
  * Map so the server starts without Redis in development / CI.
  */
 
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+
 const CACHE_TTL_MS = parseInt(process.env.CACHE_TTL_MS ?? "5000", 10);
 
-/** @type {import("ioredis").Redis | null} */
+/** @type {any | null} */
 let _redis = null;
 
 function getRedis() {
   if (_redis) return _redis;
   const url = process.env.REDIS_URL;
   if (!url) return null;
-  // Lazy-require so the module loads even when ioredis is not installed.
-  const Redis = require("ioredis");
-  _redis = new Redis(url, { lazyConnect: false, enableReadyCheck: false });
-  _redis.on("error", (err) => {
-    console.warn("[cache] Redis error:", err.message);
-  });
-  return _redis;
+  try {
+    const Redis = require("ioredis");
+    _redis = new Redis(url, { lazyConnect: false, enableReadyCheck: false });
+    _redis.on("error", (err) => {
+      console.warn("[cache] Redis error:", err.message);
+    });
+    return _redis;
+  } catch {
+    return null;
+  }
 }
 
 // ── In-process fallback ───────────────────────────────────────────────────────
@@ -33,13 +38,18 @@ function getRedis() {
 /** @type {Map<string, { value: string; expiresAt: number }>} */
 const _local = new Map();
 
+/** @type {{ hits: number; misses: number }} */
+const _stats = { hits: 0, misses: 0 };
+
 function localGet(key) {
   const entry = _local.get(key);
-  if (!entry) return null;
+  if (!entry) { _stats.misses++; return null; }
   if (Date.now() > entry.expiresAt) {
     _local.delete(key);
+    _stats.misses++;
     return null;
   }
+  _stats.hits++;
   return entry.value;
 }
 
@@ -60,7 +70,7 @@ function localDel(pattern) {
  * @param {string} recipient
  * @param {number} ledger
  */
-function viewKey(recipient, ledger) {
+export function viewKey(recipient, ledger) {
   return `view:${recipient}:${ledger}`;
 }
 
@@ -69,11 +79,13 @@ function viewKey(recipient, ledger) {
  * @param {string} key
  * @returns {Promise<string | null>}
  */
-async function cacheGet(key) {
+export async function cacheGet(key) {
   const redis = getRedis();
   if (redis) {
     try {
-      return await redis.get(key);
+      const val = await redis.get(key);
+      if (val !== null) { _stats.hits++; return val; }
+      _stats.misses++;
     } catch {
       // fall through to local
     }
@@ -86,7 +98,7 @@ async function cacheGet(key) {
  * @param {string} key
  * @param {string} value  JSON-serialised payload
  */
-async function cacheSet(key, value) {
+export async function cacheSet(key, value) {
   const redis = getRedis();
   if (redis) {
     try {
@@ -103,12 +115,11 @@ async function cacheSet(key, value) {
  * Invalidate all cached entries for a recipient (called on claim / cancel).
  * @param {string} recipient
  */
-async function cacheInvalidate(recipient) {
+export async function cacheInvalidate(recipient) {
   const prefix = `view:${recipient}:`;
   const redis = getRedis();
   if (redis) {
     try {
-      // SCAN + DEL to avoid blocking KEYS on large keyspaces.
       let cursor = "0";
       do {
         const [next, keys] = await redis.scan(cursor, "MATCH", `${prefix}*`, "COUNT", 100);
@@ -123,4 +134,16 @@ async function cacheInvalidate(recipient) {
   localDel(prefix);
 }
 
-module.exports = { viewKey, cacheGet, cacheSet, cacheInvalidate };
+/**
+ * Return current cache statistics (hits, misses, total, hitRate).
+ * Used by the /api/v1/metrics legacy JSON endpoint.
+ */
+export function getCacheMetrics() {
+  const total = _stats.hits + _stats.misses;
+  return {
+    hits: _stats.hits,
+    misses: _stats.misses,
+    total,
+    hitRate: total === 0 ? 0 : _stats.hits / total,
+  };
+}
