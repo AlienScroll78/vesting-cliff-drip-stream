@@ -133,15 +133,23 @@
     line-height: 1.5;
   }
 
-  main {
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+
+  .page,
+  main,
+  [role="main"] {
     max-width: 100%;
+    width: 100%;
     margin: 0;
     padding: 0;
   }
 
+  /* ── Headings ──────────────────────────────────────────────────────────── */
+
   h1 {
-    font-size: 16pt;
-    margin-bottom: 0.5rem;
+    font-size: 18pt;
+    margin: 0 0 0.4rem;
+    page-break-after: avoid;
   }
 
   h2 {
@@ -202,6 +210,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 10pt;
+    page-break-inside: avoid;
   }
 
   th,
@@ -213,7 +222,7 @@
   }
 
   th {
-    background: #f0f0f0;
+    background-color: #f0f0f0 !important;
     font-weight: bold;
     color: #000;
     -webkit-print-color-adjust: exact;
@@ -229,18 +238,22 @@
     font-family: "Courier New", Courier, monospace;
     font-size: 8pt;
     word-break: break-all;
+    overflow-wrap: break-word;
   }
 
   /* ── Page footer with generation timestamp ───────────────────────────── */
   body::after {
-    content: "Printed on " attr(data-print-date) " — Vesting Cliff Drip Stream";
+    content: "Vesting Cliff Drip Stream — Stream Schedule Summary"
+             "    |    Printed on " attr(data-print-date);
     display: block;
     margin-top: 2rem;
-    font-size: 8pt;
-    color: #555;
-    text-align: center;
-    border-top: 1px solid #ccc;
     padding-top: 0.5rem;
+    border-top: 0.75pt solid #888888;
+    font-size: 7.5pt;
+    color: #555555;
+    text-align: center;
+    font-family: Georgia, serif;
+    page-break-before: avoid;
   }
 
   /* ── Hyperlinks: show full URL in parentheses ────────────────────────── */
