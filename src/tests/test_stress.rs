@@ -112,3 +112,4 @@ fn test_high_load_1000_recipients_full_drain() {
         assert!(client.get_schedule(r).is_none());
     }
 }
+

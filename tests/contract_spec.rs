@@ -47,6 +47,13 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
         },
     );
     m.insert(
+        "create_batch_streams",
+        Expect {
+            inputs: &["sponsor", "token", "streams"],
+            has_output: true,
+        },
+    );
+    m.insert(
         "cancel_stream",
         Expect {
             inputs: &["sponsor", "recipient"],
@@ -56,7 +63,7 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
     m.insert(
         "claim_vested",
         Expect {
-            inputs: &["recipient"],
+            inputs: &["recipient", "amount"],
             has_output: true,
         },
     );

@@ -184,7 +184,7 @@ fn m06_claim_at_exact_cliff_ledger_succeeds() {
     advance_ledger(&env, 10);
     assert_eq!(env.ledger().sequence(), 110); // sanity-check
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, 50); // 10 ledgers × 5
     assert_eq!(token_client.balance(&recipient), 50);
 }
@@ -200,10 +200,10 @@ fn m07_zero_claimable_amount_returns_nothing_to_claim() {
 
     // Advance to cliff, claim everything accrued so far.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 
     // Do NOT advance. Claimable == 0 → must return NothingToClaim.
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(err, VestingError::NothingToClaim.into());
 }
 
@@ -219,17 +219,17 @@ fn m08_schedule_removed_only_at_end_ledger() {
 
     // Claim at cliff (105) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim 10 ledgers before end (ledger 110) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim exactly at end_ledger — schedule must be removed
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_none());
 }
 
@@ -317,7 +317,7 @@ fn m14_cancel_after_partial_claim_uses_last_claimed_ledger() {
 
     // Claim at cliff (ledger 150) → 500 tokens to recipient
     advance_ledger(&env, 50);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, 500);
 
     // Cancel 20 ledgers later (ledger 170) → earned since last claim: 20×10=200
@@ -350,3 +350,4 @@ fn m15_deposit_equals_rate_times_total_duration() {
     assert_eq!(token_client.balance(&sponsor), 7_900); // 10000 - 2100
     assert_eq!(token_client.balance(&cid), 2_100);
 }
+
