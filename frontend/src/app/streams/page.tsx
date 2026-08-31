@@ -20,7 +20,9 @@ import {
 } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CancelConfirmModal } from "@/components/CancelConfirmModal";
+import { ClaimButton } from "@/components/ClaimButton";
 import { useStreams, StreamFilter } from "@/hooks/useStreams";
+import { useClaimVested } from "@/hooks/useClaimVested";
 import { VestingStream, StreamStatus } from "@/types";
 import { abbreviateAmount } from "@/utils/formatAmount";
 
