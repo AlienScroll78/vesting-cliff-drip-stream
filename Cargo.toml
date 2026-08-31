@@ -1,6 +1,6 @@
 [package]
 name = "vesting-cliff-drip-stream"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 description = "A time-locked cliff vesting contract built on Soroban for long-term contributor retention"
 license = "MIT"
