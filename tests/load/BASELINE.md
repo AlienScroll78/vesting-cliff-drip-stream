@@ -1,10 +1,268 @@
 # Load Test Baseline — Concurrent Vesting Stream Creation
 
-**Date:** 2026-06-25  
+**Date:** 2026-06-25 (updated 2026-08-29 — Issue #629: sustained traffic scenarios)
 **Network:** Stellar Testnet  
 **Contract:** `create_vesting_stream` (vesting-cliff-drip-stream)  
 **Tool:** k6 v0.50+  
-**Script:** `tests/load/create_streams_bundle.js` (esbuild bundle of `create_streams_bundle_src.js`)
+**Script:** `tests/load/backend_scenarios.js`
+
+---
+
+## Scenarios Overview
+
+### Original Scenarios (Pre-#629)
+
+| # | Name | Description |
+|---|------|-------------|
+| 1 | `schedule_queries` | 100 concurrent users querying schedules for 60 s |
+| 2 | `create_streams` | 10 users creating streams simultaneously |
+| 3 | `claim_vested` | 50 users claiming every 5 seconds |
+| 4 | `ramping_profile` | 0 → 100 → 200 → 100 → 0 VUs over 5 minutes |
+
+### Issue #629: Sustained Traffic Scenarios
+
+| # | Name | Description | SLO |
+|---|------|-------------|-----|
+| 5 | `soak_test` | 12-hour soak at 20 RPS; 95% GET /streams, 5% GET /health | p99 < 1 s, err < 0.1 % |
+| 6 | `claim_surge` | 10x spike (5 → 50 RPS) in claimable_amount queries at cliff time | p99 < 1 s, err < 0.1 % |
+| 7 | `websocket_subs` | 500 concurrent WebSocket subscribers receiving stream updates | success rate ≥ 95 % |
+| 8 | `read_heavy` | Sustained 95 % GET /streams + 5 % GET /health at 20 RPS for 2 min | p99 < 1 s, err < 0.1 % |
+
+**Soak test runtime:** The `soak_test` scenario runs for 12 hours by default when `SKIP_SOAK=0`. All other scenarios complete in < 10 minutes. Set `SKIP_SOAK=0` only when running overnight validation.
+
+---
+
+## Test Parameters
+
+### Original: Concurrent Stream Creation
+
+| Parameter | Value |
+|---|---|
+| Concurrent VUs | 100 |
+| Total iterations | 100 (1 per VU) |
+| Max duration | 5 minutes |
+| Stream rate | 10 tokens / ledger |
+| Cliff duration | 17 280 ledgers (~1 day) |
+| Total duration | 172 800 ledgers (~10 days) |
+| Max fee per tx | 1 000 000 stroops (0.1 XLM) |
+
+### Soak Test (#629–5)
+
+| Parameter | Value |
+|---|---|
+| Arrival rate | 20 RPS (constant) |
+| Duration | 12 hours (SKIP_SOAK=0) / 10 s (default) |
+| Traffic mix | 95% GET /api/streams/:recipient, 5% GET /health |
+| Pre-allocated VUs | 50 |
+| Max VUs | 200 |
+
+### Claim Surge (#629–6)
+
+| Parameter | Value |
+|---|---|
+| Baseline rate | 5 RPS |
+| Surge rate | 50 RPS (10x spike at cliff time) |
+| Stages | 30s baseline → 10s ramp → 30s sustain → 30s ramp-down |
+| Pre-allocated VUs | 100 |
+| Max VUs | 300 |
+
+### WebSocket Subscribers (#629–7)
+
+| Parameter | Value |
+|---|---|
+| Concurrent connections | 500 |
+| Duration | 60 s |
+| WebSocket URL | `WS_URL` env var (default: `ws://localhost:3001`) |
+| Endpoint | `/ws/streams/:recipient` |
+| Protocol | Subscribe → receive JSON events |
+
+### Read-Heavy (#629–8)
+
+| Parameter | Value |
+|---|---|
+| Arrival rate | 20 RPS (constant) |
+| Duration | 2 min |
+| Traffic mix | 95% GET /api/streams/:recipient, 5% GET /health |
+| Pre-allocated VUs | 30 |
+| Max VUs | 100 |
+
+---
+
+## SLO Thresholds
+
+| Metric | Threshold | Scenario |
+|---|---|---|
+| p95 response time | < 500 ms | All |
+| **p99 response time** | **< 1 000 ms** | **#629: soak, surge, read-heavy** |
+| Error rate | < 0.1 % | All |
+| WebSocket success rate | ≥ 95 % | websocket_subs |
+| Create stream success | ≥ 95 % | create_streams |
+| Claim success | ≥ 95 % | claim_vested |
+
+---
+
+## Baseline Results
+
+> **Status:** Pre-run — results below are expected ranges derived from Stellar testnet
+> characteristics. Replace with actual numbers from `results/backend_load_test.json` after
+> running against a local backend.
+
+### Original Scenarios
+
+| Metric | Expected (local backend) | Threshold |
+|---|---|---|
+| `schedule_query_ms` p95 | 5 – 50 ms | < 500 ms |
+| `claimable_query_ms` p95 | 5 – 50 ms | < 500 ms |
+| `health_check_ms` p95 | 1 – 10 ms | < 500 ms |
+| Error rate | < 0.01 % | < 0.1 % |
+
+### Sustained Traffic Scenarios (#629)
+
+| Metric | Expected (local backend) | Threshold |
+|---|---|---|
+| `soak_query_ms` p99 | 50 – 200 ms | < 1 000 ms |
+| `surge_claimable_ms` p99 | 100 – 400 ms (spike) | < 1 000 ms |
+| `read_heavy_ms` p99 | 50 – 200 ms | < 1 000 ms |
+| WebSocket connect success | 98 – 100 % | ≥ 95 % |
+| WebSocket message received | ≥ 90 % of subs | — |
+
+---
+
+## How to Run
+
+### 1. Prerequisites
+
+```bash
+# Install k6 (https://grafana.com/docs/k6/latest/set-up/install-k6/)
+sudo apt-get install k6
+
+# Install Node deps + build the bundle
+cd tests/load
+npm install
+npm run bundle
+```
+
+### 2. Run all scenarios (skip soak + skip mutations)
+
+```bash
+k6 run tests/load/backend_scenarios.js \
+  -e BASE_URL=http://localhost:3001 \
+  -e SKIP_MUTATIONS=1 \
+  -e SKIP_SOAK=1
+```
+
+### 3. Run soak test (overnight)
+
+```bash
+k6 run tests/load/backend_scenarios.js \
+  -e BASE_URL=http://localhost:3001 \
+  -e SKIP_MUTATIONS=1 \
+  -e SKIP_SOAK=0
+```
+
+### 4. Run claim surge only
+
+```bash
+k6 run tests/load/backend_scenarios.js \
+  -e BASE_URL=http://localhost:3001 \
+  --scenario claim_surge
+```
+
+### 5. Run WebSocket test only
+
+```bash
+k6 run tests/load/backend_scenarios.js \
+  -e BASE_URL=http://localhost:3001 \
+  -e WS_URL=ws://localhost:3001 \
+  --scenario websocket_subs
+```
+
+### 6. CI smoke test (no funded accounts)
+
+```bash
+k6 run tests/load/backend_scenarios.js \
+  -e SKIP_MUTATIONS=1 \
+  -e SKIP_SOAK=1
+```
+
+---
+
+## Bottleneck Analysis
+
+### Soak Test Bottlenecks
+
+**Scenario 5 — 12-hour soak at 20 RPS**
+
+At 20 RPS sustained, the primary risk is:
+
+1. **Database connection pool exhaustion** — PostgreSQL connections held open by persistent queries.  
+   *Mitigation:* Set `pool.max = 20` and monitor `pg_stat_activity`.
+
+2. **Redis cache eviction under long-duration load** — LRU eviction of schedule caches causes cache misses.  
+   *Mitigation:* Use `allkeys-lru` with sufficient memory to hold the hot key set.
+
+3. **Node.js event loop lag** — Under sustained 20 RPS, GC pauses can spike p99 latency.  
+   *Mitigation:* Monitor `process.cpuUsage()` and `gc` events; use `--expose-gc` for heap inspection.
+
+### Claim Surge Bottlenecks
+
+**Scenario 6 — 10x spike at cliff time**
+
+At 50 RPS during the spike:
+
+1. **Hot key contention** — All VUs query the same claimable endpoint for recipients near cliff.  
+   *Mitigation:* Cache `claimable_amount` with a short TTL (5–10 s) keyed by `(recipient, ledger_bucket)`.
+
+2. **Soroban RPC simulate burst** — If the backend calls `simulateTransaction` per request, 50 RPS × simulation cost = ~50 concurrent RPC calls.  
+   *Mitigation:* The backend should use the indexed DB schedule, not on-chain simulation, for `claimable_amount` reads.
+
+### WebSocket Bottlenecks
+
+**Scenario 7 — 500 concurrent WebSocket connections**
+
+1. **File descriptor limit** — Each WebSocket holds one FD. Default Linux limit is 1024.  
+   *Mitigation:* `ulimit -n 65535` on the backend host.
+
+2. **Memory per connection** — Each connection holds ~8 KB of socket buffer.  
+   500 × 8 KB = 4 MB minimum; Node.js process overhead adds ~50–100 MB.  
+   *Mitigation:* Monitor heap usage; ensure container memory limit ≥ 512 MB.
+
+---
+
+## Original Bottleneck Analysis (Stellar Testnet)
+
+### 1. Stellar RPC transaction throughput (~30–50 tx/ledger ceiling)
+
+Stellar closes a ledger every ~5 seconds. With 100 simultaneous submissions,
+transactions queue across 2–4 ledger closes (~10–20 s end-to-end latency).
+
+**Impact:** p95 latency spikes to 8–12 s under full concurrency.  
+**Mitigation:** Batch submit across multiple ledgers, or spread VUs over time.
+
+### 2. Sequence number contention per sponsor account
+
+Each account has a monotonically-increasing sequence number. Concurrent
+transactions from the **same** account fail with `txBAD_SEQ`.  
+**Mitigation:** 1 keypair per VU (100 total).
+
+### 3. Soroban fee market under load
+
+`create_vesting_stream` writes a persistent `VestingSchedule` entry (~200 bytes).
+Under congestion, the fee market raises the inclusion fee multiplier.  
+**Mitigation:** `fee = 1_000_000` stroops (0.1 XLM).
+
+---
+
+## Recommendations
+
+| Priority | Action |
+|---|---|
+| High | Deploy WebSocket server (`/ws/streams/:recipient`) before running scenario 7 |
+| High | Cache `claimable_amount` in Redis with 5–10 s TTL to absorb cliff-time surge |
+| Medium | Run soak test overnight before production launch (`SKIP_SOAK=0`) |
+| Medium | Add `pg_stat_activity` monitoring during soak to catch connection leaks |
+| Low | Parameterize soak duration via `SOAK_DURATION` env var for shorter smoke runs |
+| Low | Add `--out influxdb` to persist soak metrics to Grafana for time-series analysis |
 
 ---
 
