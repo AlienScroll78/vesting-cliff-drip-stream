@@ -2,6 +2,8 @@
 
 Thank you for contributing! This guide covers everything you need to go from a clean checkout to an approved PR.
 
+> **New to the project?** For a step-by-step local development environment setup from scratch on Ubuntu 24.04, see the [Developer Onboarding Guide](docs/developer-onboarding.md).
+
 ---
 
 ## Table of Contents
