@@ -41,8 +41,6 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ├── Cargo.toml                     # Package manifest & dependencies
 ├── Makefile                       # Build / test / lint / mutants helpers
 ├── README.md
-├── .cargo/
-│   └── config.toml                # WASM build target
 ├── .cargo-mutants.toml            # Mutation testing exclusions & config
 ├── .gitignore
 ├── docs/

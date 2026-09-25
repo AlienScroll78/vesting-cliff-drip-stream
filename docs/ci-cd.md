@@ -1,8 +1,8 @@
 # CI/CD Pipeline Documentation
 
-**Version:** 1.2.0  
-**Status:** Active  
-**Last Updated:** 2026-08-30  
+**Version:** 1.3.0
+**Status:** Active
+**Last Updated:** 2026-09-25
 
 This document provides a comprehensive reference for the CI/CD automation pipelines supporting the Vesting Cliff Drip Stream repository. It covers all 23 GitHub Actions workflows, visual architecture diagrams, required secrets and rotation schedules, quality gates, branch protection rules, local reproduction steps, and instructions for contributing new workflow steps.
 
@@ -179,7 +179,7 @@ All workflow definition files reside in [`.github/workflows/`](../.github/workfl
 
 | File | Name | Triggers | Description |
 |---|---|---|---|
-| [`staging.yml`](../.github/workflows/staging.yml) | Staging Deployment | Push to `main`, `workflow_dispatch` | Deploys contract to Stellar Testnet, updates GitHub Actions environment variables, executes Helm upgrades for staging backend and frontend, and validates deployment via smoke tests with automated rollback on failure. |
+| [`staging.yml`](../.github/workflows/staging.yml) | Legacy Staging Deployment | `workflow_dispatch` | Manual staging deploy; push-to-main delivery is owned by the consolidated `pipeline.yml` workflow. |
 | [`pipeline.yml`](../.github/workflows/pipeline.yml) | Unified Multi-Environment Pipeline | Push to `main`, tag `v*`, PR | Unified pipeline orchestrating PR validation, staging deployment on `main`, and production deployment on `v*` tags with manual approval gates and Slack notifications. |
 | [`release.yml`](../.github/workflows/release.yml) | Release Management | Push to `main` | Manages automated version bumping and changelog generation via Google release-please; attaches optimized WASM binaries and checksums to release assets. |
 | [`docker.yml`](../.github/workflows/docker.yml) | Docker Build & Push | Push to `main` | Builds standard container images and pushes to GitHub Container Registry (`ghcr.io`). |
@@ -382,6 +382,69 @@ cd frontend && npm audit --audit-level=high --omit=dev && cd ..
 # 9. Performance benchmarks (mirrors performance.yml)
 cargo test --features testutils bench_ -- --nocapture
 ```
+
+---
+
+## 7.3 Consolidated Pipeline Setup
+
+The `pipeline.yml` workflow is the single orchestrator for pull-request quality gates, main-branch testnet delivery, and tag-based mainnet delivery.
+
+### Pull requests
+
+The following checks run in parallel and are joined by the `PR gate` job:
+
+- Rust formatting and Clippy
+- Frontend lint, typecheck, and unit tests
+- Backend tests and typecheck
+- Contract tests on stable Rust and the declared MSRV (`1.84.0`)
+- Line and branch coverage thresholds
+- Optimized WASM size limit
+- Rust, npm, and repository configuration security scans
+
+The concurrency group cancels superseded pull-request runs. Cache hit results are written to the Actions job summary for the Rust and Docker layers.
+
+### GitHub environments
+
+Create these environments in **Settings → Environments** before enabling delivery:
+
+| Environment | Approval | Purpose |
+|---|---|---|
+| `testnet` | No approval | Testnet contract deployment, Terraform plan/apply, and smoke tests |
+| `mainnet` | Required reviewers | Mainnet contract deployment, production Helm release, and smoke tests |
+
+The `mainnet` environment must have required reviewers configured in GitHub; the workflow cannot create that protection rule itself. Environment secrets and variables are referenced directly by the deployment jobs, so credentials are not shared with pull-request jobs.
+
+### Environment configuration
+
+`testnet` requires:
+
+- `STELLAR_TESTNET_SECRET_KEY`
+- `TESTNET_TOKEN`
+- `TESTNET_RECIPIENT`
+- `TESTNET_DB_PASSWORD`
+- `AWS_DEPLOY_ROLE_ARN`
+- `TERRAFORM_STATE_BUCKET`
+- `TERRAFORM_LOCK_TABLE`
+- `TESTNET_FEE_BPS`
+- `TESTNET_TREASURY_ADDRESS`
+- `COST_ALERT_EMAILS`
+
+`mainnet` requires:
+
+- `STELLAR_MAINNET_SECRET_KEY`
+- `MAINNET_TOKEN`
+- `MAINNET_RECIPIENT`
+- `KUBECONFIG_MAINNET`
+- `MAINNET_FEE_BPS`
+- `MAINNET_TREASURY_ADDRESS`
+- `MAINNET_IMAGE_REPOSITORY`
+- `MAINNET_K8S_NAMESPACE`
+
+Both environments also use `AWS_REGION` and `SLACK_WEBHOOK_URL` where applicable. Protect the Stellar keys and kubeconfig as environment secrets; never place them in repository variables or pull-request logs.
+
+### Main-branch and release flow
+
+A push to `main` runs the PR gate, build, integration tests, Terraform plan, testnet apply, testnet deployment, and smoke tests. A `v*` tag repeats the validation and integration stages, then waits for the `mainnet` environment approval before deploying and publishing release assets. Terraform plans are stored as artifacts and applied only by the gated apply jobs.
 
 ---
 

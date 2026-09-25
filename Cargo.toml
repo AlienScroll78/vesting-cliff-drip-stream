@@ -2,6 +2,7 @@
 name = "vesting-cliff-drip-stream"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.84"
 description = "A time-locked cliff vesting contract built on Soroban for long-term contributor retention"
 license = "MIT"
 repository = "https://github.com/your-org/vesting-cliff-drip-stream"

@@ -10,7 +10,8 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
-    "test:e2e": "npm run test:e2e --workspace=frontend",
+    "test:unit": "npm --prefix frontend test",
+    "test:e2e": "npm --prefix frontend run test:e2e",
     "test:e2e:contract": "node tests/e2e/run_e2e.js"
   },
   "dependencies": {
