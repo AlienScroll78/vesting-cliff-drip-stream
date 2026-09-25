@@ -58,6 +58,25 @@ describe("ClaimBottomSheet", () => {
     expect(screen.getByTestId("claim-button")).not.toBeDisabled();
   });
 
+  it("labels the review block as a claim and shows confirmation time", async () => {
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(screen.getByTestId("review-kind")).toHaveTextContent("Claim Vested Tokens");
+    expect(await screen.findByTestId("fee-value")).toBeInTheDocument();
+    expect(screen.getByTestId("review-eta")).toHaveTextContent(/seconds/);
+  });
+
+  it("warns about an unusually high claim fee", async () => {
+    vi.spyOn(feeEstimate, "estimateFee").mockResolvedValue({ xlm: "3.00000", usd: "$0.360000" });
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(await screen.findByTestId("review-fee-warning")).toHaveTextContent("3.00000 XLM");
+  });
+
+  it("keeps the raw XDR behind the advanced disclosure", async () => {
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(await screen.findByTestId("review-xdr-unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Advanced").closest("details")).not.toHaveAttribute("open");
+  });
+
   it("calls onClaim when claim button is clicked", async () => {
     const onClaim = vi.fn().mockResolvedValue(undefined);
     render(<ClaimBottomSheet {...defaultProps} onClaim={onClaim} />);
