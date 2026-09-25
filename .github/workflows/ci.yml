@@ -124,3 +124,19 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  design-manifest:
+    name: design-manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate generated design manifests
+        run: npm run design:check

@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/server/index.js",
     "validate:openapi": "node scripts/validate-openapi.js",
+    "design:export": "node scripts/export-design-manifest.js",
+    "design:check": "node scripts/export-design-manifest.js --check",
     "test:backend": "node --test src/server/*.test.js",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
