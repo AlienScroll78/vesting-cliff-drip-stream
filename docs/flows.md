@@ -191,7 +191,7 @@ sequenceDiagram
 
 ## 5. Clawback
 
-[Clawback](glossary.md#clawback) is a compliance mechanism available only on SAC tokens that carry the clawback flag. The original [sponsor](glossary.md#sponsor) recovers **all remaining vault tokens** regardless of cliff or accrual state. A mandatory `reason` string is stored on-chain for audit trails. See the [FAQ](faq.md#what-is-clawback-and-when-can-it-be-used) for usage guidance.
+[Clawback](glossary.md#clawback) is a compliance mechanism available only on SAC tokens that carry the clawback flag. The original [sponsor](glossary.md#sponsor) recovers **all remaining vault tokens** regardless of cliff or accrual state. A mandatory `reason` string is stored on-chain for audit trails. See [Clawback](#5-clawback) below and [Transaction Cost Comparison](comparison.md#transaction-cost-comparison).
 
 ```mermaid
 sequenceDiagram
@@ -211,7 +211,7 @@ sequenceDiagram
 
 ## 6. Drain Expired Stream
 
-After a stream's `end_ledger` plus the [drain delay](glossary.md#drain-delay) (~1 year / ~3,153,600 ledgers) has elapsed, this [permissionless](glossary.md#permissionless) function allows **any caller** to return unclaimed tokens to the original sponsor. It exists to prevent indefinite token lockup when a recipient's keys are permanently lost. Any [dust](glossary.md#dust) remaining in the vault is included in the transfer. See the [FAQ](faq.md#what-happens-to-tokens-in-an-expired-stream) for context.
+After a stream's `end_ledger` plus the [drain delay](glossary.md#drain-delay) (~1 year / ~3,153,600 ledgers) has elapsed, this [permissionless](glossary.md#permissionless) function allows **any caller** to return unclaimed tokens to the original sponsor. It exists to prevent indefinite token lockup when a recipient's keys are permanently lost. Any [dust](glossary.md#dust) remaining in the vault is included in the transfer. See [Drain Expired Stream](#6-drain-expired-stream) below.
 
 ```mermaid
 sequenceDiagram
