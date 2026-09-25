@@ -57,6 +57,31 @@ export const AddressParamsSchema = z.object({
   address: StellarAddressSchema,
 });
 
+// ── Stream acknowledgment schemas ─────────────────────────────────────────────
+
+/** Params for GET/POST /streams/:recipient/acknowledgments */
+export const AcknowledgmentRecipientParamsSchema = z.object({
+  recipient: StellarAddressSchema,
+});
+
+/** Body for POST /streams/:recipient/acknowledgments */
+export const CreateAcknowledgmentSchema = z.object({
+  sponsor: StellarAddressSchema,
+  token: z
+    .string({ required_error: "Token is required" })
+    .min(1, "Token is required")
+    .max(56, "Token must be 56 characters or fewer"),
+  action: z.enum(["acknowledge", "skip"], {
+    required_error: "Action is required",
+    invalid_type_error: "Action is required",
+  }),
+  signedMessage: z
+    .string()
+    .min(1)
+    .max(4096)
+    .optional(),
+});
+
 // ── Shared pagination query ───────────────────────────────────────────────────
 
 /**
@@ -268,6 +293,8 @@ export type SchedulesQuery = z.infer<typeof SchedulesQuerySchema>;
 export type CreateStreamBody = z.infer<typeof CreateStreamBodySchema>;
 export type ExportQuery = z.infer<typeof ExportQuerySchema>;
 export type WebhookBody = z.infer<typeof WebhookBodySchema>;
+export type AcknowledgmentRecipientParams = z.infer<typeof AcknowledgmentRecipientParamsSchema>;
+export type CreateAcknowledgmentBody = z.infer<typeof CreateAcknowledgmentSchema>;
 
 // ── Legacy helper (kept for backwards compatibility) ──────────────────────────
 

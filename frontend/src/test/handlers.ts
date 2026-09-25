@@ -53,9 +53,57 @@ export const sponsorPageFixture = {
   next_cursor: null,
 };
 
+export const ACKNOWLEDGMENTS_PATH = "/streams/:recipient/acknowledgments";
+
+export const acknowledgmentFixture = {
+  recipient: RECIPIENT,
+  sponsor: SPONSOR,
+  token: "CUSDC1TOKENXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  acknowledged_at: "2026-01-02T03:04:05.000Z",
+  skipped_at: null,
+  signed_message: "c2lnbmF0dXJl",
+  pending: false,
+};
+
 // ── Default happy-path handlers ───────────────────────────────────────────────
 
 export const defaultHandlers = [
+  http.get(`${BASE_URL}${ACKNOWLEDGMENTS_PATH}`, ({ params }) => {
+    const { recipient } = params as { recipient: string };
+    if (recipient === "PENDING") {
+      return HttpResponse.json({
+        recipient,
+        items: [
+          { ...acknowledgmentFixture, recipient, acknowledged_at: null, pending: true },
+        ],
+      });
+    }
+    return HttpResponse.json({ recipient, items: [] });
+  }),
+
+  http.post(`${BASE_URL}${ACKNOWLEDGMENTS_PATH}`, async ({ params, request }) => {
+    const { recipient } = params as { recipient: string };
+    const body = (await request.json()) as {
+      sponsor: string;
+      token: string;
+      action: "acknowledge" | "skip";
+      signedMessage?: string;
+    };
+    return HttpResponse.json(
+      {
+        ...acknowledgmentFixture,
+        recipient,
+        sponsor: body.sponsor,
+        token: body.token,
+        acknowledged_at: body.action === "acknowledge" ? "2026-01-02T03:04:05.000Z" : null,
+        skipped_at: body.action === "skip" ? "2026-01-02T03:04:05.000Z" : null,
+        signed_message: body.signedMessage ?? null,
+        pending: false,
+      },
+      { status: 201 },
+    );
+  }),
+
   // GET /schedules/:recipient
   http.get(`${BASE_URL}/schedules/:recipient`, ({ params }) => {
     const { recipient } = params as { recipient: string };

@@ -4,6 +4,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { VestingTimeline } from "@/components/VestingTimeline";
+import { StreamAcknowledgmentBanner } from "@/components/StreamAcknowledgmentBanner";
 import { StreamDetailSkeleton } from "@/components/Skeletons";
 import { VestingStream } from "@/types";
 import { useWallet } from "@/contexts/WalletContext";
@@ -34,7 +35,7 @@ async function claimVested(_recipient: string): Promise<void> {
 }
 
 export default function ViewPageClient({ recipient }: { recipient: string }) {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const [stream, setStream] = useState<VestingStream | null | undefined>(undefined);
   const [showClaim, setShowClaim] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
@@ -84,6 +85,10 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
           {urlCopied ? "✓ Copied!" : "Share"}
         </button>
       </header>
+
+      {isRecipient && (
+        <StreamAcknowledgmentBanner stream={stream} network={network} />
+      )}
 
       <section className="stream-card" style={{ flexDirection: "column", gap: "0.75rem", marginTop: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
