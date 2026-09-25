@@ -18,6 +18,20 @@ pub const DEFAULT_MIN_DEPOSIT: i128 = 100;
 
 // ── TTL helpers ───────────────────────────────────────────────────────────────
 
+/// Extends the TTL of a single persistent storage entry to the Soroban maximum.
+///
+/// This is the *passive* bump strategy: it is a no-op when the key is absent,
+/// so callers do not need to check for existence first. It renews to a fixed
+/// window rather than to any value derived from the entry's contents, which is
+/// why [`ensure_ttl_for_stream`] exists for fixed-rate schedules.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `key` – Any key convertible to and from a storage `Val`.
+///
+/// # Notes
+/// Skipped entirely when the key does not exist, because `extend_ttl` on a
+/// missing entry is an error rather than a no-op.
 pub fn bump_persistent<K: soroban_sdk::TryIntoVal<Env, soroban_sdk::Val> + soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
     if env.storage().persistent().has(key) {
         env.storage().persistent().extend_ttl(
@@ -28,6 +42,12 @@ pub fn bump_persistent<K: soroban_sdk::TryIntoVal<Env, soroban_sdk::Val> + sorob
     }
 }
 
+/// Extends the instance-storage TTL to the Soroban maximum.
+///
+/// Instance storage backs the contract's configuration (admin, fee, limits).
+/// It is shared by every stream, so it is renewed on any entry point rather
+/// than per stream, and is never a no-op — unlike [`bump_persistent`], the
+/// instance always exists once the contract has been initialized.
 pub fn bump_instance(env: &Env) {
     env.storage()
         .instance()
@@ -82,6 +102,21 @@ pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingS
 
 // ── Read ─────────────────────────────────────────────────────────────────────
 
+/// Returns the fixed-rate [`VestingSchedule`] for `recipient`, extending TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient; one schedule exists per recipient.
+///
+/// # Returns
+/// `Some(schedule)` when a fixed-rate stream exists, otherwise `None`.
+///
+/// # Notes
+/// This is **not** a read-only accessor: it renews the entry's TTL via
+/// [`ensure_ttl_for_stream`] and the instance TTL as a side effect. Naming a
+/// getter `get_*` while writing storage is the existing convention in this
+/// module; see [`get_schedule_readonly`] for a note on why that name is
+/// currently misleading.
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
     let schedule = env
@@ -103,6 +138,11 @@ pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSc
     Some(schedule)
 }
 
+/// Reports whether a fixed-rate schedule exists for `recipient`.
+///
+/// Unlike [`get_schedule`] this does not renew any TTL, so it is the correct
+/// choice for existence checks that should not extend a stream's lifetime —
+/// notably `create_vesting_stream`'s duplicate-stream guard.
 pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
@@ -120,6 +160,14 @@ pub fn set_schedule(env: &Env, recipient: &Address, schedule: &VestingSchedule) 
     ensure_ttl_for_stream(env, recipient, schedule);
 }
 
+/// Deletes the fixed-rate schedule for `recipient`.
+///
+/// # Notes
+/// Used by every terminal path — cancel, clawback, drain, and the auto-removal
+/// that follows a fully-consumed stream. Because all of them converge on
+/// removal, a removed schedule is observable only as `StreamStatus::NotFound`.
+/// See `docs/flows.md` for why `Cancelled` and `Drained` are not separately
+/// observable states.
 pub fn remove_schedule(env: &Env, recipient: &Address) {
     env.storage()
         .persistent()
@@ -128,6 +176,20 @@ pub fn remove_schedule(env: &Env, recipient: &Address) {
 
 // ── Variable-rate schedule ────────────────────────────────────────────────────
 
+/// Returns the variable-rate schedule for `recipient`, extending TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient.
+///
+/// # Returns
+/// `Some(schedule)` when a variable-rate stream exists, otherwise `None`.
+///
+/// # Notes
+/// Renews both the entry and the instance TTL via [`bump_persistent`] and
+/// [`bump_instance`]. Variable-rate streams do not use
+/// [`ensure_ttl_for_stream`], so their TTL is a flat window rather than one
+/// derived from `end_ledger`.
 pub fn get_variable_schedule(env: &Env, recipient: &Address) -> Option<VariableRateSchedule> {
     let key = DataKey::VariableSchedule(recipient.clone());
     let schedule = env
@@ -139,6 +201,22 @@ pub fn get_variable_schedule(env: &Env, recipient: &Address) -> Option<VariableR
     Some(schedule)
 }
 
+/// Returns the variable-rate schedule for `recipient` without renewing its TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient.
+///
+/// # Returns
+/// `Some(schedule)` when a variable-rate stream exists, otherwise `None`.
+///
+/// # Warning
+/// This is currently **byte-for-byte identical to
+/// [`get_variable_schedule`]** and therefore also extends TTL. The two are
+/// intended to diverge: this variant exists for view functions, which must not
+/// mutate state because a read that writes cannot be simulated cheaply and can
+/// surprise callers relying on read-only RPC behaviour. Tracked for correction
+/// in #856.
 pub fn get_variable_schedule_readonly(env: &Env, recipient: &Address) -> Option<VariableRateSchedule> {
     let key = DataKey::VariableSchedule(recipient.clone());
     let schedule = env
@@ -150,12 +228,21 @@ pub fn get_variable_schedule_readonly(env: &Env, recipient: &Address) -> Option<
     Some(schedule)
 }
 
+/// Reports whether a variable-rate schedule exists for `recipient`.
+///
+/// Does not renew any TTL.
 pub fn has_variable_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::VariableSchedule(recipient.clone()))
 }
 
+/// Persists a variable-rate schedule and renews its TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient.
+/// * `schedule` – The schedule to store.
 pub fn set_variable_schedule(env: &Env, recipient: &Address, schedule: &VariableRateSchedule) {
     let key = DataKey::VariableSchedule(recipient.clone());
     env.storage().persistent().set(&key, schedule);
@@ -163,6 +250,10 @@ pub fn set_variable_schedule(env: &Env, recipient: &Address, schedule: &Variable
     bump_instance(env);
 }
 
+/// Deletes the variable-rate schedule for `recipient`.
+///
+/// # Notes
+/// Does not renew the instance TTL, unlike its read/write counterparts.
 pub fn remove_variable_schedule(env: &Env, recipient: &Address) {
     env.storage()
         .persistent()
@@ -171,6 +262,19 @@ pub fn remove_variable_schedule(env: &Env, recipient: &Address) {
 
 // ── Milestone schedule ────────────────────────────────────────────────────────
 
+/// Returns the milestone schedule for `recipient`, extending TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient.
+///
+/// # Returns
+/// `Some(schedule)` when a milestone stream exists, otherwise `None`.
+///
+/// # Notes
+/// Uses the flat [`bump_persistent`] strategy rather than
+/// [`ensure_ttl_for_stream`]; milestone streams are not bounded by a single
+/// `end_ledger` in the same way fixed-rate streams are.
 pub fn get_milestone_schedule(env: &Env, recipient: &Address) -> Option<MilestoneSchedule> {
     let key = DataKey::MilestoneSchedule(recipient.clone());
     let schedule = env
@@ -182,12 +286,21 @@ pub fn get_milestone_schedule(env: &Env, recipient: &Address) -> Option<Mileston
     Some(schedule)
 }
 
+/// Reports whether a milestone schedule exists for `recipient`.
+///
+/// Does not renew any TTL.
 pub fn has_milestone_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
         .has(&DataKey::MilestoneSchedule(recipient.clone()))
 }
 
+/// Persists a milestone schedule and renews its TTL.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `recipient` – The stream's recipient.
+/// * `schedule` – The schedule to store.
 pub fn set_milestone_schedule(env: &Env, recipient: &Address, schedule: &MilestoneSchedule) {
     let key = DataKey::MilestoneSchedule(recipient.clone());
     env.storage().persistent().set(&key, schedule);
@@ -195,6 +308,7 @@ pub fn set_milestone_schedule(env: &Env, recipient: &Address, schedule: &Milesto
     bump_instance(env);
 }
 
+/// Deletes the milestone schedule for `recipient`.
 pub fn remove_milestone_schedule(env: &Env, recipient: &Address) {
     env.storage()
         .persistent()
@@ -203,26 +317,60 @@ pub fn remove_milestone_schedule(env: &Env, recipient: &Address) {
 
 // ── Instance-level config ─────────────────────────────────────────────────────
 
+/// Reports whether the contract has been initialized.
+///
+/// # Notes
+/// Read by `create_vesting_stream`, which rejects with `NotInitialized` before
+/// the contract has been set up. Unset is distinct from `false`: there is no
+/// stored `false`, only "never initialized".
 pub fn is_initialized(env: &Env) -> bool {
     env.storage()
         .instance()
         .has(&DataKey::Initialized)
 }
 
+/// Marks the contract as initialized.
+///
+/// Called once by `initialize`, which is itself guarded against a second call.
 pub fn set_initialized(env: &Env) {
     env.storage().instance().set(&DataKey::Initialized, &true);
 }
 
+/// Returns the administrator address, if one has been set.
+///
+/// # Returns
+/// `Some(admin)` after `initialize` or `set_admin`, otherwise `None`.
+///
+/// # Notes
+/// Callers compare the `admin` argument against this value rather than relying
+/// on `require_auth` alone — see #856, which records that `set_min_deposit` and
+/// `add_allowed_token` currently omit that comparison.
 pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage()
         .instance()
         .get::<DataKey, Address>(&DataKey::Admin)
 }
 
+/// Stores the administrator address, overwriting any previous value.
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
 
+/// Returns the protocol fee configuration.
+///
+/// Intended return value is `(fee_bps, treasury)`.
+///
+/// # Returns
+/// Currently a `Vec<Address>` read from `DataKey::AllowedTokens`, defaulting to
+/// an empty vector when unset — **not** the declared tuple. The fee and treasury
+/// are never read back.
+///
+/// # Warning
+/// This does not compile against the current `DataKey` enum and does not
+/// behave as its signature advertises. It is left unchanged here rather than
+/// silently rewritten, because correcting it changes observable behaviour and
+/// belongs with the compile fix in #856. There is no `get_treasury` accessor
+/// anywhere in the crate.
 pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
     let fee_bps = env
         .storage()
@@ -231,6 +379,12 @@ pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
         .unwrap_or_else(|| Vec::new(env))
 }
 
+/// Stores the protocol fee (in basis points) and its treasury address.
+///
+/// # Arguments
+/// * `env` – Soroban environment.
+/// * `fee_bps` – Fee in basis points; bounded by `MAX_FEE_BPS` at the call site.
+/// * `treasury` – Destination for collected fees.
 pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
     env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
     env.storage().instance().set(&DataKey::Treasury, treasury);
