@@ -104,15 +104,31 @@ Terraform-managed AWS infrastructure (ECS, RDS, VPC, IAM). Configuration lives i
 
 ### Drift Detection
 
-A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) runs `terraform plan` daily at **02:00 UTC** against production state. If the plan detects any changes (exit code 2), it:
+A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) runs
+`terraform plan -detailed-exitcode` daily at **02:00 UTC** against the selected
+environment's remote state, authenticating to AWS with OIDC (no static access keys).
+`workflow_dispatch` allows an on-demand run against `staging` or `production`. The
+outcome is classified as clean, drift, or error:
 
-1. Opens a GitHub issue labelled `infrastructure` + `drift` with the full plan output.
-2. Sends a Slack alert to `#ops`.
+1. **Drift** — one workflow-managed issue (labels `infrastructure` + `drift`) is created
+   or updated in place with the plan excerpt and a link to the full plan artifact, and
+   Slack `#ops` is alerted with the plan summary.
+2. **Clean** — workflow-managed drift issues are commented on and closed; manually
+   opened issues are never touched.
+3. **Error** — the run fails, open drift issues stay open, and Slack `#ops` is alerted.
+
+### Remote State
+
+State lives in a per-environment S3 bucket with DynamoDB locking, AES-256 encryption,
+versioning, public access blocked, and MFA delete. Setup, backend migration, stale-lock
+handling, and state recovery are documented in
+[Terraform Bootstrap](docs/runbooks/terraform-bootstrap.md).
 
 ### Operations Runbooks
 
 | Runbook | Purpose |
 |---------|---------|
+| [Terraform Bootstrap](docs/runbooks/terraform-bootstrap.md) | Remote state bootstrap, backend migration, stale locks, state recovery, MFA delete |
 | [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
 | [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
 | [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |

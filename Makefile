@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update
 
 all: build
 
@@ -129,6 +129,10 @@ test-load:
 ## Run k6 load tests in dry-run mode (skips create/claim mutations)
 test-load-dryrun:
 	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run mocked tests for the Terraform drift-detection script (no AWS required)
+test-drift:
+	bash scripts/tests/test_detect_drift.sh
 
 ## Run performance benchmarks and evaluate against baselines (see docs/performance.md)
 bench:
