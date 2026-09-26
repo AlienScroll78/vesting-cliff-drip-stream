@@ -26,10 +26,11 @@
 use std::env as std_env;
 
 use soroban_sdk::{
-    testutils::Events,
+    testutils::{Address as _, Events, Ledger as _, LedgerInfo},
     symbol_short,
     Address,
     IntoVal,
+    String as SorobanString,
 };
 
 use crate::{
@@ -167,9 +168,7 @@ fn test_event_snapshot_stream_created() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // env starts at ledger 100 (see setup_env), so:
     //   start=100, cliff=150 (100+50), end=300 (100+200)
@@ -234,9 +233,7 @@ fn test_event_snapshot_tokens_claimed() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Advance past cliff but not to end: ledger 100 → 200.
     advance_ledger(&env, 100);
@@ -301,9 +298,7 @@ fn test_event_snapshot_stream_completed() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Jump well past end_ledger (300) so a single claim drains the whole stream.
     advance_ledger(&env, 500); // ledger → 600
@@ -378,9 +373,7 @@ fn test_event_snapshot_stream_cancelled() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Cancel before cliff at ledger 120 → full refund.
     // rate(10) × (end(300) − last_claimed(100)) = 10 × 200 = 2000 refunded
@@ -463,16 +456,12 @@ fn test_event_snapshot_stream_clawed_back() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Clawback before cliff: remaining = rate(10) * (end(300) - start(100)) = 2000
     advance_ledger(&env, 20); // ledger → 120 (before cliff at 150)
     let reason = SorobanString::from_str(&env, "regulatory compliance");
-    client
-        .clawback_stream(&sponsor, &recipient, &reason)
-        .unwrap();
+    client.clawback_stream(&sponsor, &recipient, &reason);
 
     let clawed_amount: i128 = 2_000;
 
@@ -554,9 +543,7 @@ fn test_event_snapshot_stream_drained() {
     let (token_id, _) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     // Advance past end_ledger (300) + drain delay (3_153_600)
     // start=100, so need ledger > 100+200+3_153_600 = 3_153_900
@@ -574,7 +561,7 @@ fn test_event_snapshot_stream_drained() {
     let caller = Address::generate(&env);
     let drained_amount: i128 = 2_000;
 
-    client.drain_expired_stream(&caller, &recipient).unwrap();
+    client.drain_expired_stream(&caller, &recipient);
 
     assert_eq!(
         env.events().all(),
@@ -648,10 +635,12 @@ fn test_event_snapshot_allowlist_token_added() {
     let client = VestingDripsClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
     let token = Address::generate(&env);
 
     // add_allowed_token requires admin auth (mocked)
-    client.add_allowed_token(&admin, &token).unwrap();
+    client.add_allowed_token(&admin, &token);
 
     assert_eq!(
         env.events().all(),
@@ -687,27 +676,33 @@ fn test_event_snapshot_allowlist_token_removed() {
     let client = VestingDripsClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
     let token = Address::generate(&env);
 
     // Add then remove
-    client.add_allowed_token(&admin, &token).unwrap();
+    client.add_allowed_token(&admin, &token);
     env.events().all(); // consume add event
 
     // Clear events by registering fresh env is not possible; instead verify
     // that the remove event is the second event in the sequence.
-    client.remove_allowed_token(&admin, &token).unwrap();
-
-    let all_events = env.events().all();
-    // Second event is the remove
-    let remove_event = all_events.get(1).expect("remove event must exist");
+    client.remove_allowed_token(&admin, &token);
 
     assert_eq!(
-        remove_event,
-        (
-            contract_id.clone(),
-            (Symbol::new(&env, "AllowlistUpdated"), admin.clone()).into_val(&env),
-            (token.clone(), false).into_val(&env),
-        ),
+        env.events().all(),
+        soroban_sdk::vec![
+            &env,
+            (
+                contract_id.clone(),
+                (Symbol::new(&env, "AllowlistUpdated"), admin.clone()).into_val(&env),
+                (token.clone(), true).into_val(&env),
+            ),
+            (
+                contract_id.clone(),
+                (Symbol::new(&env, "AllowlistUpdated"), admin.clone()).into_val(&env),
+                (token.clone(), false).into_val(&env),
+            ),
+        ],
         "AllowlistUpdated (remove) event schema changed!"
     );
 }

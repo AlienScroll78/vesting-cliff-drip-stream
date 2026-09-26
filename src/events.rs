@@ -3,7 +3,9 @@
 // attribute-macro-generated sibling impls, so the allow has to be module-scoped.
 #![allow(missing_docs)]
 
-use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, String, Symbol};
+use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Env, String, Symbol, Vec};
+
+use crate::types::TokenAllocation;
 
 /// Data payload for the `StreamCreated` event.
 ///
@@ -40,18 +42,17 @@ pub fn emit_stream_created(
     start_ledger: u32,
     cliff_ledger: u32,
     end_ledger: u32,
-    total_deposit: i128,
+    metadata: &Option<String>,
 ) {
-    let total_deposit = rate * (end_ledger - start_ledger) as i128;
+    let total_deposit = (end_ledger - start_ledger) as i128 * rate_per_ledger;
     let data = StreamCreatedData {
         token: token.clone(),
-        rate,
+        rate: rate_per_ledger,
         start_ledger,
         cliff_ledger,
         end_ledger,
+        total_deposit,
     };
-    // Include metadata in topics for off-chain indexing.
-    let _ = metadata; // stored in schedule; not emitted in topics to keep topic count ≤ 4
     env.events().publish(
         (
             Symbol::new(env, "StreamCreated"),
@@ -152,12 +153,27 @@ pub fn emit_stream_completed(env: &Env, recipient: &Address, token: &Address) {
 
 /// Emitted when a sponsor cancels a vesting stream.
 ///
-/// Topics: `["vc_cancel", recipient]`
-/// Data:   `(sponsor_refund)`
-pub fn emit_stream_cancelled(env: &Env, recipient: &Address, refunded_amount: i128) {
+/// Topics: `["StreamCancelled", recipient]`
+/// Data:   `(sponsor, refund_to_sponsor, released_to_recipient, ledger)`
+pub fn emit_stream_cancelled(
+    env: &Env,
+    sponsor: &Address,
+    recipient: &Address,
+    refund_to_sponsor: i128,
+    released_to_recipient: i128,
+) {
+    let ledger = env.ledger().sequence();
     env.events().publish(
-        (symbol_short!("vc_cancel"), recipient.clone()),
-        refunded_amount,
+        (
+            Symbol::new(env, "StreamCancelled"),
+            recipient.clone(),
+        ),
+        (
+            sponsor.clone(),
+            refund_to_sponsor,
+            released_to_recipient,
+            ledger,
+        ),
     );
 }
 
@@ -176,6 +192,86 @@ pub fn emit_stream_transferred(
             current_recipient.clone(),
         ),
         new_recipient.clone(),
+    );
+}
+
+/// Emitted when a recipient's stream is transferred to a new address.
+pub fn emit_recipient_transferred(
+    env: &Env,
+    current_recipient: &Address,
+    new_recipient: &Address,
+) {
+    emit_stream_transferred(env, current_recipient, new_recipient);
+}
+
+/// Emitted when a stream is paused.
+pub fn emit_stream_paused(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    paused_at_ledger: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_pause"), recipient.clone()),
+        (sponsor.clone(), paused_at_ledger),
+    );
+}
+
+/// Emitted when a paused stream is resumed.
+pub fn emit_stream_resumed(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    new_end_ledger: u32,
+) {
+    env.events().publish(
+        (symbol_short!("vc_resum"), recipient.clone()),
+        (sponsor.clone(), new_end_ledger),
+    );
+}
+
+/// Emitted when a milestone is claimed.
+pub fn emit_milestone_claimed(env: &Env, recipient: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("vc_ms_cl"), recipient.clone()),
+        amount,
+    );
+}
+
+/// Emitted when the allowlist is updated.
+pub fn emit_allowlist_updated(env: &Env, admin: &Address, token: &Address, added: bool) {
+    env.events().publish(
+        (Symbol::new(env, "AllowlistUpdated"), admin.clone()),
+        (token.clone(), added),
+    );
+}
+
+/// Emitted when the contract is upgraded.
+pub fn emit_contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: &BytesN<32>) {
+    env.events().publish(
+        (Symbol::new(env, "ContractUpgraded"), admin.clone()),
+        new_wasm_hash.clone(),
+    );
+}
+
+/// Emitted when a protocol fee is collected.
+pub fn emit_fee_collected(env: &Env, sponsor: &Address, treasury: &Address, amount: i128) {
+    env.events().publish(
+        (Symbol::new(env, "FeeCollected"), sponsor.clone()),
+        (treasury.clone(), amount),
+    );
+}
+
+/// Emitted when an emergency drain occurs.
+pub fn emit_emergency_drain(
+    env: &Env,
+    recipient: &Address,
+    sponsor: &Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_emdrn"), recipient.clone()),
+        (sponsor.clone(), amount),
     );
 }
 
@@ -215,7 +311,7 @@ pub fn emit_stream_drained(
     );
 }
 
-/// Emitted by the `emergency_drain` entry point.
+/// Emitted when the contract is initialized.
 ///
 /// Topics: `["ContractInit", admin]`
 /// Data:   `(fee_bps, treasury)`
@@ -232,6 +328,7 @@ pub fn emit_contract_initialized(env: &Env, admin: &Address, fee_bps: u32, treas
 ///
 /// Topics: `["vmt_create", recipient]`
 /// Data:   `(sponsor, allocations, start_ledger, cliff_ledger, end_ledger)`
+#[allow(dead_code)]
 pub fn emit_multi_stream_created(
     env: &Env,
     sponsor: &Address,
@@ -260,6 +357,7 @@ pub fn emit_multi_stream_created(
 ///
 /// The per-token amounts are implicit from the stored allocations and can be
 /// reconstructed off-chain from the ledger range.
+#[allow(dead_code)]
 pub fn emit_multi_tokens_claimed(
     env: &Env,
     recipient: &Address,
@@ -275,6 +373,7 @@ pub fn emit_multi_tokens_claimed(
 ///
 /// Topics: `["vmt_done", recipient]`
 /// Data:   `()` — no additional payload; completion is self-explanatory.
+#[allow(dead_code)]
 pub fn emit_multi_stream_completed(env: &Env, recipient: &Address) {
     env.events().publish(
         (symbol_short!("vmt_don"), recipient.clone()),
@@ -286,6 +385,7 @@ pub fn emit_multi_stream_completed(env: &Env, recipient: &Address) {
 ///
 /// Topics: `["vmt_cancel", recipient]`
 /// Data:   `(sponsor)`
+#[allow(dead_code)]
 pub fn emit_multi_stream_cancelled(env: &Env, recipient: &Address, sponsor: &Address) {
     env.events().publish(
         (symbol_short!("vmt_cnl"), recipient.clone()),

@@ -53,6 +53,27 @@ pub enum VestingError {
     /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
     InvalidToken = 12,
 
+    /// **Code 13** — Contract has already been initialized.
+    AlreadyInitialized = 13,
+
+    /// **Code 14** — Recipient is not allowed.
+    RecipientNotAllowed = 14,
+
+    /// **Code 15** — The stream is currently paused.
+    StreamPaused = 15,
+
+    /// **Code 16** — Batch size exceeds the maximum allowed limit.
+    BatchTooLarge = 16,
+
+    /// **Code 17** — Rate is below the minimum allowed rate.
+    RateTooLow = 17,
+
+    /// **Code 18** — Contract has not been initialized.
+    NotInitialized = 18,
+
+    /// **Code 19** — Variable-rate segments are invalid.
+    InvalidSegments = 19,
+
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
 
@@ -68,4 +89,25 @@ pub enum VestingError {
     /// Reason strings are stored on-chain in the emitted event. Trim the reason
     /// to at most 256 UTF-8 bytes before retrying.
     ReasonTooLong = 22,
+
+    /// **Code 23** — The stream is already paused.
+    StreamAlreadyPaused = 23,
+
+    /// **Code 24** — The stream is not currently paused.
+    StreamNotPaused = 24,
+
+    /// **Code 25** — Version counter overflow.
+    VersionOverflow = 25,
+
+    /// **Code 26** — Caller is not authorized to perform this operation.
+    Unauthorized = 26,
+
+    /// **Code 27** — Deposit is below the configured minimum deposit.
+    DepositBelowMinimum = 27,
+
+    /// **Code 28** — Milestone configuration is invalid.
+    InvalidMilestones = 28,
+
+    /// **Code 29** — Reentrancy guard: reentrant call rejected.
+    Reentrancy = 29,
 }

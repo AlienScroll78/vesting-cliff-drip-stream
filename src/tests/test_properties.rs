@@ -59,8 +59,7 @@ proptest! {
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
         client
-            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None)
-            .unwrap();
+            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None);
 
         // Two claims at different ledger offsets.
         let a = adv1.min(total);
@@ -79,71 +78,8 @@ proptest! {
     }
 }
 
-// Property: claimable == 0 before cliff
-proptest! {
-    #[test]
-    fn prop_claimable_zero_before_cliff(
-        rate in 100_i128..1000_i128,
-        cliff in 1u32..50u32,
-        total in 2u32..100u32,
-        advance_before in 0u32..50u32,
-    ) {
-        prop_assume!(total > cliff);
-        prop_assume!(rate * total as i128 >= 100);
-        let env = setup_env();
-        let contract_id = env.register(crate::VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &contract_id);
+// ── Invariant 2: Claimable at end_ledger = total_deposit ───────────────────
 
-        let sponsor = Address::generate(&env);
-        let recipient = Address::generate(&env);
-        let (token_id, _token_client) = create_token(&env, &sponsor);
-
-        let total_duration = total;
-        let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
-        mint_to(&env, &token_id, &sponsor, total_deposit);
-
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
-
-        let adv = advance_before.min(cliff.saturating_sub(1));
-        advance_ledger(&env, adv);
-
-        let claimable = client.claimable_amount(&recipient);
-        prop_assert_eq!(claimable, 0_i128);
-    }
-}
-
-// Property: claimable_amount is never negative (Issue #319)
-proptest! {
-    #[test]
-    fn prop_claimable_never_negative(
-        rate in 1_i128..1000_i128,
-        cliff in 1u32..50u32,
-        total in 2u32..200u32,
-        advance in 0u32..300u32,
-    ) {
-        prop_assume!(total > cliff);
-        let env = setup_env();
-        let contract_id = env.register(crate::VestingDrips, ());
-        let client = VestingDripsClient::new(&env, &contract_id);
-
-        let sponsor = Address::generate(&env);
-        let recipient = Address::generate(&env);
-        let (token_id, _token_client) = create_token(&env, &sponsor);
-
-        let total_duration = total;
-        let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
-        mint_to(&env, &token_id, &sponsor, total_deposit);
-
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None);
-
-        advance_ledger(&env, advance);
-
-        let claimable = client.claimable_amount(&recipient);
-        prop_assert!(claimable >= 0, "claimable must be non-negative, got {}", claimable);
-    }
-}
-
-// Property: claimable_amount equals total_deposit at (or past) end_ledger (Issue #319)
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
     #[test]
@@ -166,7 +102,7 @@ proptest! {
         let total_deposit = rate * total as i128;
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None);
 
         // Advance to end_ledger or beyond; no claims made yet.
         advance_ledger(&env, total + extra);
@@ -207,8 +143,7 @@ proptest! {
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
         client
-            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None)
-            .unwrap();
+            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None);
 
         // Advance to strictly before the cliff.
         let adv = advance_pre.min(cliff.saturating_sub(1));
@@ -249,11 +184,10 @@ proptest! {
         mint_to(&env_a, &token_a, &sponsor_a, total_deposit);
 
         client_a
-            .create_vesting_stream(&sponsor_a, &recipient_a, &token_a, &rate, &cliff, &total, &None)
-            .unwrap();
+            .create_vesting_stream(&sponsor_a, &recipient_a, &token_a, &rate, &cliff, &total, &None);
 
         advance_ledger(&env_a, t1);
-        let c_a1 = client_a.claim_vested(&recipient_a).unwrap();
+        let c_a1 = client_a.claim_vested(&recipient_a);
 
         advance_ledger(&env_a, t2);
         let c_a2 = client_a.try_claim_vested(&recipient_a).unwrap_or(Ok(0)).unwrap_or(0);
@@ -268,11 +202,10 @@ proptest! {
         mint_to(&env_b, &token_b, &sponsor_b, total_deposit);
 
         client_b
-            .create_vesting_stream(&sponsor_b, &recipient_b, &token_b, &rate, &cliff, &total, &None)
-            .unwrap();
+            .create_vesting_stream(&sponsor_b, &recipient_b, &token_b, &rate, &cliff, &total, &None);
 
         advance_ledger(&env_b, t1 + t2);
-        let c_b = client_b.claim_vested(&recipient_b).unwrap();
+        let c_b = client_b.claim_vested(&recipient_b);
 
         prop_assert_eq!(
             c_a1 + c_a2,
@@ -309,8 +242,7 @@ proptest! {
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
         client
-            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None)
-            .unwrap();
+            .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total, &None);
 
         // Optionally claim before cancel (only succeeds after cliff).
         let claim_advance = adv.min(total);

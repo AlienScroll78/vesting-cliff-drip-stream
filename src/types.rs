@@ -92,14 +92,8 @@ pub struct MilestoneSchedule {
     pub total_deposited: i128,
     pub milestones: Vec<Milestone>,
     pub next_milestone_idx: u32,
-    pub drip_start_ledger: u32,
-    pub drip_rate_per_ledger: i128,
     pub end_ledger: u32,
     pub total_claimed: i128,
-    /// Alias for `total_claimed`; used by dust-collection paths.
-    pub claimed_amount: i128,
-    /// If `Some(ledger)`, the stream was paused at that ledger.
-    pub paused_at_ledger: Option<u32>,
 }
 
 /// Analytics snapshot for a single vesting stream.
@@ -190,7 +184,34 @@ pub enum DataKey {
 
     /// Instance-level configuration: minimum rate per ledger (default 1).
     ConfigMinRate,
+
+    /// Reentrancy guard lock flag.
+    Lock,
+
+    /// Instance-level: initialization state.
+    Initialized,
+
+    /// Instance-level: list of allowed tokens.
+    AllowedTokens,
+
+    /// Per-sponsor list of active stream recipient addresses.
+    SponsorStreams(Address),
+
+    /// Multi-token schedule keyed by recipient and token.
+    MultiSchedule(Address, Address),
+
+    /// Milestone total deposit.
+    MilestoneTotalDeposit(Address),
+
+    /// Milestone claimed basis points.
+    MilestoneClaimedBps(Address),
 }
+
+/// Fixed-point rate decimal scaling factor (10_000_000).
+pub const RATE_DECIMALS: i128 = 10_000_000;
+
+/// Maximum cliff ratio percentage of total duration (80%).
+pub const MAX_CLIFF_RATIO: u32 = 80;
 
 /// Human-readable status of a vesting stream.
 ///
