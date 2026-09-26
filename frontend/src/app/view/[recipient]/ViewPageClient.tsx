@@ -5,6 +5,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamDetailSkeleton } from "@/components/Skeletons";
+import {
+  ExpiredFullyClaimedState,
+  SearchResultsEmpty,
+} from "@/components/EmptyStates";
+import { isExpiredAndFullyClaimed } from "@/utils/streamCompletion";
 import { VestingStream } from "@/types";
 import { useWallet } from "@/contexts/WalletContext";
 
@@ -61,10 +66,28 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   if (stream === null) {
     return (
       <main className="page">
-        <h1 style={{ marginBottom: "0.5rem" }}>Schedule not found</h1>
-        <p style={{ color: "#6b7280" }}>
-          No vesting schedule was found for <code>{recipient}</code>.
-        </p>
+        <SearchResultsEmpty address={recipient} />
+      </main>
+    );
+  }
+
+  if (
+    isExpiredAndFullyClaimed({
+      status: stream.status,
+      currentLedger,
+      endLedger: stream.endLedger,
+      claimableAmount: stream.claimableAmount,
+      totalReceived: stream.totalReceived,
+    })
+  ) {
+    return (
+      <main className="page">
+        <ExpiredFullyClaimedState
+          token={stream.token}
+          totalReceived={stream.totalReceived ?? 0}
+          recipient={stream.recipient}
+          celebrate
+        />
       </main>
     );
   }

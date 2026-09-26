@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { AppNotification, NotificationEventType } from "@/hooks/useNotifications";
+import { NotificationsEmpty } from "@/components/EmptyStates";
 import { trapFocus } from "@/utils/focusTrap";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
@@ -10,10 +11,10 @@ const EVENT_META: Record<
   NotificationEventType,
   { icon: string; label: string; color: string }
 > = {
-  cliff_reached:    { icon: "🏔️", label: "Cliff Reached",    color: "var(--color-active)" },
-  expiring_soon:    { icon: "⏳", label: "Expiring Soon",    color: "var(--color-pre-cliff)" },
-  claim_available:  { icon: "💸", label: "Claim Available",  color: "var(--color-completed)" },
-  stream_cancelled: { icon: "🛑", label: "Stream Cancelled", color: "var(--color-cancelled)" },
+  cliff_reached:    { icon: "🏔️", label: "Cliff Reached",    color: "var(--color-active, var(--color-brand-primary, #7c3aed))" },
+  expiring_soon:    { icon: "⏳", label: "Expiring Soon",    color: "var(--color-pre-cliff, var(--color-warning, #f59e0b))" },
+  claim_available:  { icon: "💸", label: "Claim Available",  color: "var(--color-completed, var(--color-success, #10b981))" },
+  stream_cancelled: { icon: "🛑", label: "Stream Cancelled", color: "var(--color-cancelled, var(--color-danger, #ef4444))" },
 };
 
 // ── Relative time helper ───────────────────────────────────────────────────────
@@ -77,14 +78,14 @@ function NotificationItem({
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: meta.color }}>
             {meta.label}
           </span>
-          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#9ca3af", whiteSpace: "nowrap" }}>
+          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "var(--color-text-secondary, var(--color-text, #64748b))", whiteSpace: "nowrap" }}>
             {relativeTime(notification.timestamp)}
           </span>
         </div>
         <p style={{ fontWeight: notification.read ? 400 : 600, fontSize: "0.875rem", margin: 0, lineHeight: 1.4 }}>
           {notification.title}
         </p>
-        <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "0.15rem 0 0", lineHeight: 1.4 }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary, var(--color-text, #64748b))", margin: "0.15rem 0 0", lineHeight: 1.4 }}>
           {notification.message}
         </p>
       </div>
@@ -189,8 +190,8 @@ export function NotificationCenter() {
               minWidth: 16,
               height: 16,
               borderRadius: "9999px",
-              background: "var(--color-cancelled)",
-              color: "#fff",
+              background: "var(--color-cancelled, var(--color-danger, #ef4444))",
+              color: "var(--color-text-primary, var(--color-text, #f8fafc))",
               fontSize: "0.65rem",
               fontWeight: 700,
               display: "flex",
@@ -255,8 +256,8 @@ export function NotificationCenter() {
                     style={{
                       marginLeft: "0.5rem",
                       fontSize: "0.75rem",
-                      background: "var(--color-active)",
-                      color: "#fff",
+                      background: "var(--color-active, var(--color-brand-primary, #7c3aed))",
+                      color: "var(--color-text-primary, var(--color-text, #f8fafc))",
                       borderRadius: "9999px",
                       padding: "0.1rem 0.4rem",
                     }}
@@ -325,28 +326,7 @@ export function NotificationCenter() {
               style={{ flex: 1, overflowY: "auto" }}
             >
               {notifications.length === 0 ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    gap: "0.75rem",
-                    padding: "2rem",
-                    textAlign: "center",
-                    color: "#9ca3af",
-                  }}
-                >
-                  <span style={{ fontSize: "2.5rem" }} aria-hidden="true">🔔</span>
-                  <p style={{ fontWeight: 600, color: "var(--color-text)", margin: 0 }}>
-                    No notifications yet
-                  </p>
-                  <p style={{ fontSize: "0.85rem", margin: 0 }}>
-                    You'll be notified when your cliff is reached, tokens are claimable, or a stream
-                    is about to expire.
-                  </p>
-                </div>
+                <NotificationsEmpty />
               ) : (
                 notifications.map((n) => (
                   <NotificationItem key={n.id} notification={n} onRead={markRead} />

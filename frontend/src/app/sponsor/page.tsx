@@ -5,6 +5,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { VestingStream } from "@/types";
 import { AggregateStats } from "@/components/AggregateStats";
 import { SponsorStreamTable } from "@/components/SponsorStreamTable";
+import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { generateStreamsCsv, downloadCsv } from "@/utils/exportCsv";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import styles from "./sponsor.module.css";
@@ -29,6 +30,7 @@ export default function SponsorPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Mock data - replace with API call
   const MOCK_SPONSOR_STREAMS: VestingStream[] = [
@@ -139,7 +141,8 @@ export default function SponsorPage() {
     return (
       <div className={styles.container}>
         <h1 className={styles.title}>My Sponsored Streams</h1>
-        <SponsorStreamListEmpty />
+        <SponsorStreamListEmpty onCreateStream={() => setShowCreate(true)} />
+        {showCreate && <CreateStreamWizard onClose={() => setShowCreate(false)} />}
       </div>
     );
   }

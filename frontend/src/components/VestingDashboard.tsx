@@ -16,7 +16,9 @@ import { useWallet } from "@/contexts/WalletContext";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { ExpiredFullyClaimedState, NewUserEmpty } from "@/components/EmptyStates";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
+import { isExpiredAndFullyClaimed } from "@/utils/streamCompletion";
 import type { VestingStream, StreamStatus } from "@/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -352,37 +354,31 @@ function Stat({ label, value }: { label: string; value: string }) {
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyDashboard({ address }: { address: string | null }) {
+  if (address) {
+    return (
+      <div data-testid="dashboard-empty">
+        <NewUserEmpty address={address} />
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="dashboard-empty"
       style={{
         textAlign: "center",
         padding: "3rem 1.5rem",
-        background: "var(--color-surface)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius)",
+        background: "var(--color-surface, var(--color-bg-surface, #1e293b))",
+        border: "1px solid var(--color-border, var(--color-neutral-700, #334155))",
+        borderRadius: "var(--radius, 0.5rem)",
         marginTop: "1.5rem",
+        color: "var(--color-text, var(--color-text-primary, #0f172a))",
       }}
     >
-      <p style={{ fontSize: "2rem", marginBottom: "0.75rem" }}>📭</p>
-      {address ? (
-        <>
-          <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "0.5rem" }}>No streams found</p>
-          <p style={{ fontSize: "0.875rem", color: "#6b7280" }}>
-            No vesting streams are associated with{" "}
-            <span style={{ fontFamily: "monospace" }}>
-              {address.slice(0, 8)}…{address.slice(-4)}
-            </span>
-          </p>
-        </>
-      ) : (
-        <>
-          <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "0.5rem" }}>Connect your wallet</p>
-          <p style={{ fontSize: "0.875rem", color: "#6b7280" }}>
-            Connect a wallet to view your vesting streams.
-          </p>
-        </>
-      )}
+      <p style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "0.5rem" }}>Connect your wallet</p>
+      <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary, var(--color-text, #64748b))" }}>
+        Connect a wallet to view your vesting streams.
+      </p>
     </div>
   );
 }
@@ -445,6 +441,29 @@ export function VestingDashboard() {
     await new Promise(r => setTimeout(r, 1200));
     // Re-fetch after claim to update amounts
     await loadStreams();
+  }
+
+  const completedStream = streams.length === 1 ? streams[0] : undefined;
+  if (
+    completedStream &&
+    isExpiredAndFullyClaimed({
+      status: completedStream.status,
+      currentLedger,
+      endLedger: completedStream.endLedger,
+      claimableAmount: completedStream.claimableAmount,
+      totalReceived: completedStream.totalReceived,
+    })
+  ) {
+    return (
+      <section aria-label="Vesting Dashboard" style={{ marginTop: "1.5rem" }}>
+        <ExpiredFullyClaimedState
+          token={completedStream.token}
+          totalReceived={completedStream.totalReceived ?? 0}
+          recipient={completedStream.recipient}
+          celebrate
+        />
+      </section>
+    );
   }
 
   return (
