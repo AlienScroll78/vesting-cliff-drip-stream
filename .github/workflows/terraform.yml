@@ -48,6 +48,8 @@ jobs:
     defaults:
       run:
         working-directory: terraform
+    env:
+      TF_DATA_DIR: ${{ github.workspace }}/terraform/.terraform/staging
 
     steps:
       - uses: actions/checkout@v4
@@ -60,18 +62,14 @@ jobs:
       - name: terraform init
         run: |
           terraform init \
-            -backend-config="bucket=vesting-tf-state" \
-            -backend-config="key=vesting/terraform.tfstate" \
-            -backend-config="region=us-east-1" \
-            -backend-config="dynamodb_table=vesting-tf-locks"
-
-      - name: terraform workspace
-        run: terraform workspace new staging 2>/dev/null || terraform workspace select staging
+            -input=false \
+            -backend-config="envs/staging.backend.hcl"
 
       - name: terraform plan
         id: plan
         run: |
           terraform plan \
+            -lock-timeout=5m \
             -var-file="envs/staging.tfvars" \
             -var="db_password=dummy-ci-password" \
             -no-color \

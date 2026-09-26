@@ -12,6 +12,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 
 | Runbook | When to use |
 |---------|-------------|
+| [Terraform Bootstrap](./terraform-bootstrap.md) | First-time remote state setup per environment, backend migration, stale state locks, state recovery, or MFA delete verification |
 | [Drift Reconciliation](./drift-reconciliation.md) | A daily drift-detection run has reported that live infrastructure diverges from Terraform configuration |
 | [Emergency Override](./emergency-override.md) | You must make a manual infrastructure change immediately to mitigate an active incident |
 
