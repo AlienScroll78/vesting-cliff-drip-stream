@@ -19,6 +19,7 @@
  */
 
 const { loadConfig } = require("../lib");
+const { logger } = require("../logger");
 
 const STROOPS_PER_XLM = 10_000_000n;
 const DISCLAIMER =
@@ -72,12 +73,21 @@ async function estimateHandler(req, res) {
   let baseFeeStroops;
   try {
     baseFeeStroops = await fetchBaseFeeStroops(HORIZON_URL);
-  } catch {
+  } catch (err) {
+    logger.warn(
+      { event: "fee_stats_fallback", err },
+      "Failed to fetch Horizon fee_stats; using fallback base fee of 100 stroops",
+    );
     baseFeeStroops = 100n; // Stellar minimum base fee
   }
 
   const totalDeposit = BigInt(rate) * BigInt(total_duration);
   const feeXlm = (Number(baseFeeStroops) / Number(STROOPS_PER_XLM)).toFixed(5);
+
+  logger.debug(
+    { event: "estimate_computed", rate, cliff_duration, total_duration, total_deposit: Number(totalDeposit) },
+    "Estimate computed",
+  );
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(

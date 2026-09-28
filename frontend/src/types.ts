@@ -37,3 +37,29 @@ export interface Transaction {
   timestamp: string;
   counterparty: string;
 }
+
+// ── Horizon event types (closes #272) ─────────────────────────────────────────
+
+/** Event type identifiers as emitted by the Soroban contract. */
+export type HorizonEventType = "StreamCreated" | "TokensClaimed" | "StreamCancelled";
+
+/** A decoded contract event from Horizon. */
+export interface HorizonEvent {
+  /** Unique event identifier (ledger_sequence:tx_index:event_index) */
+  id: string;
+  type: HorizonEventType;
+  /** Ledger sequence number */
+  ledger: number;
+  /** ISO-8601 timestamp */
+  timestamp: string;
+  /** Transaction hash (64-char hex) */
+  txHash: string;
+  /** Token amount involved (0 for events without an amount) */
+  amount: number;
+  /** Token symbol or contract address */
+  token: string;
+  /** Recipient address */
+  recipient: string;
+  /** Sponsor address (present for StreamCreated and StreamCancelled) */
+  sponsor?: string;
+}

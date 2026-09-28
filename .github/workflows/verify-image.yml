@@ -1,0 +1,171 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# verify-image.yml
+#
+# Verifies cosign signature and SLSA provenance attestation for a container
+# image BEFORE it is applied to any Kubernetes environment.
+#
+# Triggered:
+#   • Automatically after container-registry.yml completes on a release
+#   • Manually via workflow_dispatch (provide the full image ref with digest)
+#
+# Acceptance criteria:
+#   ✓ Image signing verified in deployment pipeline before apply
+# ─────────────────────────────────────────────────────────────────────────────
+name: Verify Image Signature
+
+on:
+  workflow_run:
+    workflows: ["Container Registry"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: "Full image ref including digest (e.g. ghcr.io/org/repo@sha256:abc123)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment"
+        required: false
+        default: "staging"
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+  id-token: write        # needed for cosign OIDC verification
+  packages: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  verify:
+    name: Verify cosign signature & SLSA provenance
+    # Only run if the triggering workflow succeeded, or if manually triggered
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      # ── Resolve the image ref ─────────────────────────────────────────────
+      # For workflow_run triggers we fetch the digest from the completed run's
+      # artifacts; for workflow_dispatch the user supplies it directly.
+      - name: Resolve image reference
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "image_ref=${{ inputs.image_ref }}" >> "$GITHUB_OUTPUT"
+          else
+            # Download the digest artifact written by the container-registry workflow
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            gh run download "$RUN_ID" --name image-digest --dir /tmp/digest-artifact || true
+
+            if [ -f /tmp/digest-artifact/digest.txt ]; then
+              DIGEST=$(cat /tmp/digest-artifact/digest.txt)
+              echo "image_ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${DIGEST}" >> "$GITHUB_OUTPUT"
+            else
+              # Fallback: use the latest digest from GHCR
+              echo "::warning::digest artifact not found, resolving latest from GHCR"
+              DIGEST=$(docker buildx imagetools inspect \
+                "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
+                --format '{{json .Manifest}}' | jq -r '.digest')
+              echo "image_ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${DIGEST}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 1. Verify cosign signature ────────────────────────────────────────
+      # Keyless verification: checks the Rekor transparency log and that the
+      # signing certificate's OIDC identity matches this repository's workflow.
+      - name: Verify cosign signature (keyless)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          echo "Verifying signature on: ${{ steps.resolve.outputs.image_ref }}"
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/container-registry.yml@refs/.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            "${{ steps.resolve.outputs.image_ref }}" \
+            | jq '.[0] | {subject: .optional.Subject, issuer: .optional.Issuer, workflow: .optional.Workflow}'
+
+      # ── 2. Verify SLSA provenance attestation ─────────────────────────────
+      - name: Verify SLSA provenance attestation
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          echo "Verifying SLSA provenance for: ${{ steps.resolve.outputs.image_ref }}"
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity-regexp="https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            "${{ steps.resolve.outputs.image_ref }}" \
+            | jq '.payload | @base64d | fromjson | .predicate | {buildType, builder, materials: .materials[0].uri}'
+
+      # ── 3. Verify GitHub SLSA attestation (actions/attest-build-provenance)
+      - name: Verify GitHub attestation
+        run: |
+          gh attestation verify \
+            --owner "${{ github.repository_owner }}" \
+            "${{ steps.resolve.outputs.image_ref }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 4. Summary ────────────────────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Image Verification Summary
+
+          | Check | Status |
+          |-------|--------|
+          | cosign signature (keyless) | ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | SLSA provenance attestation | ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }} |
+          | GitHub attestation | ${{ job.status == 'success' && '✅ Passed' || '❌ Failed' }} |
+
+          **Image:** \`${{ steps.resolve.outputs.image_ref }}\`
+          EOF
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Deploy to staging only after successful verification
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to staging (post-verification)
+    needs: verify
+    if: >
+      needs.verify.result == 'success' &&
+      (github.event_name == 'workflow_run' ||
+       (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging'))
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Confirm verified image before deploy
+        run: |
+          echo "✅ Signature verified. Proceeding with deployment."
+          echo "Image: ${{ needs.verify.outputs.image_ref || steps.resolve.outputs.image_ref }}"
+
+      # Replace this step with your actual kubectl / helm / ArgoCD apply command
+      - name: Apply K8s manifests (dry-run shown; replace with live apply)
+        run: |
+          echo "kubectl apply -f k8s/deployment.yaml"
+          echo "-- In production, pass --kubeconfig or use a managed runner with cluster access --"
