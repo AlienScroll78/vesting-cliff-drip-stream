@@ -68,6 +68,35 @@ jobs:
       - name: Run contract tests
         run: cargo test --features testutils
 
+  # ── proptest ────────────────────────────────────────────────────────────────
+  # Required status check: "proptest"
+  # Runs property-based tests for claimable_amount invariants (#778).
+  # Each of the 5 properties executes 10 000 cases.
+  proptest:
+    name: proptest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run property-based tests
+        run: cargo test --features testutils test_properties
+        env:
+          PROPTEST_CASES: "10000"
+
   # ── build ───────────────────────────────────────────────────────────────────
   # Required status check: "build"
   # Compiles to wasm32 (the production target) and generates rustdoc.
