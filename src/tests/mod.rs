@@ -11,12 +11,12 @@ mod test_edge_cases;
 mod test_event_snapshots;
 mod test_events;
 mod test_initialize;
+mod test_mutation_score;
 mod test_properties;
 mod test_total_claimed;
 mod test_variable_rate;
 mod test_versioning;
 mod test_views;
-mod test_initialize;
 mod test_sponsor_streams;
 mod test_invalid_token;
 

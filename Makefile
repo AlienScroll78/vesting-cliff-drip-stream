@@ -97,6 +97,21 @@ mutants:
 		--file src/contract.rs --file src/storage.rs \
 		--output mutants.out
 
+## Run mutation testing and enforce ≥ 95% score (used by CI gate)
+mutants-check: mutants
+	@CAUGHT=$$(jq '.caught | length' mutants.out/outcomes.json); \
+	MISSED=$$(jq '.missed | length' mutants.out/outcomes.json); \
+	TOTAL=$$((CAUGHT + MISSED)); \
+	SCORE_X100=$$((CAUGHT * 10000 / TOTAL)); \
+	SCORE_INT=$$((SCORE_X100 / 100)); \
+	SCORE_FRAC=$$((SCORE_X100 % 100)); \
+	echo "Mutation score: $${SCORE_INT}.$${SCORE_FRAC}% ($${CAUGHT} killed of $${TOTAL})"; \
+	if [ "$$SCORE_X100" -lt 9500 ]; then \
+		echo "ERROR: Mutation score below 95% threshold."; \
+		exit 1; \
+	fi; \
+	echo "OK: Mutation score meets 95% threshold."
+
 ## Remove build artifacts
 clean:
 	cargo clean
