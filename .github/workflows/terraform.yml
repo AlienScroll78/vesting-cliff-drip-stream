@@ -93,3 +93,61 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
+
+  cost:
+    name: Cost estimate
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Check Infracost key
+        id: check
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          if [ -n "$INFRACOST_API_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "INFRACOST_API_KEY is not set; skipping the cost estimate." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.enabled == 'true'
+
+      - name: Setup Terraform
+        if: steps.check.outputs.enabled == 'true'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+
+      - name: Setup Infracost
+        if: steps.check.outputs.enabled == 'true'
+        uses: infracost/actions/setup-infracost@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate cost breakdown
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          infracost breakdown \
+            --path . \
+            --config-file ../.github/infracost.yml \
+            --format json \
+            --out-file infracost.json
+        continue-on-error: true
+
+      - name: Comment cost delta on PR
+        if: steps.check.outputs.enabled == 'true'
+        uses: infracost/actions/comment@v3
+        with:
+          path: terraform/infracost.json
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          policy: update-comment

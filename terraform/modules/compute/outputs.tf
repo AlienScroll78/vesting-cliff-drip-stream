@@ -19,6 +19,16 @@ output "ecs_task_role_arn" {
   sensitive   = true
 }
 
+output "fargate_spot_capacity_provider_name" {
+  description = "Name of the Fargate Spot capacity provider"
+  value       = aws_capacity_provider.fargate_spot.name
+}
+
+output "indexer_service_name" {
+  description = "Name of the ECS service running the indexer on Fargate Spot"
+  value       = aws_ecs_service.indexer.name
+}
+
 output "alb_security_group_id" {
   description = "Security group ID of the ALB"
   value       = aws_lb.main.security_groups[0]

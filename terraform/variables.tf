@@ -22,6 +22,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "project_name" {
+  description = "Cost allocation tag value applied to every resource and activated in Cost Explorer."
+  type        = string
+  default     = "vesting-drips"
+}
+
 variable "additional_tags" {
   description = "Mandatory business tags (for example CostCenter and Owner) applied to every supported AWS resource."
   type        = map(string)
@@ -37,10 +43,17 @@ variable "monthly_budget_limit_usd" {
 variable "cost_alert_emails" {
   description = "Email recipients for budget and Cost Explorer anomaly alerts."
   type        = set(string)
+  default     = []
 }
 
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for cost alert relay to #ops channel."
   type        = string
   sensitive   = true
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class. db.t3.micro for testnet/staging, db.t3.small for production."
+  type        = string
+  default     = "db.t3.micro"
 }
