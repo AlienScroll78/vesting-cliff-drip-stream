@@ -54,3 +54,30 @@ output "backup_failure_topic_arn" {
   description = "SNS topic for RDS backup failure alerts"
   value       = module.data.backup_failure_topic_arn
 }
+
+# ─── Log aggregation ──────────────────────────────────────────────────────────
+
+output "application_log_groups" {
+  description = "Application log groups written by the Fluent Bit sidecars."
+  value       = local.ecs_log_groups
+}
+
+output "rds_log_group_name" {
+  description = "Log group holding the PostgreSQL audit and error logs."
+  value       = aws_cloudwatch_log_group.rds.name
+}
+
+output "logging_alert_topic_arn" {
+  description = "SNS topic that pages PagerDuty when the error alarm fires."
+  value       = aws_sns_topic.logging_alerts.arn
+}
+
+output "application_error_alarm_name" {
+  description = "CloudWatch alarm on ApplicationErrorCount."
+  value       = aws_cloudwatch_metric_alarm.application_errors.alarm_name
+}
+
+output "pagerduty_enabled" {
+  description = "Whether the PagerDuty SNS subscription exists."
+  value       = var.pagerduty_integration_key != ""
+}

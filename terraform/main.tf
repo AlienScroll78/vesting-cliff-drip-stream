@@ -60,11 +60,17 @@ module "dns" {
 }
 
 module "compute" {
-  source            = "./modules/compute"
-  environment       = var.environment
-  vpc_id            = module.network.vpc_id
-  public_subnet_ids = module.network.public_subnet_ids
+  source      = "./modules/compute"
+  environment = var.environment
+  vpc_id      = module.network.vpc_id
+  aws_region  = var.aws_region
+
+  public_subnet_ids  = module.network.public_subnet_ids
   private_subnet_ids = module.network.private_subnet_ids
+
+  app_log_group_name = "/ecs/api-server"
+  app_log_group_arns = [for name in local.ecs_log_groups : aws_cloudwatch_log_group.ecs[name].arn]
+  log_level          = var.app_log_level
 }
 
 module "data" {

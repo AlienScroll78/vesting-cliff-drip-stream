@@ -160,6 +160,22 @@ The sampler is a `ParentBasedSampler` wrapping `TraceIdRatioBasedSampler`, so:
 
 ## Structured Logging & Correlation IDs
 
+> **Status: partly aspirational.** The correlation fields, the pino logger and
+> the `AsyncLocalStorage` injection described below are the target design and are
+> **not implemented yet** — pino is not a dependency and there is no
+> `requestLoggerMiddleware`.
+>
+> What ships today is `src/server/logger.js`: a dependency-free logger that emits
+> one JSON object per line with `ts`, `level`, `service`, `env` and `msg`, plus
+> whatever a call site passes. Correlation IDs are passed explicitly
+> (`logger.child({ requestId })`) rather than injected, and are camelCase
+> (`requestId`, not `request_id`).
+>
+> The ECS pipeline, metric filters and Log Insights queries in
+> [runbooks/cloudwatch-logs.md](./runbooks/cloudwatch-logs.md) are built against
+> the fields that actually exist. Everything in this section below that mentions
+> `time`, `event`, `request_id` or `trace_id` describes work still to do.
+
 All backend log output is JSON-structured for CloudWatch Logs Insights ingestion and uses [pino](https://getpino.io) as the underlying logger.
 
 ### Correlation ID fields
