@@ -2,6 +2,8 @@
 
 pub mod token_helper;
 
+pub mod invariants;
+
 mod test_allowlist;
 mod test_cancel;
 mod test_claim;
@@ -11,6 +13,7 @@ mod test_edge_cases;
 mod test_event_snapshots;
 mod test_events;
 mod test_initialize;
+mod test_migration;
 mod test_properties;
 mod test_total_claimed;
 mod test_variable_rate;
