@@ -48,23 +48,28 @@ resource "aws_ce_anomaly_monitor" "services" {
 
 # ECS-specific monitor
 resource "aws_ce_anomaly_monitor" "ecs" {
-  name              = "${var.environment}-vesting-ecs-costs"
-  monitor_type      = "CUSTOM"
-  monitor_expression = <<-EOT
-    CostCategory.ServiceCode = "AmazonECS"
-    OR CostCategory.ServiceCode = "AmazonEC2ContainerService"
-    OR CostCategory.ServiceCode = "AWS Fargate"
-  EOT
+  name         = "${var.environment}-vesting-ecs-costs"
+  monitor_type = "CUSTOM"
+  monitor = jsonencode({
+    Dimensions = {
+      Key           = "SERVICE"
+      Values        = ["Amazon Elastic Container Service", "Amazon Elastic Container Service for Kubernetes", "AWS Fargate"]
+      MatchOptions  = ["EQUALS"]
+    }
+  })
 }
 
 # RDS-specific monitor
 resource "aws_ce_anomaly_monitor" "rds" {
-  name              = "${var.environment}-vesting-rds-costs"
-  monitor_type      = "CUSTOM"
-  monitor_expression = <<-EOT
-    CostCategory.ServiceCode = "AmazonRDS"
-    OR CostCategory.ServiceCode = "Amazon ElastiCache"
-  EOT
+  name         = "${var.environment}-vesting-rds-costs"
+  monitor_type = "CUSTOM"
+  monitor = jsonencode({
+    Dimensions = {
+      Key           = "SERVICE"
+      Values        = ["Amazon Relational Database Service", "Amazon ElastiCache"]
+      MatchOptions  = ["EQUALS"]
+    }
+  })
 }
 
 # ─── Anomaly Subscriptions (20% threshold) ──────────────────────────────────
