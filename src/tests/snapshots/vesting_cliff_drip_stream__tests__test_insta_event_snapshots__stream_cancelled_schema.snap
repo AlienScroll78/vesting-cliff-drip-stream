@@ -1,0 +1,5 @@
+---
+source: src/tests/test_insta_event_snapshots.rs
+expression: "serde_json::json!({\n            \"event\": \"StreamCancelled\",\n            \"symbol\": \"vc_cancel\",\n            \"topics\": {\n                \"count\": 2,\n                \"0\": { \"type\": \"Symbol\", \"value\": \"vc_cancel\" },\n                \"1\": { \"type\": \"Address\", \"description\": \"recipient\" }\n            },\n            \"data\": {\n                \"count\": 1,\n                \"0\": { \"type\": \"i128\", \"description\": \"refunded_amount to sponsor\", \"example\": 2000 }\n            }\n        })\n        .to_string()"
+---
+{"data":{"0":{"description":"refunded_amount to sponsor","example":2000,"type":"i128"},"count":1},"event":"StreamCancelled","symbol":"vc_cancel","topics":{"0":{"type":"Symbol","value":"vc_cancel"},"1":{"description":"recipient","type":"Address"},"count":2}}

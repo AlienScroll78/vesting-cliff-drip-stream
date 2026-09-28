@@ -67,6 +67,10 @@ jobs:
 
       - name: Run contract tests
         run: cargo test --features testutils
+        env:
+          # Fail immediately if any insta snapshot is missing or mismatched.
+          # Run `cargo insta review` locally to approve intentional changes.
+          INSTA_UPDATE: "no"
 
   # ── build ───────────────────────────────────────────────────────────────────
   # Required status check: "build"

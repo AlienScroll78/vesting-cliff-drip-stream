@@ -11,14 +11,13 @@ mod test_edge_cases;
 mod test_event_snapshots;
 mod test_events;
 mod test_initialize;
+mod test_insta_event_snapshots;
+mod test_invalid_token;
 mod test_properties;
 mod test_total_claimed;
 mod test_variable_rate;
 mod test_versioning;
 mod test_views;
-mod test_initialize;
-mod test_sponsor_streams;
-mod test_invalid_token;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
