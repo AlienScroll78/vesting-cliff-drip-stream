@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       contract_id: ${{ steps.deploy.outputs.contract_id }}
+      previous_contract_id: ${{ steps.previous.outputs.contract_id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +36,14 @@ jobs:
       - name: Configure Stellar key
         run: |
           stellar keys add deployer --secret-key "${{ secrets.STELLAR_SECRET_KEY }}"
+
+      - name: Capture previous contract ID (for rollback)
+        id: previous
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          PREV=$(gh variable get VESTING_CONTRACT --json value -q .value 2>/dev/null || echo "")
+          echo "contract_id=$PREV" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to testnet
         id: deploy
@@ -61,6 +70,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/smoke/requirements.txt
+
+      - name: Install smoke test dependencies
+        run: pip install -r tests/smoke/requirements.txt
+
       - name: Install Stellar CLI
         run: |
           curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
@@ -68,5 +87,30 @@ jobs:
 
       - name: Run smoke tests
         env:
+          SMOKE_NETWORK: testnet
           VESTING_CONTRACT: ${{ needs.deploy.outputs.contract_id }}
-        run: bash scripts/smoke_test.sh
+          SMOKE_API_HOST: ${{ vars.SMOKE_API_HOST }}
+          SMOKE_SPONSOR_ADDRESS: ${{ vars.SMOKE_SPONSOR_ADDRESS }}
+          SMOKE_RECIPIENT_ADDRESS: ${{ vars.SMOKE_RECIPIENT_ADDRESS }}
+          SMOKE_EXPECTED_CLIFF: ${{ vars.SMOKE_EXPECTED_CLIFF }}
+        run: |
+          pytest tests/smoke/ --tb=short -v --timeout=60
+
+      # ── Rollback on smoke test failure ────────────────────────────────────────
+      # If smoke tests fail, restore the previous contract ID in the Actions
+      # variable so subsequent deployments and monitoring point to the last
+      # known-good contract. The failing deploy logs are retained as an artifact.
+      - name: Rollback contract ID on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          PREVIOUS_CONTRACT_ID: ${{ needs.deploy.outputs.previous_contract_id }}
+        run: |
+          if [ -n "$PREVIOUS_CONTRACT_ID" ]; then
+            echo "⚠️  Smoke tests failed. Rolling back VESTING_CONTRACT to $PREVIOUS_CONTRACT_ID"
+            gh variable set VESTING_CONTRACT --body "$PREVIOUS_CONTRACT_ID"
+          else
+            echo "⚠️  Smoke tests failed and no previous contract ID is available for rollback."
+          fi
+          echo "❌ Deployment marked as FAILED. See smoke test output above."
+          exit 1

@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui smoke-test
 
 all: build
 
@@ -76,3 +76,32 @@ test-integration: build
 	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run post-deployment smoke tests against a live environment (issue #793).
+##
+## Required environment variables:
+##   SMOKE_API_HOST          e.g. https://api.testnet.example.com
+##   VESTING_CONTRACT        Deployed contract ID (Cxxx...)
+##
+## Optional overrides (defaults shown):
+##   SMOKE_SPONSOR_ADDRESS   Stellar G... address for analytics test
+##   SMOKE_RECIPIENT_ADDRESS Stellar G... address for contract view tests
+##   SMOKE_EXPECTED_CLIFF    "true" | "false" — expected is_cliff_passed result
+##
+## Usage:
+##   make smoke-test ENV=testnet
+##   make smoke-test ENV=mainnet SMOKE_API_HOST=https://api.mainnet.example.com
+##
+## ENV is translated to SMOKE_NETWORK and selects built-in testnet/mainnet defaults.
+ENV ?= testnet
+
+smoke-test:
+	@echo "▶ Installing smoke test dependencies..."
+	pip install --quiet -r tests/smoke/requirements.txt
+	@echo "▶ Running smoke tests against $(ENV)..."
+	SMOKE_NETWORK=$(ENV) \
+	pytest tests/smoke/ \
+	  --tb=short \
+	  -v \
+	  --timeout=60
+	@echo "✅ All smoke tests passed."
