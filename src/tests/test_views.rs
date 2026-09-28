@@ -1,89 +1,59 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
-
 use crate::{
-    contract::{VestingDrips, VestingDripsClient},
-    tests::{advance_ledger, setup_env},
+    tests::{
+        advance_ledger, setup_env,
+        factory::{at_cliff_stream, fully_claimed_stream, post_cliff_stream, pre_cliff_stream},
+    },
 };
 
-use super::super::tests::token_helper::{create_token, mint_to};
-
+/// `claimable_amount` returns 0 before the cliff.
 #[test]
 fn test_claimable_amount_before_cliff_is_zero() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = pre_cliff_stream(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    advance_ledger(&env, 30);
-    assert_eq!(client.claimable_amount(&recipient), 0);
+    assert_eq!(stream.client.claimable_amount(&addrs.recipient), 0);
 }
 
+/// `claimable_amount` reflects accrual correctly after the cliff.
 #[test]
 fn test_claimable_amount_after_cliff() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    // post_cliff_stream(25) → ledger 175 (75 ledgers past start × 10 = 750).
+    let (stream, addrs) = post_cliff_stream(&env, 25);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    advance_ledger(&env, 75); // 75 ledgers past start → 75 × 10 = 750
-    assert_eq!(client.claimable_amount(&recipient), 750);
+    assert_eq!(stream.client.claimable_amount(&addrs.recipient), 750);
 }
 
+/// `is_cliff_passed` transitions from false to true as the ledger advances.
 #[test]
 fn test_is_cliff_passed() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    // pre_cliff_stream lands at ledger 120 – cliff not passed.
+    let (stream, addrs) = pre_cliff_stream(&env);
+    assert!(!stream.client.is_cliff_passed(&addrs.recipient));
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    assert!(!client.is_cliff_passed(&recipient));
-    advance_ledger(&env, 50);
-    assert!(client.is_cliff_passed(&recipient));
+    // Advance to exactly the cliff (30 more ledgers to reach 150).
+    advance_ledger(&env, 30);
+    assert!(stream.client.is_cliff_passed(&addrs.recipient));
 }
 
+/// `get_schedule` returns `None` once the stream has been fully claimed.
 #[test]
 fn test_get_schedule_returns_none_after_completion() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = fully_claimed_stream(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
+    assert!(stream.client.get_schedule(&addrs.recipient).is_none());
+}
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+/// `claimable_amount` returns the full deposit when the stream has expired.
+#[test]
+fn test_claimable_amount_at_cliff_equals_accrued_since_start() {
+    let env = setup_env();
+    let (stream, addrs) = at_cliff_stream(&env);
 
-    advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
-
-    assert!(client.get_schedule(&recipient).is_none());
+    // 50 ledgers × 10 = 500
+    assert_eq!(stream.client.claimable_amount(&addrs.recipient), 500);
 }

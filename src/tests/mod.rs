@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 pub mod token_helper;
+pub mod factory;
 
 mod test_create;
 mod test_claim;
