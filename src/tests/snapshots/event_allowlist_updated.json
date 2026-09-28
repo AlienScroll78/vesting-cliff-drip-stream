@@ -1,0 +1,12 @@
+{
+  "event": "AllowlistUpdated",
+  "topics": {
+    "0": { "type": "Symbol", "value": "AllowlistUpdated" },
+    "1": { "type": "Address", "description": "admin address" }
+  },
+  "data": {
+    "0": { "type": "Address", "description": "token address" },
+    "1": { "type": "bool",    "description": "true = added, false = removed" }
+  },
+  "changelog": []
+}

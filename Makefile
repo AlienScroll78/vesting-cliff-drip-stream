@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
 
 all: build
 
@@ -17,6 +17,17 @@ build:
 ## Run all unit tests (native target, with testutils)
 test:
 	cargo test --features testutils
+
+## Run coverage with cargo-llvm-cov (install: cargo install cargo-llvm-cov)
+## Generates HTML report in docs/coverage/html and lcov.info in docs/coverage/
+coverage:
+	cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
+	cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
+
+## Run coverage in CI mode with threshold enforcement
+## Fails if line coverage < 90% or branch coverage < 80%
+coverage-ci:
+	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
 
 ## Validate the on-chain contract spec (schema) against the expected API.
 ## Requires the WASM to be built first; spec-test depends on `build`.
@@ -40,6 +51,39 @@ lint:
 ## Type-check without building
 check:
 	cargo check --all-targets --all-features
+
+## Run fuzz targets with cargo-fuzz (requires nightly toolchain)
+## Each target runs for 60 seconds by default
+fuzz:
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/create_vesting_stream/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/claim_vested/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/metadata_validation/
+
+## Run fuzz targets in CI mode – 10-minute wall-clock budget per target.
+## Runs create_vesting_stream first (with the full structured corpus), then
+## claim_vested and metadata_validation at 60 s each.
+## Usage: make fuzz-ci
+## Requires: nightly Rust toolchain, cargo-fuzz installed.
+fuzz-ci:
+	mkdir -p fuzz/artifacts/create_vesting_stream fuzz/artifacts/claim_vested fuzz/artifacts/metadata_validation
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run create_vesting_stream \
+		fuzz/corpus/create_vesting_stream \
+		-- \
+		-max_total_time=600 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/create_vesting_stream/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run claim_vested \
+		fuzz/corpus/claim_vested \
+		-- \
+		-max_total_time=60 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/claim_vested/
+	RUSTUP_TOOLCHAIN=nightly cargo fuzz run metadata_validation \
+		fuzz/corpus/metadata_validation \
+		-- \
+		-max_total_time=60 \
+		-print_final_stats=1 \
+		-artifact_prefix=fuzz/artifacts/metadata_validation/
 
 ## Build rustdoc; fails on any missing-doc warning (mirrors CI)
 doc:
@@ -76,3 +120,31 @@ test-integration: build
 	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run k6 backend load tests (requires a running backend on localhost:3001)
+## See tests/load/backend_scenarios.js for scenario description.
+test-load:
+	cd tests/load && k6 run backend_scenarios.js
+
+## Run k6 load tests in dry-run mode (skips create/claim mutations)
+test-load-dryrun:
+	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run performance benchmarks and evaluate against baselines (see docs/performance.md)
+bench:
+	@mkdir -p benchmarks
+	cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
+		| grep '^BENCH' \
+		| sed 's/^BENCH //' \
+		| jq -s '{benchmarks: .}' > benchmarks/results.json
+	node scripts/check_perf.js --results benchmarks/results.json --baseline benchmarks/baseline.json
+
+## Run benchmarks and record results to benchmarks/results.json (see docs/performance.md)
+bench-update:
+	@mkdir -p benchmarks
+	cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
+		| grep '^BENCH' \
+		| sed 's/^BENCH //' \
+		| jq -s '{benchmarks: .}' > benchmarks/results.json
+	@echo "Benchmark results captured in benchmarks/results.json"
+

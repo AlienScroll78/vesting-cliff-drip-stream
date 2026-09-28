@@ -159,6 +159,93 @@ This gives downstream users a quick at-a-glance view of what's in the release wi
 
 ---
 
+## Contributor Guide — Adding Dependencies
+
+This section explains how to add, verify, and document new dependencies in compliance with the project's license policy.
+
+### 1. Check if the dependency's license is approved
+
+Before adding a dependency, verify its license against the [approved list](#allowed-licenses) above.
+
+**Rust (Cargo):**
+```bash
+cargo install cargo-license --locked
+cargo license | grep -i '<package-name>'
+```
+
+**Node.js:**
+```bash
+npm info <package-name> license          # quick check
+license-checker --summary --production   # full scan (root)
+cd frontend && license-checker --summary --production  # frontend
+```
+
+If the license SPDX ID appears in the **allowed** list, you can proceed. If it appears in the **disallowed** list, you cannot use the package — find an alternative.
+
+### 2. Request approval for a new license type
+
+If the dependency uses a license not in either list:
+
+1. Open a GitHub issue with the `security` label.
+2. Include:
+   - Package name and version
+   - SPDX license identifier (exact string)
+   - Why you need this dependency
+   - Whether a permissive alternative exists
+3. The security team will review and either:
+   - Add the license to the `allowed` list in `.license-policy.json`, or
+   - Grant an `explicit_exceptions` entry with justification.
+
+### 3. Regenerate the SBOM locally
+
+After adding dependencies, regenerate the SBOM to verify it produces a clean artifact:
+
+```bash
+# Install syft (one-time)
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+# Generate SBOM
+syft . -o spdx-json=sbom-local.spdx.json
+
+# Verify against the release SBOM
+diff <(jq '.packages[].name' sbom-local.spdx.json | sort) \
+     <(jq '.packages[].name' sbom.spdx.json | sort)
+```
+
+### 4. Handle copyleft transitive dependencies
+
+If a **transitive** dependency (a dependency of a dependency) carries a copyleft license:
+
+1. **Do not merge** the PR until the issue is resolved.
+2. Check if a newer version of the direct dependency uses a permissive alternative.
+3. If no alternative exists, open an issue tagged `security` requesting a waiver.
+4. Waivers require:
+   - Confirmation that the copyleft code is not linked into the final WASM/JS bundle
+   - Or an `explicit_exceptions` entry with a time-bound review date
+
+### 5. Quarantine procedure for dependencies with known CVEs
+
+When a dependency has a known CVE:
+
+1. **Check severity:** Use `cargo audit` (Rust) or `npm audit` (Node.js).
+2. **Critical / High:** Block the PR. Upgrade to a patched version or remove the dependency.
+3. **Medium / Low:** Document in the PR description. Open a follow-up issue to upgrade.
+4. **Transitive dependency CVE:** Check if upgrading the direct dependency resolves it.
+
+```bash
+# Rust
+cargo install cargo-audit --locked
+cargo audit
+
+# Node.js
+npm audit --omit=dev
+cd frontend && npm audit --omit=dev
+```
+
+> **Rule:** A dependency with a CVE scoring ≥ 9.0 (Critical) must be upgraded or removed before the PR can merge.
+
+---
+
 ## Verifying an SBOM
 
 To verify a downloaded SBOM against the actual source tree, install [syft](https://github.com/anchore/syft) locally and regenerate:

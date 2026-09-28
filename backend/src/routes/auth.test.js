@@ -165,4 +165,59 @@ describe("verifyToken (authMiddleware logic)", () => {
     const r = verifyToken(`Bearer ${token}`);
     expect(r.status).toBe(401);
   });
+
+  it("rejects expired token", () => {
+    const token = jwt.sign({ sub: TEST_ADDR }, JWT_SECRET, { expiresIn: "0s" });
+    const r = verifyToken(`Bearer ${token}`);
+    expect(r.status).toBe(401);
+  });
+
+  it("rejects malformed authorization header", () => {
+    expect(verifyToken("Basic token").status).toBe(401);
+    expect(verifyToken("Bearer").status).toBe(401);
+  });
+});
+
+describe("issueChallenge edge cases", () => {
+  it("returns nonce with valid Stellar address format", async () => {
+    const r = await issueChallenge(TEST_ADDR);
+    expect(r.status).toBe(200);
+    expect(r.body.nonce).toBeDefined();
+    expect(r.body.nonce.length).toBeGreaterThan(0);
+  });
+
+  it("rejects empty address", async () => {
+    const r = await issueChallenge("");
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects invalid address format", async () => {
+    const r = await issueChallenge("GINVALID");
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects address with wrong length", async () => {
+    const r = await issueChallenge("GAH5H7EKIVT3VMYLDRZL4PJ732EXGBNFWLUQGHRKTUQ6HK2TN3RQXMG");
+    expect(r.status).toBe(400);
+  });
+});
+
+describe("verifyAndIssueToken edge cases", () => {
+  it("rejects timestamp in the future beyond window", async () => {
+    const futureTs = Date.now() + 60000;
+    const r = await verifyAndIssueToken({ address: TEST_ADDR, nonce: "n1", timestamp: futureTs, signature: "AAAA" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/window/);
+  });
+
+  it("rejects empty signature", async () => {
+    const r = await verifyAndIssueToken({ address: TEST_ADDR, nonce: "n1", timestamp: Date.now(), signature: "" });
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects invalid base64 signature", async () => {
+    const { body: { nonce, created_at } } = await issueChallenge(TEST_ADDR);
+    const r = await verifyAndIssueToken({ address: TEST_ADDR, nonce, timestamp: created_at, signature: "!!!invalid-base64!!!" });
+    expect(r.status).toBe(400);
+  });
 });

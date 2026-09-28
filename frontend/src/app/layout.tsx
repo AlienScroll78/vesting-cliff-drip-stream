@@ -1,8 +1,13 @@
 import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AnalyticsInit } from "@/components/AnalyticsInit";
 import { DarkModeToggle } from "@/components/DarkModeToggle";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { HorizonStatusBanner } from "@/components/HorizonStatusBanner";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 // Inline script run before paint to prevent flash of unstyled content
 const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
@@ -24,12 +29,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <I18nProvider>
           <AnalyticsInit />
+          {/* #278 — Horizon API status banner */}
+          <HorizonStatusBanner />
           <WalletProvider>
-            <header className="header" style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}>
-              <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
-              <DarkModeToggle />
-            </header>
-            {children}
+            <NotificationProvider>
+              <header
+                className="header"
+                style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}
+              >
+                <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {/* #382 — Notification bell */}
+                  <NotificationCenter />
+                  {/* #280 — Language switcher */}
+                  <LanguageSwitcher />
+                  <DarkModeToggle />
+                </div>
+              </header>
+              {children}
+              {/* #279 — Mobile bottom navigation (hidden on desktop via CSS) */}
+              <MobileBottomNav />
+            </NotificationProvider>
           </WalletProvider>
         </I18nProvider>
       </body>

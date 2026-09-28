@@ -1,0 +1,32 @@
+[package]
+name = "vesting-cliff-drip-stream-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "create_vesting_stream"
+path = "fuzz_targets/create_vesting_stream.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "claim_vested"
+path = "fuzz_targets/claim_vested.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "metadata_validation"
+path = "fuzz_targets/metadata_validation.rs"
+test = false
+doc = false
+bench = false

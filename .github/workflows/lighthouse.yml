@@ -1,0 +1,115 @@
+name: Lighthouse CI
+
+# Issue #369: Run Lighthouse on every PR against the deployed preview.
+# Enforces Performance ≥ 80, Accessibility ≥ 95, Best Practices ≥ 90, SEO ≥ 80.
+
+on:
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  lighthouse:
+    name: Lighthouse audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        env:
+          # Use a placeholder API URL so the build doesn't fail without a real backend
+          VITE_API_BASE_URL: http://localhost:3001/api
+
+      - name: Install @lhci/cli
+        run: npm install -g @lhci/cli@0.14.x
+
+      # ── Option A: run against local preview server ──────────────────────────
+      # Used when no deployed preview URL is available (e.g. draft PRs).
+      - name: Start local preview server
+        working-directory: frontend
+        run: |
+          npm run preview -- --port 4173 &
+          # Wait for the server to be ready
+          npx wait-on http://localhost:4173 --timeout 30000
+
+      - name: Run Lighthouse CI (local)
+        if: env.PREVIEW_URL == ''
+        run: lhci autorun --config=lighthouserc.js
+        env:
+          LHCI_URL: http://localhost:4173
+          LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}
+          LHCI_SERVER_BASE_URL: ${{ secrets.LHCI_SERVER_BASE_URL }}
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      # ── Option B: run against deployed preview URL ──────────────────────────
+      # When a preview deployment is available (set PREVIEW_URL in the PR env).
+      - name: Run Lighthouse CI (preview)
+        if: env.PREVIEW_URL != ''
+        run: lhci autorun --config=lighthouserc.js
+        env:
+          LHCI_URL: ${{ env.PREVIEW_URL }}
+          LHCI_TOKEN: ${{ secrets.LHCI_TOKEN }}
+          LHCI_SERVER_BASE_URL: ${{ secrets.LHCI_SERVER_BASE_URL }}
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      # ── Upload results as artifact for download ──────────────────────────────
+      - name: Upload Lighthouse results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-results
+          path: .lighthouseci/
+          retention-days: 30
+
+      # ── Post results as PR comment ───────────────────────────────────────────
+      - name: Comment Lighthouse scores on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const lhDir = '.lighthouseci';
+            if (!fs.existsSync(lhDir)) {
+              console.log('No Lighthouse results found.');
+              return;
+            }
+
+            // Find the manifest JSON produced by lhci
+            const manifestFile = path.join(lhDir, 'manifest.json');
+            if (!fs.existsSync(manifestFile)) {
+              console.log('No manifest.json found.');
+              return;
+            }
+
+            const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+            const results = manifest.map(entry => {
+              const summary = entry.summary;
+              const format = (v) => Math.round(v * 100);
+              return `| ${entry.url} | ${format(summary.performance)} | ${format(summary.accessibility)} | ${format(summary['best-practices'])} | ${format(summary.seo)} |`;
+            });
+
+            const thresholds = '| Threshold | ≥ 80 | ≥ 95 | ≥ 90 | ≥ 80 |';
+            const header = '## 🔦 Lighthouse CI Results\n\n| URL | Performance | Accessibility | Best Practices | SEO |\n|---|---|---|---|---|\n' + thresholds;
+            const body = header + '\n' + results.join('\n') + '\n\n> Scores are averaged over 3 runs. Full report available in the [workflow artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

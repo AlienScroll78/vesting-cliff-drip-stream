@@ -18,3 +18,29 @@ export function trapFocus(container: HTMLElement): () => void {
   document.addEventListener("keydown", handler);
   return () => document.removeEventListener("keydown", handler);
 }
+
+/**
+ * Returns all focusable elements within `container`, in DOM order.
+ * Excludes elements with tabindex="-1".
+ */
+export function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE));
+}
+
+/**
+ * Moves focus to the first focusable element inside `container`.
+ * No-op if the container has no focusable children.
+ */
+export function focusFirst(container: HTMLElement): void {
+  const elements = getFocusableElements(container);
+  elements[0]?.focus();
+}
+
+/**
+ * Moves focus to the last focusable element inside `container`.
+ * No-op if the container has no focusable children.
+ */
+export function focusLast(container: HTMLElement): void {
+  const elements = getFocusableElements(container);
+  elements[elements.length - 1]?.focus();
+}

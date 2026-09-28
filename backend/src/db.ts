@@ -1,10 +1,9 @@
 /**
  * Shared PostgreSQL connection pool.
- * Requires DATABASE_URL in the environment.
+ *
+ * This module re-exports the pool from database.ts so that existing imports
+ * of "../db.js" continue to work without change.
+ *
+ * The canonical implementation with Prometheus metrics lives in database.ts.
  */
-import pg from "pg";
-
-export const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
-});
+export { pool } from "./database.js";

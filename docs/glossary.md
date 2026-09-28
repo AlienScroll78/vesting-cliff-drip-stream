@@ -1,6 +1,6 @@
 # Glossary
 
-Domain-specific terms used throughout this project's documentation and code.
+Domain-specific terms used throughout this project's documentation and code. Terms are ordered alphabetically for quick reference.
 
 ---
 
@@ -16,9 +16,33 @@ A Stellar account identifier or contract identifier. In Soroban, both user accou
 
 ---
 
+### Admin
+
+The privileged [address](#address) with authority to perform sensitive contract operations: [`upgrade`](api-reference.md#upgrade) (deploy new WASM), [`transfer_admin`](api-reference.md#transfer_admin) (delegate authority), [`set_min_deposit`](api-reference.md#set_min_deposit) (configure thresholds), and [`migrate_schedule`](api-reference.md#migrate_schedule) (update legacy schemas). Set once via [`initialize`](api-reference.md#initialize) and stored in [instance storage](#instance-storage). Unlike [sponsor](#sponsor), the admin does not fund streams and cannot cancel or claim on behalf of users. Unauthorized admin operations return error code 13 (`Unauthorized`).
+
+---
+
+### Allowlist
+
+An optional on-chain registry of [addresses](#address) permitted to receive vesting streams. When enabled, [`create_vesting_stream`](api-reference.md#create_vesting_stream) checks that the `recipient` address appears in the allowlist before accepting the stream; unlisted recipients are rejected with an authorization error. The allowlist is managed by the contract [admin](#admin) and stored in [instance storage](#instance-storage). By default the allowlist feature is disabled and any valid recipient address is accepted. See [`set_allowlist`](api-reference.md#set_allowlist) and [`get_allowlist`](api-reference.md#get_allowlist) for management functions.
+
+---
+
 ### Auth / `require_auth()`
 
 A Soroban SDK call that enforces that a given `Address` has signed the current transaction. This contract requires the sponsor to authorize `create_vesting_stream` and `cancel_stream`, and the recipient to authorize `claim_vested`.
+
+---
+
+### Authorization
+
+See [Auth / `require_auth()`](#auth--require_auth).
+
+---
+
+### BytesN
+
+A Soroban SDK type representing a fixed-length byte array. `BytesN<32>` is commonly used for cryptographic hashes like WASM contract hashes (SHA-256). When calling [`upgrade`](api-reference.md#upgrade), the `new_wasm_hash` parameter must be a `BytesN<32>` value obtained from `stellar contract install`. The Stellar CLI automatically handles encoding; raw SDK users must construct from a `[u8; 32]` array. See [Soroban SDK documentation](https://docs.rs/soroban-sdk/) for type conversions.
 
 ---
 
@@ -31,6 +55,12 @@ The lump-sum transfer made at the first claim after the cliff. Because tokens ha
 ### Checked Arithmetic
 
 Rust operations (e.g., `checked_mul`, `checked_add`) that return `None` instead of panicking on integer overflow. This contract uses them everywhere to return [`DepositOverflow`](../src/error.rs) rather than trap.
+
+---
+
+### Clawback
+
+A compliance mechanism allowing the original [sponsor](#sponsor) to recover all remaining tokens from a vesting stream, regardless of [cliff](#cliff) status. Only available on tokens that support the SAC (Stellar Asset Contract) clawback flag. Used for regulatory compliance scenarios such as AML violations, sanctions list matches, or court orders. Invoked via [`clawback_stream`](api-reference.md#clawback_stream) with a mandatory reason string for audit trails.
 
 ---
 
@@ -52,9 +82,21 @@ The absolute ledger sequence number at which the cliff occurs, computed as `star
 
 ---
 
+### Compliance
+
+Regulatory requirements that may necessitate recovering vested tokens from a stream, typically for Anti-Money Laundering (AML), sanctions enforcement, or court orders. The contract provides [`clawback_stream`](api-reference.md#clawback_stream) for immediate token recovery on [clawback](#clawback)-enabled assets, requiring a mandatory `reason` string (max 256 chars) for audit trails. Compliance actions bypass normal [cliff](#cliff) and [accrual](#accrual) rules, transferring all remaining vault tokens directly to the [sponsor](#sponsor). Emits a `vc_clawback` event with the reason field for off-chain compliance monitoring.
+
+---
+
 ### Deposit
 
 The total token amount locked into the contract vault at stream creation, computed as `rate × total_duration`. The sponsor must hold this balance at the time `create_vesting_stream` is called.
+
+---
+
+### Drain Delay
+
+A mandatory waiting period of approximately 1 year (~3,153,600 [ledgers](#ledger)) after a stream's [`end_ledger`](#end_ledger) before the [`emergency_drain`](api-reference.md#emergency_drain) or [`drain_expired_stream`](api-reference.md#drain_expired_stream) function can be called. This safety window prevents abuse by giving [recipients](#recipient) ample time to claim their vested tokens. The delay is checked in ledger-time, not wall-clock time, to ensure deterministic contract behavior. Defined as `DRAIN_DELAY_LEDGERS` constant in [`contract.rs`](../src/contract.rs).
 
 ---
 
@@ -64,9 +106,23 @@ A token-streaming primitive where tokens flow to a recipient at a constant rate 
 
 ---
 
+### Dust
+
+A fractional token remainder too small to be economically meaningful — typically a sub-stroop or single-unit balance left in the vault after all full-ledger accruals have been claimed. Dust arises from integer division when `rate × elapsed_ledgers` does not divide evenly over the stream's lifetime. The contract leaves dust in the vault and returns it to the [sponsor](#sponsor) on cancellation or via [`drain_expired_stream`](api-reference.md#drain_expired_stream) after the [drain delay](#drain-delay) elapses. The [minimum deposit](#minimum-deposit) threshold prevents streams so small that the entire deposit would be considered dust.
+
+---
+
+### Emergency Drain
+
+A sponsor-initiated recovery mechanism ([`emergency_drain`](api-reference.md#emergency_drain)) for reclaiming tokens from an expired stream when the [recipient](#recipient)'s keys are permanently lost. Only callable after [`end_ledger`](#end_ledger) + [drain delay](#drain-delay) (~1 year) have elapsed. This balances two risks: preventing indefinite token lockup (if recipient keys are lost) versus protecting recipients from premature sponsor clawback. Unlike [`clawback_stream`](api-reference.md#clawback_stream), which is instantaneous and compliance-driven, emergency drain enforces a long safety window to give recipients time to claim. Returns error code 10 (`DrainDelayNotExpired`) if called too early.
+
+---
+
 ### `end_ledger`
 
 The absolute ledger sequence number at which the stream ends, computed as `start_ledger + total_duration`. After this ledger, no further tokens accrue.
+
+---
 
 ---
 
@@ -76,15 +132,51 @@ The REST API server for the Stellar network, operated by the Stellar Development
 
 ---
 
+### Idempotency Key
+
+A unique, caller-supplied token included in an API or transaction request to guarantee that retrying the same operation does not produce duplicate effects. In the context of this contract's off-chain tooling and REST wrappers, an idempotency key (typically a UUID or content hash) allows a client to safely re-submit a `create_vesting_stream` request after a network timeout without risking a second stream being created. The contract itself enforces idempotency at the on-chain level via the `ScheduleAlreadyExists` guard (error 6) — a second call with the same recipient is rejected regardless of key. Idempotency keys are primarily relevant for the HTTP API layer described in [`docs/api.yaml`](api.yaml).
+
+---
+
+### Instance Storage
+
+A Soroban storage tier for contract-wide configuration values that apply to all instances of a contract. In this project, [`set_min_deposit`](api-reference.md#set_min_deposit) stores the minimum deposit threshold in instance storage using the `DataKey::MinDeposit` key. Instance storage entries have independent [TTL](#ttl-time-to-live) from [persistent storage](#persistent-storage) and are typically used for admin-controlled settings that don't vary per user. See [Soroban storage documentation](https://developers.stellar.org/docs/smart-contracts/storage) for tier comparisons.
+
+---
+
 ### Ledger
 
 The fundamental unit of time on the Stellar network. A new ledger closes approximately every 5 seconds. All time parameters in this contract (`cliff_duration`, `total_duration`, `rate`) are expressed in ledgers rather than wall-clock time.
 
 ---
 
+### Minimum Deposit
+
+A configurable threshold (default 100 tokens) enforcing that `rate × total_duration` must meet a minimum value when creating a vesting stream via [`create_vesting_stream`](api-reference.md#create_vesting_stream). This prevents dust-level streams that would consume disproportionate storage and ledger resources. The threshold is stored in [instance storage](#instance-storage) and can be updated by the contract admin via [`set_min_deposit`](api-reference.md#set_min_deposit). Violation triggers error code 14 (`DepositBelowMinimum`). See [ADR-0004](adr/README.md) for the rationale behind this constraint.
+
+---
+
+### Milestone Stream
+
+A vesting variant in which token releases are gated on discrete, verifiable project milestones rather than purely on elapsed [ledgers](#ledger). Each milestone (e.g., code audit completion, product launch) unlocks a pre-defined tranche of tokens when an authorised oracle or admin attests that the milestone has been met. Unlike a standard linear drip, a milestone stream's cliff and unlock schedule are event-driven. This feature is tracked in the project roadmap; the current contract implements time-based [accrual](#accrual) only. See [docs/design/multi-token.md](design/multi-token.md) for related design discussions.
+
+---
+
+### Permissionless
+
+A contract function callable by any [address](#address) without [authorization](#auth--require_auth) requirements. [`drain_expired_stream`](api-reference.md#drain_expired_stream) is permissionless: after a stream expires and the [drain delay](#drain-delay) elapses, **any user** can trigger cleanup to return unclaimed tokens to the [sponsor](#sponsor). This design allows the network community to perform housekeeping, reducing the contract's storage footprint and freeing locked tokens. Permissionless functions still validate business logic (e.g., delay expiration) but don't require the caller to prove identity or ownership.
+
+---
+
 ### Persistent Storage
 
 A Soroban storage tier whose entries survive across ledger closings indefinitely, subject to [TTL](#ttl-time-to-live) rent. This contract stores each `VestingSchedule` in persistent storage and bumps the TTL on every read and write.
+
+---
+
+### Protocol Fee
+
+A percentage of the total stream [deposit](#deposit) charged at stream creation and transferred to a designated fee-collection address. Fees are expressed in **basis points** (bps), where 1 bps = 0.01%. For example, a 50 bps fee on a 10,000-token deposit retains 9,950 tokens for vesting and routes 50 tokens to the fee recipient. The fee rate and collection address are set by the contract [admin](#admin) via [`set_protocol_fee`](api-reference.md#set_protocol_fee) and stored in [instance storage](#instance-storage). A fee of 0 bps (the default) disables the mechanism entirely. Protocol fees are deducted before the [minimum deposit](#minimum-deposit) check so that the threshold applies to the net vesting amount.
 
 ---
 
@@ -103,6 +195,12 @@ The beneficiary `Address` of a vesting stream. The recipient can call `claim_ves
 ### SAC (Stellar Asset Contract)
 
 A Soroban smart contract that wraps a classic Stellar asset and exposes it via the standard token interface. The `token` parameter in `create_vesting_stream` must be a SAC contract address (`C…`).
+
+---
+
+### Schema Versioning
+
+A forward-compatibility mechanism where each [`VestingSchedule`](api-reference.md#vestingschedule) struct includes a `version: u32` field indicating the schema generation. Schedules created before this field was introduced have an implicit `version = 0` (XDR default). Current schedules use `version = 1`. The [`migrate_schedule`](api-reference.md#migrate_schedule) function upgrades legacy entries in-place. This pattern allows the contract to evolve its storage schema without breaking existing streams, supporting progressive data migrations during upgrades. See [types.rs](../src/types.rs) for version-specific field interpretations.
 
 ---
 
@@ -136,6 +234,18 @@ A decentralized payment and smart-contract network. Validators reach consensus v
 
 ---
 
+### Stream Statistics
+
+Consolidated metrics for a vesting stream returned by [`get_stats`](api-reference.md#get_stats). Includes `total_deposited` (initial allocation), `total_claimed` (tokens already transferred to [recipient](#recipient)), `remaining` (tokens still in [vault](#vault)), and `claimable_now` (tokens claimable at the current [ledger](#ledger)). The contract maintains the mathematical invariant `total_deposited == total_claimed + remaining` and `claimable_now <= remaining`. These fields provide a complete snapshot for UI dashboards without requiring off-chain event indexing. See [`StreamStats`](api-reference.md#streamstats) type definition.
+
+---
+
+### Stroops
+
+The smallest unit of XLM (Stellar's native asset) and XLM-based SAC tokens. One XLM equals 10,000,000 stroops (7 decimal places). All token amounts in this contract—[`rate`](#rate), [`total_deposit`](#deposit), [`claimable_amount`](api-reference.md#claimable_amount)—are denominated in the token's base unit (stroops for XLM, or the equivalent smallest unit for other assets). When creating a stream with `rate = 10`, that means 10 stroops per [ledger](#ledger), not 10 whole XLM. Always multiply by `10^decimals` when displaying human-readable amounts in UIs.
+
+---
+
 ### `total_duration`
 
 The total length of the vesting stream in [ledgers](#ledger), passed as a `u32` to `create_vesting_stream`. Must be strictly greater than `cliff_duration`. Determines the [`end_ledger`](#end_ledger) and the total [deposit](#deposit).
@@ -148,15 +258,33 @@ A rent mechanism in Soroban persistent storage. Each entry has a TTL expressed i
 
 ---
 
+### Upgrade
+
+The process of replacing a deployed contract's [WASM](#wasm-webassembly) code with a new version while preserving on-chain storage. Performed via [`upgrade`](api-reference.md#upgrade), which requires [admin](#admin) authorization and the SHA-256 hash ([`BytesN<32>`](#bytesn)) of the new WASM binary. The Stellar CLI workflow: `stellar contract install` (uploads WASM, returns hash) → `stellar contract invoke ... upgrade` (atomically updates the contract). Storage entries (like [`VestingSchedule`](api-reference.md#vestingschedule) structs) survive upgrades if the new code maintains schema compatibility. Use [`migrate_schedule`](api-reference.md#migrate_schedule) to adapt old schemas after breaking changes.
+
+---
+
 ### Vault
 
 The contract's internal token balance — the tokens held by the contract address itself after the sponsor's upfront deposit. Tokens are released from the vault to the recipient on each `claim_vested` call.
 
 ---
 
+### Variable Rate
+
+A stream configuration in which the [rate](#rate) (tokens per [ledger](#ledger)) changes over the lifetime of the stream, rather than remaining constant. A variable-rate schedule is typically expressed as a piecewise function: for example, `rate₁` tokens/ledger from `start_ledger` to a breakpoint, then `rate₂` tokens/ledger from the breakpoint to `end_ledger`. The total [deposit](#deposit) equals the sum of each segment: `(rate₁ × segment₁_duration) + (rate₂ × segment₂_duration)`. [Accrual](#accrual) and [catch-up claim](#catch-up-claim) logic must evaluate the correct rate segment for the current ledger. The current contract implements a single constant rate only; variable-rate support is a planned extension. See [ADR-0002](adr/0002-i128-rate-representation.md) for the rate representation rationale.
+
+---
+
 ### VestingSchedule
 
 The core data struct stored in [persistent storage](#persistent-storage) for each recipient. Contains `sponsor`, `token`, `rate`, `start_ledger`, `cliff_ledger`, `end_ledger`, and `claimed` (total tokens already transferred).
+
+---
+
+### Variable Rate
+
+A stream configuration where the token accrual [rate](#rate) changes over the lifetime of the stream rather than remaining constant. Instead of a single `rate` value, a variable-rate stream stores a schedule of `(effective_ledger, rate_per_ledger)` pairs; the claimable amount at any ledger is computed by summing each segment: `Σ rate_i × (min(current, end_i) − start_i)`. Variable-rate streams enable use cases such as step-vesting (rate doubles after one year) or decay schedules (rate halves every quarter). Because each rate segment can introduce sub-unit remainders when ledger counts are uneven, variable-rate streams are the primary source of [dust](#dust). The current contract implements a fixed rate only; variable rate is the planned extension tracked in the feature roadmap.
 
 ---
 
