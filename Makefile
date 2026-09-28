@@ -148,3 +148,11 @@ bench-update:
 		| jq -s '{benchmarks: .}' > benchmarks/results.json
 	@echo "Benchmark results captured in benchmarks/results.json"
 
+
+## Analyse the frontend bundle size — generates frontend/dist/stats.html (#771)
+## Open frontend/dist/stats.html in your browser after running.
+analyze:
+	cd frontend && npx vite-bundle-visualizer --open || \
+		(npm install --save-dev rollup-plugin-visualizer --prefer-offline && \
+		 VITE_BUNDLE_ANALYZE=true npx vite build)
+

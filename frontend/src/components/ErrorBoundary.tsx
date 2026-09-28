@@ -1,33 +1,65 @@
 "use client";
 /**
- * ErrorBoundary — enhanced error boundaries (#275)
+ * ErrorBoundary — error boundary components (#769)
  *
  * Exports:
- *  - `logError`              — abstracted error reporter (console + optional Sentry)
- *  - `ErrorBoundary`         — top-level boundary; full-page fallback with details
- *  - `StreamCardErrorBoundary` — lightweight per-card boundary; inline fallback
+ *  - `ErrorBoundary`             — root-level boundary; full-page fallback with
+ *                                   Reload + Report buttons, Sentry integration
+ *  - `RouteErrorBoundary`        — route-level boundary; shows friendly page with
+ *                                   navigation options, resets on route change
+ *  - `StreamCardErrorBoundary`   — per-card boundary; inline compact fallback
+ *  - `logError`                  — abstracted error reporter (console + Sentry)
  *
- * Sentry integration is opt-in: set NEXT_PUBLIC_SENTRY_DSN in your environment
- * and `@sentry/react` will be dynamically imported and used automatically.
- * No Sentry package is required when the DSN is absent.
+ * Sentry integration: set VITE_SENTRY_DSN and import @sentry/react.
+ * Errors are always reported synchronously via captureException so the
+ * event-id is available immediately to render the "Report this issue" button.
  */
 
-import React, { Component, ReactNode, ErrorInfo } from "react";
+import React, {
+  Component,
+  ReactNode,
+  ErrorInfo,
+  useEffect,
+  useRef,
+  useState,
+  useId,
+} from "react";
+import * as Sentry from "@sentry/react";
 
-// ─── Abstracted error logger (Sentry hook-ready) ──────────────────────────────
+// ─── Sentry event-id tracking ─────────────────────────────────────────────────
 
 /**
- * Log an error to the browser console (always) and to Sentry when
- * `NEXT_PUBLIC_SENTRY_DSN` is present in the environment.
- *
- * Pass `context` for any structured extra data you want to attach.
+ * Report an error to Sentry and return the event-id (or null when Sentry is
+ * not configured / unavailable).
+ */
+export function captureToSentry(
+  error: Error,
+  errorInfo: ErrorInfo | { componentStack?: string | null } | null,
+  extra?: Record<string, unknown>,
+): string | null {
+  try {
+    const eventId = Sentry.captureException(error, {
+      extra: {
+        ...(errorInfo ?? {}),
+        ...(extra ?? {}),
+      },
+    });
+    return eventId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Log an error to the console (always) and to Sentry when a DSN is
+ * configured. Returns the Sentry event-id if captured, otherwise null.
  */
 export function logError(
   error: Error,
-  errorInfo: ErrorInfo | { componentStack?: string } | null,
+  errorInfo: ErrorInfo | { componentStack?: string | null } | null,
   context?: Record<string, unknown>,
-): void {
-  // Always log to console with full stack trace
+): string | null {
+  // Always surface to console
   console.error(
     "[ErrorBoundary] Uncaught error:",
     error,
@@ -36,27 +68,13 @@ export function logError(
     ...(context ? ["\nContext:", context] : []),
   );
 
-  // Optional Sentry integration — dynamically imported only when DSN is set
-  if (
-    typeof window !== "undefined" &&
-    process.env.NEXT_PUBLIC_SENTRY_DSN
-  ) {
-    import("@sentry/react")
-      .then(({ captureException }) =>
-        captureException(error, {
-          extra: { ...(errorInfo ?? {}), ...context },
-        }),
-      )
-      .catch(() => {
-        /* Sentry unavailable — fail silently so the app keeps running */
-      });
-  }
+  return captureToSentry(error, errorInfo, context);
 }
 
-// ─── Shared styles (CSS custom properties from globals.css) ───────────────────
+// ─── Shared styles ────────────────────────────────────────────────────────────
 
-const sharedStyles = {
-  retryBtn: {
+const styles = {
+  primaryBtn: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -71,10 +89,19 @@ const sharedStyles = {
     cursor: "pointer",
   } as React.CSSProperties,
 
-  homeLink: {
+  secondaryBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "44px",
+    padding: "0.5rem 1.25rem",
+    background: "transparent",
     color: "var(--color-active, #1d6ae5)",
-    fontSize: "0.875rem",
-    textDecoration: "underline",
+    border: "1px solid var(--color-active, #1d6ae5)",
+    borderRadius: "var(--radius, 0.5rem)",
+    fontWeight: 600,
+    fontSize: "1rem",
+    cursor: "pointer",
   } as React.CSSProperties,
 
   details: {
@@ -82,18 +109,6 @@ const sharedStyles = {
     textAlign: "left" as const,
     width: "100%",
     maxWidth: "640px",
-  } as React.CSSProperties,
-
-  detailsSummary: {
-    cursor: "pointer",
-    fontSize: "0.8125rem",
-    color: "var(--color-cancelled, #b91c1c)",
-    fontWeight: 600,
-    userSelect: "none" as const,
-    listStyle: "none",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "0.25rem",
   } as React.CSSProperties,
 
   pre: {
@@ -112,7 +127,7 @@ const sharedStyles = {
   } as React.CSSProperties,
 } as const;
 
-// ─── Collapsible error details ────────────────────────────────────────────────
+// ─── Collapsible technical details ────────────────────────────────────────────
 
 interface ErrorDetailsProps {
   error: Error;
@@ -121,13 +136,26 @@ interface ErrorDetailsProps {
 
 function ErrorDetails({ error, componentStack }: ErrorDetailsProps) {
   return (
-    <details style={sharedStyles.details}>
-      {/* eslint-disable-next-line jsx-a11y/no-redundant-roles */}
-      <summary style={sharedStyles.detailsSummary}>
+    <details style={styles.details}>
+      <summary
+        style={{
+          cursor: "pointer",
+          fontSize: "0.8125rem",
+          color: "var(--color-cancelled, #b91c1c)",
+          fontWeight: 600,
+          userSelect: "none",
+          listStyle: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.25rem",
+        }}
+      >
         ▶ Show technical details
       </summary>
-      <pre style={sharedStyles.pre}>
-        <strong>{error.name}: {error.message}</strong>
+      <pre style={styles.pre}>
+        <strong>
+          {error.name}: {error.message}
+        </strong>
         {error.stack ? `\n\n${error.stack}` : ""}
         {componentStack ? `\n\nComponent stack:${componentStack}` : ""}
       </pre>
@@ -135,7 +163,7 @@ function ErrorDetails({ error, componentStack }: ErrorDetailsProps) {
   );
 }
 
-// ─── Top-level ErrorBoundary ──────────────────────────────────────────────────
+// ─── Root-level ErrorBoundary ─────────────────────────────────────────────────
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -149,46 +177,56 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryState {
   error: Error | null;
   componentStack: string | null;
+  sentryEventId: string | null;
 }
 
 /**
- * Top-level error boundary — wrap the entire app (or large page sections).
+ * Root-level error boundary — wrap the entire app or large page sections.
  *
- * Shows a full-page fallback with:
- *  - Accessible `role="alert"` container
- *  - Error message
- *  - Collapsible technical details (`<details>`)
- *  - "Retry" button that resets boundary state
- *  - "Go to home page" link
+ * Fallback UI:
+ *  - Accessible `role="main"` container labelled by the heading (aria-labelledby)
+ *  - Heading with `tabIndex={-1}` for programmatic focus
+ *  - "Reload the page" button
+ *  - "Report this issue" button (shown after Sentry captures the event)
+ *  - Collapsible technical details
  */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { error: null, componentStack: null };
+  state: ErrorBoundaryState = {
+    error: null,
+    componentStack: null,
+    sentryEventId: null,
+  };
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { error };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    this.setState({ componentStack: info.componentStack ?? null });
-    logError(error, info);
+    const sentryEventId = logError(error, info);
+    this.setState({
+      componentStack: info.componentStack ?? null,
+      sentryEventId,
+    });
   }
 
-  reset = (): void => this.setState({ error: null, componentStack: null });
+  reset = (): void =>
+    this.setState({ error: null, componentStack: null, sentryEventId: null });
 
   render(): ReactNode {
-    const { error, componentStack } = this.state;
+    const { error, componentStack, sentryEventId } = this.state;
 
     if (error) {
       if (this.props.fallback) {
         return this.props.fallback(this.reset, error);
       }
       return (
-        <TopLevelFallback
+        <RootFallback
           error={error}
           componentStack={componentStack}
+          sentryEventId={sentryEventId}
           reset={this.reset}
         />
       );
@@ -198,23 +236,45 @@ export class ErrorBoundary extends Component<
   }
 }
 
-// ─── Top-level fallback UI ────────────────────────────────────────────────────
+export default ErrorBoundary;
 
-interface TopLevelFallbackProps {
+// ─── Root fallback UI ─────────────────────────────────────────────────────────
+
+interface RootFallbackProps {
   error: Error;
   componentStack: string | null;
+  sentryEventId: string | null;
   reset: () => void;
 }
 
-function TopLevelFallback({
+function RootFallback({
   error,
   componentStack,
+  sentryEventId,
   reset,
-}: TopLevelFallbackProps) {
+}: RootFallbackProps) {
+  const headingId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // Move focus to the heading so screen-reader users are informed immediately
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  function handleReload() {
+    window.location.reload();
+  }
+
+  function handleReport() {
+    if (sentryEventId) {
+      Sentry.showReportDialog({ eventId: sentryEventId });
+    }
+  }
+
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
+    <main
+      role="main"
+      aria-labelledby={headingId}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -226,17 +286,20 @@ function TopLevelFallback({
         textAlign: "center",
       }}
     >
-      {/* Decorative error icon — hidden from screen readers */}
       <span aria-hidden="true" style={{ fontSize: "3rem", lineHeight: 1 }}>
         ⚠️
       </span>
 
       <h1
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
         style={{
           fontSize: "1.5rem",
           fontWeight: 700,
           margin: 0,
           color: "var(--color-text, #111827)",
+          outline: "none",
         }}
       >
         Something went wrong
@@ -255,14 +318,220 @@ function TopLevelFallback({
       </p>
 
       <div
-        style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+          flexWrap: "wrap",
+          justifyContent: "center",
+        }}
       >
-        <button type="button" onClick={reset} style={sharedStyles.retryBtn}>
-          Retry
+        <button
+          type="button"
+          onClick={handleReload}
+          style={styles.primaryBtn}
+        >
+          Reload the page
         </button>
-        <a href="/" style={sharedStyles.homeLink}>
-          Go to home page
+
+        {sentryEventId && (
+          <button
+            type="button"
+            onClick={handleReport}
+            style={styles.secondaryBtn}
+          >
+            Report this issue
+          </button>
+        )}
+      </div>
+
+      <ErrorDetails error={error} componentStack={componentStack} />
+    </main>
+  );
+}
+
+// ─── RouteErrorBoundary ───────────────────────────────────────────────────────
+
+interface RouteErrorBoundaryProps {
+  children: ReactNode;
+  /** Route key — when this changes the boundary resets automatically */
+  routeKey?: string;
+}
+
+interface RouteErrorBoundaryState {
+  error: Error | null;
+  componentStack: string | null;
+  sentryEventId: string | null;
+  lastRouteKey: string | undefined;
+}
+
+/**
+ * Route-level error boundary — wraps individual route pages.
+ *
+ * Automatically clears the caught error when `routeKey` changes (i.e. the
+ * user navigates to a different route), preventing stale error UIs.
+ */
+export class RouteErrorBoundary extends Component<
+  RouteErrorBoundaryProps,
+  RouteErrorBoundaryState
+> {
+  state: RouteErrorBoundaryState = {
+    error: null,
+    componentStack: null,
+    sentryEventId: null,
+    lastRouteKey: undefined,
+  };
+
+  static getDerivedStateFromProps(
+    props: RouteErrorBoundaryProps,
+    state: RouteErrorBoundaryState,
+  ): Partial<RouteErrorBoundaryState> | null {
+    // Clear error when the route changes
+    if (props.routeKey !== state.lastRouteKey) {
+      return {
+        error: null,
+        componentStack: null,
+        sentryEventId: null,
+        lastRouteKey: props.routeKey,
+      };
+    }
+    return null;
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    const sentryEventId = logError(error, info, { context: "RouteErrorBoundary" });
+    this.setState({
+      componentStack: info.componentStack ?? null,
+      sentryEventId,
+    });
+  }
+
+  reset = (): void =>
+    this.setState({ error: null, componentStack: null, sentryEventId: null });
+
+  render(): ReactNode {
+    const { error, componentStack, sentryEventId } = this.state;
+
+    if (error) {
+      return (
+        <RouteFallback
+          error={error}
+          componentStack={componentStack}
+          sentryEventId={sentryEventId}
+          reset={this.reset}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ─── Route fallback UI ────────────────────────────────────────────────────────
+
+interface RouteFallbackProps {
+  error: Error;
+  componentStack: string | null;
+  sentryEventId: string | null;
+  reset: () => void;
+}
+
+function RouteFallback({
+  error,
+  componentStack,
+  sentryEventId,
+  reset,
+}: RouteFallbackProps) {
+  const headingId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  function handleReport() {
+    if (sentryEventId) {
+      Sentry.showReportDialog({ eventId: sentryEventId });
+    }
+  }
+
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "40vh",
+        gap: "1rem",
+        padding: "2rem",
+        textAlign: "center",
+      }}
+    >
+      <span aria-hidden="true" style={{ fontSize: "2.5rem", lineHeight: 1 }}>
+        ⚠️
+      </span>
+
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
+        style={{
+          fontSize: "1.25rem",
+          fontWeight: 700,
+          margin: 0,
+          color: "var(--color-text, #111827)",
+          outline: "none",
+        }}
+      >
+        This page encountered an error
+      </h2>
+
+      <p
+        style={{
+          margin: 0,
+          color: "var(--color-text, #111827)",
+          opacity: 0.7,
+          maxWidth: "380px",
+        }}
+      >
+        Something went wrong loading this page. Try refreshing, or navigate to
+        a different section.
+      </p>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+          justifyContent: "center",
+        }}
+      >
+        <button type="button" onClick={reset} style={styles.primaryBtn}>
+          Try again
+        </button>
+        <a
+          href="/"
+          style={{
+            color: "var(--color-active, #1d6ae5)",
+            fontSize: "0.875rem",
+            textDecoration: "underline",
+          }}
+        >
+          Go to dashboard
         </a>
+        {sentryEventId && (
+          <button
+            type="button"
+            onClick={handleReport}
+            style={{ ...styles.secondaryBtn, fontSize: "0.875rem", minHeight: "36px" }}
+          >
+            Report this issue
+          </button>
+        )}
       </div>
 
       <ErrorDetails error={error} componentStack={componentStack} />
@@ -284,14 +553,10 @@ interface StreamCardErrorBoundaryState {
 }
 
 /**
- * Lightweight per-card error boundary — wrap individual stream cards so a
- * single broken card cannot crash the entire list.
+ * Per-card error boundary — wrap individual stream cards so a single broken
+ * card cannot crash the entire dashboard.
  *
- * Shows a compact inline error banner with:
- *  - Accessible `role="alert"` container
- *  - Short error summary
- *  - Collapsible `<details>` for the full stack trace
- *  - "Retry" button to reset this card's boundary
+ * Shows a compact inline banner with a Retry button.
  */
 export class StreamCardErrorBoundary extends Component<
   StreamCardErrorBoundaryProps,
@@ -369,11 +634,10 @@ function StreamCardFallback({
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
-          <span
-            aria-hidden="true"
-            style={{ fontSize: "1.1rem", flexShrink: 0 }}
-          >
+        <div
+          style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}
+        >
+          <span aria-hidden="true" style={{ fontSize: "1.1rem", flexShrink: 0 }}>
             ⚠️
           </span>
           <span
@@ -424,4 +688,51 @@ function StreamCardFallback({
       <ErrorDetails error={error} componentStack={componentStack} />
     </div>
   );
+}
+
+// ─── Convenience hook: useErrorBoundaryReset ──────────────────────────────────
+
+/**
+ * Returns a `resetKey` string that updates on route-pathname changes.
+ * Pass this as `routeKey` to `RouteErrorBoundary` so it auto-resets on navigation.
+ *
+ * ```tsx
+ * const routeKey = useRouteResetKey();
+ * <RouteErrorBoundary routeKey={routeKey}>…</RouteErrorBoundary>
+ * ```
+ */
+export function useRouteResetKey(): string {
+  const [key, setKey] = useState(() =>
+    typeof window !== "undefined" ? window.location.pathname : "/",
+  );
+
+  useEffect(() => {
+    // Listen to popstate (back/forward) and custom pushstate events
+    function onLocationChange() {
+      setKey(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", onLocationChange);
+
+    // Intercept history.pushState / replaceState
+    const origPush = history.pushState.bind(history);
+    const origReplace = history.replaceState.bind(history);
+
+    history.pushState = function (...args) {
+      origPush(...args);
+      onLocationChange();
+    };
+    history.replaceState = function (...args) {
+      origReplace(...args);
+      onLocationChange();
+    };
+
+    return () => {
+      window.removeEventListener("popstate", onLocationChange);
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+    };
+  }, []);
+
+  return key;
 }

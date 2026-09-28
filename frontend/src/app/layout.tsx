@@ -8,6 +8,7 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { HorizonStatusBanner } from "@/components/HorizonStatusBanner";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Inline script run before paint to prevent flash of unstyled content
 const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
@@ -27,31 +28,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main-content" className="skip-nav">
           Skip to main content
         </a>
-        <I18nProvider>
-          <AnalyticsInit />
-          {/* #278 — Horizon API status banner */}
-          <HorizonStatusBanner />
-          <WalletProvider>
-            <NotificationProvider>
-              <header
-                className="header"
-                style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}
-              >
-                <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  {/* #382 — Notification bell */}
-                  <NotificationCenter />
-                  {/* #280 — Language switcher */}
-                  <LanguageSwitcher />
-                  <DarkModeToggle />
-                </div>
-              </header>
-              {children}
-              {/* #279 — Mobile bottom navigation (hidden on desktop via CSS) */}
-              <MobileBottomNav />
-            </NotificationProvider>
-          </WalletProvider>
-        </I18nProvider>
+        {/* #769 — root-level error boundary so crashes never show a blank screen */}
+        <ErrorBoundary>
+          <I18nProvider>
+            <AnalyticsInit />
+            {/* #278 — Horizon API status banner */}
+            <HorizonStatusBanner />
+            <WalletProvider>
+              <NotificationProvider>
+                <header
+                  className="header"
+                  style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    {/* #382 — Notification bell */}
+                    <NotificationCenter />
+                    {/* #280 — Language switcher */}
+                    <LanguageSwitcher />
+                    <DarkModeToggle />
+                  </div>
+                </header>
+                {children}
+                {/* #279 — Mobile bottom navigation (hidden on desktop via CSS) */}
+                <MobileBottomNav />
+              </NotificationProvider>
+            </WalletProvider>
+          </I18nProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

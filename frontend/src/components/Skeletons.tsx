@@ -253,3 +253,19 @@ export function FormSkeleton({ fields = 4 }: { fields?: number }) {
     </div>
   );
 }
+
+/** Generic full-page loading skeleton for routes with no specific skeleton. */
+export function FullPageSkeleton() {
+  return (
+    <div
+      style={{ padding: "2rem", maxWidth: 720, margin: "0 auto" }}
+      aria-busy="true"
+      aria-label="Loading page"
+    >
+      <Skeleton width="40%" height="1.75rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="1rem" style={{ marginBottom: "0.5rem" }} />
+      <Skeleton width="80%" height="1rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="8rem" shape="rect" style={{ borderRadius: "0.5rem" }} />
+    </div>
+  );
+}
