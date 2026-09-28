@@ -225,3 +225,19 @@ pub enum StreamStatus {
     /// No schedule exists for this recipient.
     NotFound,
 }
+
+// ── Public constants ──────────────────────────────────────────────────────────
+
+/// Scaling factor for fixed-point rate arithmetic.
+///
+/// `rate_per_ledger` is stored multiplied by this constant to preserve
+/// sub-token precision. Pass `rate = RATE_DECIMALS` for 1 token/ledger,
+/// `rate = RATE_DECIMALS / 2` for 0.5 tokens/ledger, etc.
+pub const RATE_DECIMALS: i128 = 10_000_000;
+
+/// Default maximum cliff ratio in percentage points (0–100).
+///
+/// Streams where `cliff_duration / total_duration > MAX_CLIFF_RATIO / 100`
+/// are rejected. Default is 80% (i.e. at most 80% of the total duration may
+/// be the cliff period).
+pub const MAX_CLIFF_RATIO: u32 = 80;

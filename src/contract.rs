@@ -8,7 +8,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, 
 use crate::{
     error::VestingError,
     events, storage,
-    types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule},
+    types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule, RATE_DECIMALS},
 };
 
 /// ~1 year at ~5 s/ledger.
@@ -25,9 +25,6 @@ const MAX_FEE_BPS: u32 = 500;
 
 /// Maximum batch size for `batch_create_vesting_streams`.
 const MAX_BATCH_SIZE: u32 = 20;
-
-/// Maximum milestones for a milestone stream.
-const MAX_MILESTONES: u32 = 20;
 
 /// Consolidated statistics for a vesting stream.
 ///
@@ -200,6 +197,9 @@ impl VestingDrips {
         let min_rate = storage::get_min_rate(&env);
         if rate < min_rate {
             return Err(VestingError::InvalidRate);
+        }
+        if cliff_duration == 0 {
+            return Err(VestingError::InvalidCliffDuration);
         }
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
@@ -1128,7 +1128,7 @@ impl VestingDrips {
     /// * `ScheduleNotFound`            – No stream exists for `recipient`.
     /// * `Unauthorized`                – `sponsor` is not the stream's original funder.
     /// * `ReasonTooLong`               – `reason` exceeds 256 bytes.
-    /// * `TokenDoesNotSupportClawback` – Token does not have the SAC clawback flag enabled.
+    /// * `ClawbackNotSupported` – Token does not have the SAC clawback flag enabled.
     pub fn clawback_stream(
         env: Env,
         sponsor: Address,
@@ -1159,7 +1159,7 @@ impl VestingDrips {
             .try_clawback(&env.current_contract_address(), &0_i128)
             .is_err()
         {
-            return Err(VestingError::TokenDoesNotSupportClawback);
+            return Err(VestingError::ClawbackNotSupported);
         }
 
         let remaining = (schedule.end_ledger - schedule.last_claimed_ledger) as i128

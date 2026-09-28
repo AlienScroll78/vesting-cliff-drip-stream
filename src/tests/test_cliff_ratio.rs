@@ -133,8 +133,8 @@ fn test_cliff_just_over_boundary_200_total() {
     assert_eq!(err, VestingError::InvalidCliffRatio);
 }
 
-/// InvalidCliffRatio has error code 12.
+/// InvalidCliffRatio has error code 31.
 #[test]
 fn test_invalid_cliff_ratio_error_code() {
-    assert_eq!(VestingError::InvalidCliffRatio as u32, 12);
+    assert_eq!(VestingError::InvalidCliffRatio as u32, 31);
 }

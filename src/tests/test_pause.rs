@@ -81,7 +81,7 @@ fn test_pause_wrong_sponsor_fails() {
 
     let imposter = Address::generate(&env);
     let err = client.pause_stream(&imposter, &recipient).unwrap_err();
-    assert_eq!(err, VestingError::NotSponsor.into());
+    assert_eq!(err, VestingError::Unauthorized.into());
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn test_resume_wrong_sponsor_fails() {
 
     let imposter = Address::generate(&env);
     let err = client.resume_stream(&imposter, &recipient).unwrap_err();
-    assert_eq!(err, VestingError::NotSponsor.into());
+    assert_eq!(err, VestingError::Unauthorized.into());
 }
 
 #[test]
