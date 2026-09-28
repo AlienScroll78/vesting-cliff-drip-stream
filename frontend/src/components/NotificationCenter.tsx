@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { AppNotification, NotificationEventType } from "@/hooks/useNotifications";
+import { useBrowserPush } from "@/hooks/useBrowserPush";
 import { trapFocus } from "@/utils/focusTrap";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
@@ -33,22 +34,22 @@ function relativeTime(iso: string): string {
 function NotificationItem({
   notification,
   onRead,
+  onDismiss,
 }: {
   notification: AppNotification;
   onRead: (id: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   const meta = EVENT_META[notification.type];
   return (
     <div
       role="listitem"
       data-testid={`notification-${notification.id}`}
-      onClick={() => onRead(notification.id)}
       style={{
         display: "flex",
         gap: "0.75rem",
         padding: "0.875rem 1rem",
         borderBottom: "1px solid var(--color-border)",
-        cursor: notification.read ? "default" : "pointer",
         background: notification.read ? "transparent" : "var(--color-bg)",
         transition: "background 0.15s",
       }}
@@ -71,7 +72,10 @@ function NotificationItem({
       </div>
 
       {/* Icon + content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{ flex: 1, minWidth: 0, cursor: notification.read ? "default" : "pointer" }}
+        onClick={() => onRead(notification.id)}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem" }}>
           <span aria-hidden="true">{meta.icon}</span>
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: meta.color }}>
@@ -88,6 +92,27 @@ function NotificationItem({
           {notification.message}
         </p>
       </div>
+
+      {/* Dismiss button */}
+      <button
+        type="button"
+        aria-label={`Dismiss notification: ${notification.title}`}
+        data-testid={`dismiss-notification-${notification.id}`}
+        onClick={(e) => { e.stopPropagation(); onDismiss(notification.id); }}
+        style={{
+          flexShrink: 0,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#9ca3af",
+          fontSize: "0.85rem",
+          padding: "0.1rem 0.25rem",
+          lineHeight: 1,
+          alignSelf: "flex-start",
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -134,11 +159,38 @@ function PreferencesPanel() {
 // ── Main NotificationCenter ────────────────────────────────────────────────────
 
 export function NotificationCenter() {
-  const { notifications, unreadCount, markRead, markAllRead } = useNotificationContext();
+  const { notifications, unreadCount, markRead, markAllRead, dismissNotification } =
+    useNotificationContext();
   const [open, setOpen] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const titleId = "notification-drawer-title";
+
+  const {
+    showCliffReachedPrompt,
+    requestPermission,
+    dismissPrompt,
+    triggerCliffReachedPrompt,
+    sendBrowserNotification,
+  } = useBrowserPush();
+
+  // When a new cliff_reached notification arrives and push permission not yet
+  // granted, trigger the in-drawer prompt.
+  const prevCountRef = useRef(notifications.length);
+  useEffect(() => {
+    const prevCount = prevCountRef.current;
+    prevCountRef.current = notifications.length;
+
+    if (notifications.length <= prevCount) return; // no new notification added
+
+    // Check whether the newest notification is cliff_reached
+    const newest = notifications[0];
+    if (newest?.type === "cliff_reached") {
+      triggerCliffReachedPrompt();
+      // Also fire a browser push notification if permission already granted
+      sendBrowserNotification(newest.title, newest.message);
+    }
+  }, [notifications, triggerCliffReachedPrompt, sendBrowserNotification]);
 
   // Close on Escape
   useEffect(() => {
@@ -311,6 +363,49 @@ export function NotificationCenter() {
               </div>
             </div>
 
+            {/* Browser push permission prompt */}
+            {showCliffReachedPrompt && (
+              <div
+                data-testid="push-permission-prompt"
+                role="alert"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  background: "var(--color-bg)",
+                  borderBottom: "1px solid var(--color-border)",
+                  flexShrink: 0,
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: "1.25rem", flexShrink: 0 }}>🔔</span>
+                <p style={{ flex: 1, fontSize: "0.825rem", margin: 0, lineHeight: 1.4 }}>
+                  Your cliff was reached! Enable browser notifications to stay
+                  updated even when the app is in the background.
+                </p>
+                <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={() => void requestPermission()}
+                    data-testid="push-permission-enable"
+                  >
+                    Enable
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={dismissPrompt}
+                    data-testid="push-permission-dismiss"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Preferences panel */}
             {showPrefs && (
               <div style={{ borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
@@ -349,7 +444,12 @@ export function NotificationCenter() {
                 </div>
               ) : (
                 notifications.map((n) => (
-                  <NotificationItem key={n.id} notification={n} onRead={markRead} />
+                  <NotificationItem
+                    key={n.id}
+                    notification={n}
+                    onRead={markRead}
+                    onDismiss={dismissNotification}
+                  />
                 ))
               )}
             </div>
