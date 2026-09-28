@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun chaos-test fuzz fuzz-ci
 
 all: build
 
@@ -129,3 +129,9 @@ test-load:
 ## Run k6 load tests in dry-run mode (skips create/claim mutations)
 test-load-dryrun:
 	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run chaos tests for indexer resilience (issue #787)
+## Starts Toxiproxy, injects 6 failure scenarios, generates report in docs/chaos/
+## Requires: Docker (for Toxiproxy), Node.js 20+, npm ci in backend/
+chaos-test:
+	bash scripts/run_chaos_tests.sh
