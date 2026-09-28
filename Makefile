@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-load-tge test-load-tge-ci fuzz fuzz-ci
 
 all: build
 
@@ -129,3 +129,17 @@ test-load:
 ## Run k6 load tests in dry-run mode (skips create/claim mutations)
 test-load-dryrun:
 	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run TGE k6 load test suite – 4 scenarios (issue #781)
+## Requires k6: https://grafana.com/docs/k6/latest/set-up/install-k6/
+## Scenarios: baseline (10 VU/1 min), ramp_up (0→100 VU/5 min),
+##            spike (200 VU/30 s), endurance (50 VU/30 min)
+## Results: tests/load/results/report.html + summary.json
+test-load-tge:
+	k6 run tests/load/tge_scenarios.js \
+		-e HTML_REPORT=tests/load/results/report.html
+
+## Run TGE k6 suite in CI mode (compressed durations, no endurance)
+test-load-tge-ci:
+	k6 run tests/load/tge_scenarios.js -e CI=1 \
+		-e HTML_REPORT=tests/load/results/report.html
