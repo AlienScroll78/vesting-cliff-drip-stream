@@ -10,7 +10,7 @@
 #     fluentbit     ──tails, every 1s──────────> │
 #                            flushes every 5s ──> CloudWatch Logs /ecs/api-server
 #                                               │
-#                                  metric filter { $.level = "ERROR" }
+#                                  metric filter { $.level = "error" }
 #                                               v
 #                                     VestingApp/ApplicationErrorCount
 #                                               │
@@ -146,8 +146,13 @@ resource "aws_cloudwatch_log_group" "fluentbit" {
 # ─── Metric Filters ───────────────────────────────────────────────────────────
 
 # ERROR -> ApplicationErrorCount. The pattern is JSON rather than a text match so
-# it keys off the structured `level` field instead of the substring "ERROR",
+# it keys off the structured `level` field instead of the substring "error",
 # which would also fire on an error object logged at warn.
+#
+# The literal must be lowercase. CloudWatch JSON patterns compare strings
+# case-sensitively and the logger writes pino-style lowercase levels, so an
+# "ERROR" pattern matches nothing at all and the alarm below stays permanently
+# OK. That failure is silent, which is why it is called out here.
 #
 # Application groups only. RDS emits PostgreSQL's own text log format, so a JSON
 # pattern would never match there; database errors are surfaced by the
@@ -157,7 +162,7 @@ resource "aws_cloudwatch_log_metric_filter" "errors" {
 
   name           = "${var.environment}-application-errors"
   log_group_name = each.value
-  pattern        = "{ $.level = \"ERROR\" }"
+  pattern        = "{ $.level = \"error\" }"
 
   metric_transformation {
     name          = "ApplicationErrorCount"
@@ -174,7 +179,7 @@ resource "aws_cloudwatch_log_metric_filter" "errors" {
 resource "aws_cloudwatch_log_metric_filter" "indexer_warnings" {
   name           = "${var.environment}-indexer-warnings"
   log_group_name = "/ecs/indexer"
-  pattern        = "{ $.level = \"WARN\" && $.service = \"indexer\" }"
+  pattern        = "{ $.level = \"warn\" && $.service = \"indexer\" }"
 
   metric_transformation {
     name          = "IndexerWarningCount"

@@ -20,12 +20,12 @@ ECS task (Fargate)
 │   tail, refresh_interval=1s  ──flush 5s──>  /ecs/api-server
 └──────────────────────────────────────────────────────────┘
                         │
-                        ├── metric filter { $.level = "ERROR" }
+                        ├── metric filter { $.level = "error" }
                         │      → VestingApp/ApplicationErrorCount
                         │      → alarm > 10 per 5 min
                         │      → SNS → PagerDuty (page) + email
                         │
-                        ├── metric filter { $.level = "WARN" && $.service = "indexer" }
+                        ├── metric filter { $.level = "warn" && $.service = "indexer" }
                         │      → VestingApp/IndexerWarningCount
                         │
                         └── Log Insights saved queries
@@ -72,17 +72,24 @@ the real end-to-end delay by comparing the app's `ts` field against CloudWatch's
 
 | Filter | Log groups | Pattern | Metric |
 |---|---|---|---|
-| `${env}-application-errors` | `/ecs/api-server`, `/ecs/indexer` | `{ $.level = "ERROR" }` | `VestingApp/ApplicationErrorCount` |
-| `${env}-indexer-warnings` | `/ecs/indexer` | `{ $.level = "WARN" && $.service = "indexer" }` | `VestingApp/IndexerWarningCount` |
+| `${env}-application-errors` | `/ecs/api-server`, `/ecs/indexer` | `{ $.level = "error" }` | `VestingApp/ApplicationErrorCount` |
+| `${env}-indexer-warnings` | `/ecs/indexer` | `{ $.level = "warn" && $.service = "indexer" }` | `VestingApp/IndexerWarningCount` |
 
 Both publish with **no dimensions**. That is deliberate: a metric filter normally
 emits with `LogGroupName` and `LogStreamName` dimensions, and an alarm that does
 not match those dimensions silently never fires. Dropping them gives one
 aggregated metric, so a single alarm covers the whole pipeline.
 
-The patterns are JSON, not text. A text pattern for `ERROR` would also match an
+The patterns are JSON, not text. A text pattern for `error` would also match an
 error object logged at `warn` — the `$.level` field is what makes the count mean
-"an error was logged", not "the word ERROR appeared somewhere".
+"an error was logged", not "the word error appeared somewhere".
+
+The level literals are **lowercase** because that is what `src/server/logger.js`
+writes, and CloudWatch compares JSON pattern strings case-sensitively. An
+uppercase pattern matches nothing, which leaves `ApplicationErrorCount` pinned
+at zero and the alarm permanently OK — no error, no alarm, no clue. If the
+metric is flat at zero while errors are visibly being logged, check the case of
+these literals before anything else.
 
 RDS is excluded because it emits PostgreSQL's own text format, which a JSON
 pattern never matches. Use the `rds-errors` query for database errors.
