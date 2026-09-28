@@ -15,3 +15,13 @@ frontend/node_modules/
 frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
+
+# Terraform build artifacts (archive_file output for the Lambda zips)
+terraform/.terraform-build/
+
+# Terraform working directories, state and plan files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

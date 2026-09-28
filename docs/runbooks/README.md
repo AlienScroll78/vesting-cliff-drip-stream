@@ -20,6 +20,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [RDS Restore](./rds-restore.md) | Restore the production database from a snapshot |
+| [Backup Restore Verification](./backup-restore-verification.md) | The weekly restore check failed, or you want to test a restore on demand without touching production |
 | [Disaster Recovery](./disaster-recovery.md) | Full system recovery — database, indexer re-sync, contract re-deploy |
 | [Backfill Stream Events](./backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or a decoder bug fix |
 

@@ -116,6 +116,7 @@ A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) run
 | [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
 | [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
 | [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
+| [Backup Restore Verification](docs/runbooks/backup-restore-verification.md) | Weekly automated proof that backups restore; run one on demand |
 | [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
 | [Backfill Stream Events](docs/runbooks/backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or decoder fix |
 

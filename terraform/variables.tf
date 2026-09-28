@@ -44,3 +44,32 @@ variable "slack_webhook_url" {
   type        = string
   sensitive   = true
 }
+
+variable "pagerduty_integration_key" {
+  description = <<-EOT
+    PagerDuty "Amazon SNS" integration key used to page on failed backup
+    restore verification and on sustained log error bursts. Leave empty to
+    create the topic without a PagerDuty subscription, which is useful in an
+    environment where nobody should be paged.
+  EOT
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "backup_restore_test_class" {
+  description = <<-EOT
+    Instance class for the throwaway database created by the weekly restore
+    verification. Deliberately the smallest class that boots PostgreSQL: this
+    instance exists to prove the snapshot restores and the data is queryable,
+    and it is billed for the few minutes it is up.
+  EOT
+  type    = string
+  default = "db.t3.micro"
+}
+
+variable "backup_verify_alert_emails" {
+  description = "Email recipients for backup restore verification failures."
+  type        = set(string)
+  default     = []
+}
