@@ -1,6 +1,7 @@
 "use client";
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { Tooltip } from "@/Tooltip";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 export interface SegmentedProgressBarProps {
   /** Total tokens in the stream */
@@ -35,12 +36,26 @@ export function SegmentedProgressBar({
   tokenSymbol = "tokens",
 }: SegmentedProgressBarProps) {
   const id = useId();
+  const reducedMotion = useReducedMotion();
   const safe = Math.max(total, 1); // avoid /0
 
   const lockedPct    = (locked    / safe) * 100;
   const cliffPct     = (cliffCatchUp / safe) * 100;
   const drippedPct   = (dripped   / safe) * 100;
   const released     = cliffCatchUp + dripped;
+
+  // Fill from 0 → target with an eased transition on first render; the CSS
+  // transition on each segment only fires once these values change after
+  // mount, so we start at 0 and flip to the real percentages a frame later.
+  const [filled, setFilled] = useState(reducedMotion);
+  useEffect(() => {
+    if (reducedMotion) return;
+    const frame = requestAnimationFrame(() => setFilled(true));
+    return () => cancelAnimationFrame(frame);
+  }, [reducedMotion]);
+
+  const shownDrippedPct = filled ? drippedPct : 0;
+  const shownCliffPct   = filled ? cliffPct   : 0;
 
   return (
     <div style={{ width: "100%" }}>
@@ -68,12 +83,12 @@ export function SegmentedProgressBar({
           <div
             data-testid="seg-drip"
             style={{
-              width: `${drippedPct}%`,
+              width: `${shownDrippedPct}%`,
               background: "var(--color-completed, #15803d)",
               backgroundImage:
                 "repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,255,255,.15) 4px,rgba(255,255,255,.15) 8px)",
-              minWidth: drippedPct > 0 ? "4px" : 0,
-              transition: "width 0.4s ease",
+              minWidth: shownDrippedPct > 0 ? "4px" : 0,
+              transition: reducedMotion ? "none" : "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           />
         )}
@@ -81,12 +96,12 @@ export function SegmentedProgressBar({
           <div
             data-testid="seg-cliff"
             style={{
-              width: `${cliffPct}%`,
+              width: `${shownCliffPct}%`,
               background: "var(--color-pre-cliff, #b45309)",
               backgroundImage:
                 "repeating-linear-gradient(-45deg,transparent,transparent 4px,rgba(255,255,255,.15) 4px,rgba(255,255,255,.15) 8px)",
-              minWidth: cliffPct > 0 ? "4px" : 0,
-              transition: "width 0.4s ease",
+              minWidth: shownCliffPct > 0 ? "4px" : 0,
+              transition: reducedMotion ? "none" : "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           />
         )}

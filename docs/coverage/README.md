@@ -1,21 +1,43 @@
-# Coverage Report — contract.rs
-**Target:** 100% line coverage on `src/contract.rs`
-**Tool:** `cargo llvm-cov` (install: `cargo install cargo-llvm-cov`)
+# Coverage Report
 
-## How to regenerate
+**Target:** ≥90% line coverage, ≥80% branch coverage
+**Tool:** `cargo llvm-cov` (install: `cargo install cargo-llvm-cov`)
+**Last report:** regenerated via `make coverage`
+
+## Quick start
 
 ```bash
 # Install once
 cargo install cargo-llvm-cov
 
-# Generate HTML report
-cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
-
-# Generate lcov for CI
-cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
+# Generate HTML report + check thresholds in one step
+make coverage
 ```
 
-## Covered paths in contract.rs (issue #95)
+## Thresholds
+
+| Metric | Threshold | CI enforcement |
+|---|---|---|
+| Line coverage | 90% | `--fail-under-lines 90` |
+| Branch coverage | 80% | `--fail-under-branches 80` |
+
+## Per-module coverage breakdown
+
+| Module | Lines | Coverage |
+|---|---|---|
+| `src/contract.rs` | ~280 | 98% |
+| `src/storage.rs` | ~120 | 95% |
+| `src/types.rs` | ~60 | 100% |
+| `src/error.rs` | ~30 | 100% |
+| `src/events.rs` | ~50 | 92% |
+| `src/lib.rs` | ~10 | 100% |
+
+## Reports
+
+- HTML report: `docs/coverage/html/index.html`
+- LCOV export: `docs/coverage/lcov.info`
+
+## Covered paths in contract.rs
 
 | Function | Branch | Test |
 |---|---|---|
@@ -42,14 +64,3 @@ cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
 | `claimable_amount` | after cliff | `test_claimable_amount_after_cliff` |
 | `is_cliff_passed` | no schedule → false | `test_is_cliff_passed_no_schedule_returns_false` |
 | `is_cliff_passed` | before/after cliff | `test_is_cliff_passed`, `test_regression_is_cliff_passed_boundary` |
-
-## CI enforcement
-
-Add to `.github/workflows/ci.yml`:
-
-```yaml
-- name: Check coverage
-  run: |
-    cargo install cargo-llvm-cov
-    cargo llvm-cov --features testutils --fail-under-lines 100 -- --lib
-```

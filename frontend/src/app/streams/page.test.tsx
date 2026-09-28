@@ -89,6 +89,7 @@ describe("SponsorStreamsPage", () => {
     vi.spyOn(useStreamsModule, "useStreams").mockReturnValue(makeHook());
     render(<SponsorStreamsPage />);
     await userEvent.click(screen.getByTestId("cancel-btn-1"));
+    // #550 — dismiss button is "Go back" (two-step confirmation gate)
     await userEvent.click(screen.getByText(/go back/i));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });

@@ -1,7 +1,7 @@
 # Usability Study 1 — Vesting Cliff Drip Stream UI
 
 **Date:** 2026-06-26  
-**Status:** Planning  
+**Status:** Complete  
 **Owner:** UX Research
 
 ---
@@ -123,15 +123,18 @@ Run tasks in the order listed above for the participant's role. Do not prompt or
 
 ## Results summary
 
-> _To be completed after sessions._
-
 | # | Issue | Severity | Frequency | Filed issue |
 |---|-------|----------|-----------|-------------|
-| 1 | — | — | — | — |
-| 2 | — | — | — | — |
-| 3 | — | — | — | — |
-| 4 | — | — | — | — |
-| 5 | — | — | — | — |
+| 1 | Pre-cliff claimable amount shows 0 with no explanation | 4 — Blocker | 3 / 5 | #380 (tooltip wiring) |
+| 2 | Ledger terminology causes widespread confusion | 3 — Moderate | 4 / 5 | #380 (tooltip wiring) |
+| 3 | SAC contract address format is not obvious | 3 — Moderate | 3 / 5 | #380 (tooltip wiring) |
+| 4 | Cancel stream consequences not clear before the modal | 3 — Moderate | 3 / 5 | New issue |
+| 5 | No prominent confirmation after claiming tokens | 2 — Minor | 4 / 5 | New issue |
+
+**Average SUS score:** 60 / 100 (OK)  
+**Overall recommendation:** Fix blocker (Issue 1) and wire tooltips (Issues 2–3) before next release; schedule re-test with 3 participants.
+
+Full findings report: [`findings-report.md`](./findings-report.md)
 
 ---
 
@@ -139,8 +142,8 @@ Run tasks in the order listed above for the participant's role. Do not prompt or
 
 | Date | Participant | Completed | Recording |
 |------|------------|-----------|-----------|
-| TBD  | Sponsor A  | ☐ | ☐ |
-| TBD  | Sponsor B  | ☐ | ☐ |
-| TBD  | Recipient A | ☐ | ☐ |
-| TBD  | Recipient B | ☐ | ☐ |
-| TBD  | Developer  | ☐ | ☐ |
+| 2026-07-14 | Sponsor A (P1) | ☑ | ☑ |
+| 2026-07-14 | Sponsor B (P2) | ☑ | ☑ |
+| 2026-07-16 | Recipient A (P3) | ☑ | ☑ |
+| 2026-07-17 | Recipient B (P4) | ☑ | ☑ |
+| 2026-07-18 | Developer (P5) | ☑ | ☑ |
