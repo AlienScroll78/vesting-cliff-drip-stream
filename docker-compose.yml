@@ -52,5 +52,43 @@ services:
       retries: 6
       start_period: 15s
 
+  # ── Pact Broker (self-hosted) — issue #791 ─────────────────────────────────
+  # Access the UI at http://localhost:9292
+  # Default credentials:  pact_workshop / pact_workshop
+  postgres-pact:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pact_workshop
+      POSTGRES_PASSWORD: pact_workshop
+      POSTGRES_DB: pact_workshop
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pact_workshop -d pact_workshop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_pact_data:/var/lib/postgresql/data
+
+  pact-broker:
+    image: pactfoundation/pact-broker:latest
+    restart: unless-stopped
+    depends_on:
+      postgres-pact:
+        condition: service_healthy
+    ports:
+      - "9292:9292"
+    environment:
+      PACT_BROKER_DATABASE_URL: postgres://pact_workshop:pact_workshop@postgres-pact/pact_workshop
+      PACT_BROKER_BASIC_AUTH_USERNAME: pact_workshop
+      PACT_BROKER_BASIC_AUTH_PASSWORD: pact_workshop
+      PACT_BROKER_ALLOW_PUBLIC_READ: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9292/diagnostic/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
 volumes:
   postgres_data:
+  postgres_pact_data:
