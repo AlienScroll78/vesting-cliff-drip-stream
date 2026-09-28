@@ -8,6 +8,8 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { HorizonStatusBanner } from "@/components/HorizonStatusBanner";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+// #773 — Sentry error tracking + performance monitoring
+import { SentryInit } from "@/components/SentryInit";
 
 // Inline script run before paint to prevent flash of unstyled content
 const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
@@ -33,6 +35,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <HorizonStatusBanner />
           <WalletProvider>
             <NotificationProvider>
+              {/* #773 — Sentry user context sync (inside WalletProvider for wallet access) */}
+              <SentryInit />
               <header
                 className="header"
                 style={{ maxWidth: 720, margin: "0 auto", padding: "0 1rem" }}
