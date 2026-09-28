@@ -5,7 +5,10 @@ Covers all 6 required checks:
   1. GET /health returns 200
   2. GET /ready returns 200
   3. GET /analytics/sponsor/:address returns valid JSON
-  4. Contract get_min_deposit view returns a positive integer
+  4. Contract claimable_amount view returns a non-negative integer, confirming the
+     WASM is deployed and callable. (The issue refers to this as "get_min_deposit"
+     but that function does not exist on this contract; claimable_amount is the
+     correct zero-argument-capable view that proves the contract is live.)
   5. Contract is_cliff_passed for known test address returns expected bool
   6. WebSocket connection accepted and state snapshot received
 
@@ -16,10 +19,8 @@ Run via:
 """
 
 import json
-import os
 import subprocess
 import threading
-import time
 
 import pytest
 import requests
@@ -45,12 +46,11 @@ def ws_url() -> str:
 
 def stellar_invoke(*args: str) -> dict:
     """
-    Invoke a Stellar contract view function and return the parsed result.
+    Invoke a Stellar contract view function via the Stellar CLI.
 
     Runs: stellar contract invoke --id CONTRACT --network NETWORK -- FUNCTION [ARGS...]
 
-    Returns a dict with:
-        returncode (int), stdout (str), stderr (str)
+    Returns a dict with keys: returncode (int), stdout (str), stderr (str).
     """
     contract_id = pytest.smoke_config["contract_id"]
     network = pytest.smoke_config["network"]
@@ -87,7 +87,7 @@ def test_health_returns_200():
 
 
 def test_health_body_is_valid_json():
-    """GET /health body must be valid JSON with a 'status' field."""
+    """GET /health body must be valid JSON with status='ok'."""
     url = base_url("/health")
     resp = requests.get(url, timeout=10)
     body = resp.json()
@@ -109,7 +109,7 @@ def test_ready_returns_200():
 
 
 def test_ready_body_structure():
-    """GET /ready body must include status, version, and checks fields."""
+    """GET /ready body must include 'status' and 'checks' fields."""
     url = base_url("/ready")
     resp = requests.get(url, timeout=15)
     body = resp.json()
@@ -118,9 +118,13 @@ def test_ready_body_structure():
 
 
 # ── Test 3: GET /analytics/sponsor/:address ────────────────────────────────────
+#
+# The issue spec refers to this as "GET /api/analytics/summary".
+# The actual backend route is GET /analytics/sponsor/:address (no /api prefix,
+# requires a sponsor address path param). This test hits the real endpoint.
 
 
-def test_analytics_sponsor_returns_200():
+def test_analytics_summary_returns_200():
     """GET /analytics/sponsor/:address must return HTTP 200 with valid JSON."""
     sponsor = pytest.smoke_config["test_sponsor_address"]
     url = base_url(f"/analytics/sponsor/{sponsor}")
@@ -131,7 +135,7 @@ def test_analytics_sponsor_returns_200():
     )
 
 
-def test_analytics_sponsor_body_structure():
+def test_analytics_summary_body_structure():
     """Analytics response must include sponsor, totals, and by_token fields."""
     sponsor = pytest.smoke_config["test_sponsor_address"]
     url = base_url(f"/analytics/sponsor/{sponsor}")
@@ -150,33 +154,43 @@ def test_analytics_sponsor_body_structure():
         assert field in totals, f"Missing '{field}' in totals: {totals}"
 
 
-# ── Test 4: Contract get_min_deposit view ──────────────────────────────────────
+# ── Test 4: Contract view — claimable_amount ───────────────────────────────────
+#
+# The issue spec describes this check as "get_min_deposit view returns a positive
+# integer". That function does not exist on this contract. The equivalent check
+# that proves the deployed WASM is live and callable is claimable_amount, which:
+#   - requires no sponsor auth
+#   - returns 0 (not an error) when called with any address with no schedule
+#   - returns a positive i128 when called with an address that has an active stream
+#
+# For a valid smoke test we assert the call succeeds (exit 0) and returns a
+# non-negative integer, confirming the contract is reachable and executing.
 
 
-def test_contract_get_min_deposit_positive():
+def test_contract_view_returns_integer():
     """
-    Contract view get_min_deposit must return a positive integer.
+    Contract view claimable_amount must succeed and return a non-negative integer.
 
-    Invokes the function via the Stellar CLI and asserts the numeric return value
-    is > 0, confirming the contract WASM is deployed and callable.
+    This confirms the correct WASM is deployed and the contract is callable on
+    the target network.
     """
-    result = stellar_invoke("get_min_deposit")
+    recipient = pytest.smoke_config["test_recipient_address"]
+    result = stellar_invoke("claimable_amount", "--recipient", recipient)
 
     assert result["returncode"] == 0, (
-        f"stellar contract invoke get_min_deposit failed (exit {result['returncode']}).\n"
+        f"stellar contract invoke claimable_amount failed "
+        f"(exit {result['returncode']}).\n"
         f"stderr: {result['stderr']}\nstdout: {result['stdout']}"
     )
 
-    raw = result["stdout"]
-    # The CLI returns the value as a quoted or plain integer string, e.g. '"100"' or '100'
-    value_str = raw.strip().strip('"')
-    assert value_str.lstrip("-").isdigit(), (
-        f"get_min_deposit output is not an integer: {raw!r}"
+    raw = result["stdout"].strip().strip('"')
+    assert raw.lstrip("-").isdigit(), (
+        f"claimable_amount output is not an integer: {result['stdout']!r}"
     )
 
-    value = int(value_str)
-    assert value > 0, (
-        f"get_min_deposit must return a positive integer, got {value}"
+    value = int(raw)
+    assert value >= 0, (
+        f"claimable_amount must return a non-negative integer, got {value}"
     )
 
 
@@ -187,14 +201,19 @@ def test_contract_is_cliff_passed_returns_bool():
     """
     Contract view is_cliff_passed for a known test address must return a bool.
 
-    Uses the TEST_RECIPIENT address from config. The exact value (true/false)
-    depends on ledger state, but the function must be callable and return a bool.
+    Uses SMOKE_RECIPIENT_ADDRESS from config. The function returns false (not an
+    error) when no schedule exists for the address, so this check is always safe
+    to run against a live network.
+
+    If SMOKE_EXPECTED_CLIFF is set to "true" or "false", the exact value is also
+    asserted.
     """
     recipient = pytest.smoke_config["test_recipient_address"]
     result = stellar_invoke("is_cliff_passed", "--recipient", recipient)
 
     assert result["returncode"] == 0, (
-        f"stellar contract invoke is_cliff_passed failed (exit {result['returncode']}).\n"
+        f"stellar contract invoke is_cliff_passed failed "
+        f"(exit {result['returncode']}).\n"
         f"stderr: {result['stderr']}\nstdout: {result['stdout']}"
     )
 
@@ -203,7 +222,7 @@ def test_contract_is_cliff_passed_returns_bool():
         f"is_cliff_passed must return 'true' or 'false', got: {raw!r}"
     )
 
-    # Optionally assert the expected value if configured
+    # Optionally assert the expected value when configured
     expected = pytest.smoke_config.get("expected_is_cliff_passed")
     if expected is not None:
         assert raw == expected.lower(), (
@@ -211,16 +230,18 @@ def test_contract_is_cliff_passed_returns_bool():
         )
 
 
-# ── Test 6: WebSocket connection and snapshot ──────────────────────────────────
+# ── Test 6: WebSocket connection and state snapshot ───────────────────────────
 
 
 def test_websocket_accepts_connection_and_sends_snapshot():
     """
     WebSocket endpoint /ws/claimable must:
-    1. Accept a connection.
-    2. Send a JSON snapshot message in response to a subscribe request.
+      1. Accept a connection.
+      2. Return a JSON snapshot with a 'claimable' field after subscribing.
 
-    The snapshot must contain a 'claimable' field (may be '0').
+    The snapshot is sent immediately when the client sends
+    {"recipient": "<address>"}.  The 'claimable' value may be "0" for an
+    address with no active stream.
     """
     recipient = pytest.smoke_config["test_recipient_address"]
     url = ws_url()
@@ -250,7 +271,7 @@ def test_websocket_accepts_connection_and_sends_snapshot():
         connected_event.set()
         message_event.set()
 
-    def on_close(_ws_conn, code, reason):
+    def on_close(_ws_conn, _code, _reason):
         message_event.set()
 
     ws_app = websocket.WebSocketApp(
@@ -261,7 +282,6 @@ def test_websocket_accepts_connection_and_sends_snapshot():
         on_close=on_close,
     )
 
-    # Run the WebSocket in a background thread; close after receiving the snapshot
     ws_thread = threading.Thread(
         target=ws_app.run_forever,
         kwargs={"ping_interval": 0},
@@ -269,16 +289,16 @@ def test_websocket_accepts_connection_and_sends_snapshot():
     )
     ws_thread.start()
 
-    # Wait for connection
+    # Wait for the connection to be established
     assert connected_event.wait(timeout=15), (
         f"WebSocket did not connect within 15 s. URL: {url}\n"
-        + (f"Error: {error_holder[0]}" if error_holder else "")
+        + (f"Error: {error_holder[0]}" if error_holder else "No error detail available.")
     )
 
     if error_holder:
         pytest.fail(f"WebSocket connection error: {error_holder[0]}")
 
-    # Wait for first message (snapshot)
+    # Wait for the immediate snapshot message
     assert message_event.wait(timeout=20), (
         "WebSocket connected but no snapshot message received within 20 s."
     )
@@ -288,13 +308,14 @@ def test_websocket_accepts_connection_and_sends_snapshot():
     if error_holder:
         pytest.fail(f"WebSocket message error: {error_holder[0]}")
 
-    assert len(received) >= 1, "No messages received from WebSocket."
+    assert len(received) >= 1, "No messages received from WebSocket after subscribing."
 
     snapshot = received[0]
     assert "claimable" in snapshot, (
         f"WebSocket snapshot missing 'claimable' field. Got: {snapshot}"
     )
-    # claimable must be a numeric string or integer
+
+    # 'claimable' must be a numeric string or integer (may be "0")
     claimable_str = str(snapshot["claimable"])
     assert claimable_str.lstrip("-").isdigit(), (
         f"'claimable' value is not numeric: {snapshot['claimable']!r}"
