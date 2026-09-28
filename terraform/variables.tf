@@ -1,13 +1,25 @@
 variable "environment" {
-  default = "staging"
+  description = "Deployment environment (staging, production)"
+  type        = string
+  default     = "staging"
 }
 
 variable "aws_region" {
-  default = "us-east-1"
+  description = "AWS region for all resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "domain_name" {
+  description = "DNS domain name for the application (e.g. vesting.example.com)"
+  type        = string
+  default     = "vesting.example.com"
 }
 
 variable "db_password" {
-  sensitive = true
+  description = "Master password for the PostgreSQL RDS instance"
+  type        = string
+  sensitive   = true
 }
 
 variable "additional_tags" {
@@ -25,4 +37,10 @@ variable "monthly_budget_limit_usd" {
 variable "cost_alert_emails" {
   description = "Email recipients for budget and Cost Explorer anomaly alerts."
   type        = set(string)
+}
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for cost alert relay to #ops channel."
+  type        = string
+  sensitive   = true
 }

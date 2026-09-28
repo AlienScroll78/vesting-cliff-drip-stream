@@ -1,18 +1,19 @@
 import { useWizard, WIZARD_STEPS } from './useWizard'
 import { WizardProgress } from './WizardProgress'
-import { StepConnectWallet } from './StepConnectWallet'
+import { StepRecipient } from './StepRecipient'
 import { StepSelectToken } from './StepSelectToken'
-import { StepSetAmounts } from './StepSetAmounts'
-import { StepPreview } from './StepPreview'
-import { StepConfirm } from './StepConfirm'
+import { StepSchedule } from './StepSchedule'
+import { StepReview } from './StepReview'
 
 interface Props {
-  /** Called when the user dismisses the wizard (cancel or done). */
   onClose?: () => void
 }
 
 export function CreateStreamWizard({ onClose }: Props) {
-  const { step, stepIndex, data, next, back, update, reset } = useWizard()
+  const {
+    step, stepIndex, data, touched,
+    next, back, update, touch, reset,
+  } = useWizard()
 
   function handleDone() {
     reset()
@@ -28,7 +29,7 @@ export function CreateStreamWizard({ onClose }: Props) {
       style={styles.overlay}
       onClick={e => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div style={styles.panel}>
+      <div style={styles.panel} role="document">
         <div style={styles.header}>
           <h1 style={styles.title}>Create stream</h1>
           {onClose && (
@@ -46,20 +47,42 @@ export function CreateStreamWizard({ onClose }: Props) {
         <WizardProgress steps={WIZARD_STEPS} current={stepIndex} />
 
         <div style={styles.body}>
-          {step === 'connect-wallet' && (
-            <StepConnectWallet data={data} update={update} onNext={next} />
+          {step === 'recipient' && (
+            <StepRecipient
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+            />
           )}
-          {step === 'select-token' && (
-            <StepSelectToken data={data} update={update} onNext={next} onBack={back} />
+          {step === 'token' && (
+            <StepSelectToken
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+              onBack={back}
+            />
           )}
-          {step === 'set-amounts' && (
-            <StepSetAmounts data={data} update={update} onNext={next} onBack={back} />
+          {step === 'schedule' && (
+            <StepSchedule
+              data={data}
+              update={update}
+              touch={touch}
+              touched={touched}
+              onNext={next}
+              onBack={back}
+            />
           )}
-          {step === 'preview' && (
-            <StepPreview data={data} onNext={next} onBack={back} />
-          )}
-          {step === 'confirm' && (
-            <StepConfirm data={data} onBack={back} onDone={handleDone} />
+          {step === 'review' && (
+            <StepReview
+              data={data}
+              onNext={next}
+              onBack={back}
+              onDone={handleDone}
+            />
           )}
         </div>
       </div>
@@ -84,6 +107,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    maxHeight: '90vh',
+    overflowY: 'auto',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -93,6 +118,8 @@ const styles: Record<string, React.CSSProperties> = {
   close: {
     background: 'none', border: 'none', cursor: 'pointer',
     fontSize: '1rem', color: '#6b7280', padding: '0.25rem',
+    minWidth: '44px', minHeight: '44px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   body: { padding: '0 1.5rem 1.5rem' },
 }

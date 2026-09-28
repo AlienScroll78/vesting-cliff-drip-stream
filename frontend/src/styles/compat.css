@@ -1,0 +1,67 @@
+/**
+ * Cross-browser compatibility styles.
+ *
+ * Addresses known rendering differences in Safari 15 and Firefox without
+ * resorting to browser-specific hacks. All solutions use standard CSS.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 1. CSS `gap` in flex containers — Safari 15 compatibility
+ *
+ * Safari 15 supports `gap` in flex layouts but has minor rendering differences.
+ * The safest approach is to pair `gap` with a `@supports` check and provide
+ * margin-based spacing as a baseline for very old Safari versions.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+.flex-gap {
+  display: flex;
+  flex-wrap: wrap;
+  /* Baseline: margin fallback for Safari < 14.1 that lacks flex gap support */
+  margin: -0.5rem;
+}
+
+.flex-gap > * {
+  margin: 0.5rem;
+}
+
+/* Progressive enhancement: use gap when supported */
+@supports (gap: 1rem) {
+  .flex-gap {
+    gap: 1rem;
+    margin: 0;
+  }
+
+  .flex-gap > * {
+    margin: 0;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 2. `backdrop-filter` — Firefox compatibility
+ *
+ * Firefox requires the -webkit- prefix to be present alongside the standard
+ * property. Using both ensures the blur effect renders in all target browsers.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.1);
+  /* Standard property */
+  backdrop-filter: blur(12px) saturate(180%);
+  /* -webkit- prefix for Firefox and older Safari */
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 3. Tooltip trigger focus ring — visible in all browsers
+ *
+ * Safari and Firefox both need an explicit :focus-visible outline because the
+ * default outline may be suppressed by `outline: none` on the trigger.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+.tooltip-trigger:focus-visible {
+  outline: 2px solid #4a90d9;
+  outline-offset: 2px;
+  border-radius: 2px;
+}

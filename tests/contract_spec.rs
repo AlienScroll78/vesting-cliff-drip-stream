@@ -6,6 +6,12 @@
 //! will cause this test to fail before any client code is affected.
 //!
 //! Run with:  cargo test --test contract_spec  (after `cargo build --release`)
+//!
+//! NOTE: this test is skipped unless the `contract-spec-tests` feature is enabled.
+//! It requires a pre-built WASM and `stellar_xdr`/`wasmparser` crates.
+
+#[cfg(feature = "contract-spec-tests")]
+mod contract_spec_tests {
 
 use std::collections::HashMap;
 
@@ -47,6 +53,13 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
         },
     );
     m.insert(
+        "create_batch_streams",
+        Expect {
+            inputs: &["sponsor", "token", "streams"],
+            has_output: true,
+        },
+    );
+    m.insert(
         "cancel_stream",
         Expect {
             inputs: &["sponsor", "recipient"],
@@ -56,7 +69,7 @@ fn expected_schema() -> HashMap<&'static str, Expect> {
     m.insert(
         "claim_vested",
         Expect {
-            inputs: &["recipient"],
+            inputs: &["recipient", "amount"],
             has_output: true,
         },
     );
@@ -243,3 +256,5 @@ fn critical_return_types() {
         cliff.outputs.first()
     );
 }
+
+} // end #[cfg(feature = "contract-spec-tests")]

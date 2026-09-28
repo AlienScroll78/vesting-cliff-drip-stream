@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "@/i18n";
 import { WalletButton } from "@/components/WalletButton";
@@ -11,13 +11,20 @@ import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CopyButton } from "@/components/CopyButton";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
+import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
+import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #389 — keyboard navigation & focus management
+import { StreamCardList } from "@/components/StreamCardList";
+import { useModalFocus } from "@/hooks/useModalFocus";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { formatAmount, abbreviateAmount } from "@/utils/formatAmount";
+import { useClaimVested } from "@/hooks/useClaimVested";
 
 // Ledger numbers assume stream started ~10 days ago, cliff at 30 days, ends at 365 days
 const BASE_LEDGER = 51_200_000;
@@ -84,13 +91,96 @@ function useSponsorDashboard() {
   return { showCreate, setShowCreate };
 }
 
+// ── Per-stream claim row ────────────────────────────────────────────────────
+
+interface StreamClaimCellProps {
+  stream: VestingStream;
+  currentLedger: number;
+  onOpenBottomSheet: (s: VestingStream) => void;
+}
+
+/**
+ * Renders the inline ClaimButton for a single stream card.
+ * Has its own useClaimVested instance so state is isolated per stream.
+ */
+function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamClaimCellProps) {
+  const { setPending, setConfirmed, setFailed } = useTx();
+
+  // Optimistic local claimable amount
+  const [optimisticAmount, setOptimisticAmount] = useState(stream.claimableAmount);
+
+  const claimFn = useCallback(async (_recipient: string): Promise<number> => {
+    analytics.claimSubmitted(stream.token, optimisticAmount);
+    // TODO: replace with real Soroban SDK call:
+    // return await sorobanClient.claimVested(recipient);
+    await new Promise((r) => setTimeout(r, 1_200));
+    return optimisticAmount; // stub returns current claimable amount
+  }, [stream.token, optimisticAmount]);
+
+  const { state, claim } = useClaimVested({
+    claimFn,
+    recipient: stream.recipient,
+    onSuccess: (amount) => {
+      // Optimistic update: zero out the claimable amount
+      setOptimisticAmount(0);
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+      analytics.claimSubmitted(stream.token, amount);
+    },
+  });
+
+  // Mirror signing/pending transitions to the global TxDrawer
+  const handleClick = useCallback(async () => {
+    setPending();
+    try {
+      await claim();
+    } catch {
+      setFailed(state.errorMessage ?? "Claim failed");
+    }
+  }, [claim, setPending, setFailed, state.errorMessage]);
+
+  const cliffReached = stream.status !== "pre-cliff";
+  const ledgersUntilCliff =
+    !cliffReached && stream.cliffLedger
+      ? Math.max(0, stream.cliffLedger - currentLedger)
+      : undefined;
+
+  // Only show the claim button for claimable statuses
+  if (stream.status === "completed" || stream.status === "cancelled") {
+    return null;
+  }
+
+  return (
+    <ClaimButton
+      phase={state.phase}
+      cliffReached={cliffReached}
+      ledgersUntilCliff={ledgersUntilCliff}
+      claimableAmount={optimisticAmount}
+      tokenSymbol={stream.token}
+      amountClaimed={state.amountClaimed}
+      errorMessage={state.errorMessage}
+      onClick={handleClick}
+      data-testid={`claim-btn-${stream.id}`}
+      style={{ padding: "0.35rem 1rem" }}
+    />
+  );
+}
+
 function StreamList() {
   const { t } = useTranslation();
-  const { setPending, setConfirmed, setFailed } = useTx();
-  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
+  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { setPending, setConfirmed, setFailed } = useTx();
+
+  // #389 — trigger refs for focus restoration when modals close
+  const claimTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const cancelTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // #389 — focus management: move focus into modal on open; restore on close
+  useModalFocus(claimTarget !== null, claimTriggerRef);
+  useModalFocus(cancelTarget !== null, cancelTriggerRef);
 
   useState(() => {
     const timer = setTimeout(() => setLoading(false), 800);
@@ -107,7 +197,7 @@ function StreamList() {
       setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
     } catch (err) {
       setFailed(err instanceof Error ? err.message : "Unknown error");
-      if (target) setClaimTarget(target); // reopen on failure
+      if (target) setClaimTarget(target);
     }
   }
 
@@ -134,9 +224,30 @@ function StreamList() {
 
   return (
     <>
-      <ul className="stream-list" style={{ marginTop: "1rem" }} aria-label={t("streams")}>
+      {/* #389 — StreamCardList provides Arrow/Home/End keyboard navigation */}
+      <StreamCardList
+        streamIds={MOCK_STREAMS.map((s) => s.id)}
+        activeId={activeCardId}
+        onActivate={(id) => {
+          const stream = MOCK_STREAMS.find((s) => s.id === id);
+          if (stream?.status === "active") setClaimTarget(stream);
+        }}
+        onActiveChange={setActiveCardId}
+        ariaLabel={t("streams")}
+        className="stream-list"
+        style={{ marginTop: "1rem" }}
+      >
         {MOCK_STREAMS.map((s) => (
-          <li key={s.id} className="stream-card">
+          <li
+            key={s.id}
+            id={`stream-option-${s.id}`}
+            role="option"
+            aria-selected={activeCardId === s.id}
+            className="stream-card"
+            // #389 — cards are focusable for keyboard navigation
+            tabIndex={0}
+            onFocus={() => setActiveCardId(s.id)}
+          >
             <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
@@ -149,9 +260,9 @@ function StreamList() {
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
-                  {abbreviateAmount(s.claimableAmount)} {s.token}
+                  <AnimatedNumber value={s.claimableAmount} format={abbreviateAmount} /> {s.token}
                 </div>
-                <div style={{ display: "flex", gap: "0.4rem" }}>
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   {s.startLedger && s.cliffLedger && s.endLedger && (
                     <button
                       type="button"
@@ -165,27 +276,27 @@ function StreamList() {
                     </button>
                   )}
                   {s.status === "active" && (
+                    // #389 — store ref on the button that opens the claim sheet
+                    // so focus can be restored when the sheet closes
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className={`btn btn-primary${s.claimableAmount > 0 ? " btn-pulse" : ""}`}
                       style={{ padding: "0.35rem 1rem" }}
-                      onClick={() => setClaimTarget(s)}
+                      ref={(el) => {
+                        if (claimTarget?.id === s.id || (!claimTarget && activeCardId === s.id)) {
+                          claimTriggerRef.current = el;
+                        }
+                      }}
+                      onClick={(e) => {
+                        claimTriggerRef.current = e.currentTarget;
+                        setClaimTarget(s);
+                      }}
                       data-testid={`claim-btn-${s.id}`}
                     >
                       {t("claim")}
                     </button>
                   )}
                 </div>
-                {s.status === "active" && (
-                  <button
-                    className="btn btn-primary"
-                    style={{ marginTop: "0.4rem" }}
-                    onClick={() => setClaimTarget(s)}
-                    data-testid={`claim-btn-${s.id}`}
-                  >
-                    {t("claim")}
-                  </button>
-                )}
               </div>
             </div>
 
@@ -214,8 +325,9 @@ function StreamList() {
             )}
           </li>
         ))}
-      </ul>
+      </StreamCardList>
 
+      {/* Bottom sheet for mobile / full-detail claim flow */}
       {claimTarget && (
         <ClaimBottomSheet
           stream={claimTarget}
@@ -240,6 +352,7 @@ function StreamList() {
 export default function Home() {
   const { t } = useTranslation();
   const { showCreate, setShowCreate } = useSponsorDashboard();
+  const [showCompare, setShowCompare] = useState(false);
 
   return (
     <TxProvider>
@@ -257,31 +370,40 @@ export default function Home() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem" }}>
           <StatusLegend />
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ whiteSpace: "nowrap" }}
-            onClick={() => setShowCreate((v) => !v)}
-            aria-expanded={showCreate}
-            data-testid="toggle-create-form"
-          >
-            {showCreate ? "✕ Cancel" : "+ New Stream"}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ whiteSpace: "nowrap", fontSize: "0.875rem" }}
+              onClick={() => setShowCompare(true)}
+              data-testid="open-compare"
+              aria-label="Compare streams side by side"
+            >
+              ⇄ Compare Streams
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ whiteSpace: "nowrap" }}
+              onClick={() => setShowCreate((v) => !v)}
+              aria-expanded={showCreate}
+              data-testid="toggle-create-form"
+            >
+              {showCreate ? "✕ Cancel" : "+ New Stream"}
+            </button>
+          </div>
         </div>
 
+        {/* Stream comparison modal */}
+        {showCompare && (
+          <StreamComparisonView
+            streams={MOCK_STREAMS}
+            onClose={() => setShowCompare(false)}
+          />
+        )}
+
         {showCreate && (
-          <section
-            style={{
-              marginTop: "1rem",
-              padding: "1.25rem",
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius)",
-            }}
-          >
-            <h2 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>Create Vesting Stream</h2>
-            <StreamCreateForm onSuccess={() => setShowCreate(false)} />
-          </section>
+          <CreateStreamWizard onClose={() => setShowCreate(false)} />
         )}
 
         <StreamList />
