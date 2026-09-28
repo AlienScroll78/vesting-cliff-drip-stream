@@ -54,3 +54,33 @@ output "backup_failure_topic_arn" {
   description = "SNS topic for RDS backup failure alerts"
   value       = module.data.backup_failure_topic_arn
 }
+
+output "secret_arns" {
+  description = "ARNs of every secret managed in AWS Secrets Manager."
+  value       = module.secrets.secret_arns
+}
+
+output "db_credentials_secret_arn" {
+  description = "ARN of the auto-rotating PostgreSQL credentials secret."
+  value       = module.secrets.db_credentials_arn
+}
+
+output "db_password_json_key" {
+  description = "ECS valueFrom selector for the database password."
+  value       = module.secrets.db_password_json_key
+}
+
+output "secret_rotation_failure_topic_arn" {
+  description = "SNS topic notified when a secret rotation fails."
+  value       = module.secrets.rotation_failure_topic_arn
+}
+
+output "secret_audit_trail_name" {
+  description = "CloudTrail recording every access to this environment's secrets."
+  value       = module.secrets.audit_trail_name
+}
+
+output "secret_audit_log_group" {
+  description = "CloudWatch log group receiving the Secrets Manager access trail."
+  value       = module.secrets.audit_log_group_name
+}

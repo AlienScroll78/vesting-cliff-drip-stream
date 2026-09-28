@@ -4,20 +4,24 @@ output "db_endpoint" {
   sensitive   = true
 }
 
+output "db_address" {
+  description = "PostgreSQL RDS hostname, without the port."
+  value       = aws_db_instance.postgres.address
+}
+
 output "db_name" {
   description = "PostgreSQL database name"
   value       = aws_db_instance.postgres.db_name
 }
 
+output "db_port" {
+  description = "PostgreSQL RDS port"
+  value       = aws_db_instance.postgres.port
+}
+
 output "db_username" {
   description = "PostgreSQL master username"
   value       = aws_db_instance.postgres.username
-  sensitive   = true
-}
-
-output "db_password" {
-  description = "PostgreSQL master password"
-  value       = var.db_password
   sensitive   = true
 }
 

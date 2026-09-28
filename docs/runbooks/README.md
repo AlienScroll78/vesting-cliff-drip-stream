@@ -14,6 +14,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 |---------|-------------|
 | [Drift Reconciliation](./drift-reconciliation.md) | A daily drift-detection run has reported that live infrastructure diverges from Terraform configuration |
 | [Emergency Override](./emergency-override.md) | You must make a manual infrastructure change immediately to mitigate an active incident |
+| [Secrets Management](./secrets-management.md) | Rotate a secret manually, investigate a rotation failure, or audit who read a secret |
 
 ## Database
 

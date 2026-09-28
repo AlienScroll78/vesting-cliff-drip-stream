@@ -151,10 +151,34 @@ resource "aws_lambda_function" "slack_relay" {
 
   environment {
     variables = {
-      SLACK_WEBHOOK_URL = var.slack_webhook_url
-      SLACK_CHANNEL     = "#ops"
+      # Reference only — the webhook value itself is fetched from Secrets
+      # Manager at invoke time, so it never lands in the task configuration.
+      SLACK_WEBHOOK_SECRET_ARN = module.secrets.slack_webhook_url_arn
+      SLACK_CHANNEL            = "#ops"
     }
   }
+}
+
+data "aws_iam_policy_document" "slack_lambda" {
+  statement {
+    sid       = "ReadSlackWebhook"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [module.secrets.slack_webhook_url_arn]
+  }
+
+  statement {
+    sid       = "DecryptSlackWebhook"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt"]
+    resources = [module.secrets.kms_key_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "slack_lambda" {
+  name   = "${var.environment}-cost-slack-relay-secrets"
+  role   = aws_iam_role.slack_lambda.id
+  policy = data.aws_iam_policy_document.slack_lambda.json
 }
 
 resource "aws_sns_topic_subscription" "slack_lambda" {

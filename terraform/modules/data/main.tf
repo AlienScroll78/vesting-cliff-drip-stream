@@ -27,15 +27,15 @@ resource "aws_sns_topic_subscription" "backup_failure_email" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier        = "${var.environment}-vesting-db"
-  engine            = "postgres"
-  engine_version    = "15"
-  instance_class    = "db.t3.micro"
-  allocated_storage = 20
-  db_name           = "vesting"
-  username          = "vesting"
-  password          = var.db_password
-  db_subnet_group_name = aws_db_subnet_group.main.name
+  identifier                      = "${var.environment}-vesting-db"
+  engine                          = "postgres"
+  engine_version                  = "15"
+  instance_class                  = "db.t3.micro"
+  allocated_storage               = 20
+  db_name                         = "vesting"
+  username                        = "vesting"
+  password                        = var.db_password
+  db_subnet_group_name            = aws_db_subnet_group.main.name
   storage_encrypted               = true
   kms_key_id                      = aws_kms_key.postgres.arn
   backup_retention_period         = var.backup_retention_days
