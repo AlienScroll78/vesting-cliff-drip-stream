@@ -7,10 +7,17 @@
  *   GET  /admin/indexer/status
  *   POST /admin/indexer/reindex?from_ledger=X
  *   GET  /admin/metrics   (Prometheus text format)
+ *
+ * Issue #741: Prometheus metrics for the connection pool:
+ *   db_pool_active_connections — connections currently checked out
+ *   db_pool_idle_connections   — connections waiting in the pool
+ *   db_pool_total_connections  — total connections (active + idle)
+ *   db_pool_waiting_requests   — requests queued waiting for a connection
  */
 
 import express from "express";
 import * as promClient from "prom-client";
+import { pool } from "../db.js";
 import { runStreamCleanup } from "../jobs/streamCleanup.js";
 import { networkConfig } from "../config/network.js";
 
@@ -32,6 +39,59 @@ const reindexTotal = new promClient.Counter({
   help: "Total number of reindex operations triggered",
   registers: [register],
 });
+
+// ── Issue #741: DB connection-pool metrics ──────────────────────────────────
+
+/**
+ * Active connections — pool clients currently checked out and executing a
+ * query.  Computed as: totalCount - idleCount.
+ */
+const dbPoolActiveConnections = new promClient.Gauge({
+  name: "db_pool_active_connections",
+  help: "Number of PostgreSQL connections currently checked out from the pool",
+  registers: [register],
+});
+
+/**
+ * Idle connections — clients sitting in the pool ready to be acquired.
+ */
+const dbPoolIdleConnections = new promClient.Gauge({
+  name: "db_pool_idle_connections",
+  help: "Number of PostgreSQL connections currently idle in the pool",
+  registers: [register],
+});
+
+/**
+ * Total connections — all open connections (active + idle).
+ */
+const dbPoolTotalConnections = new promClient.Gauge({
+  name: "db_pool_total_connections",
+  help: "Total number of open PostgreSQL connections (active + idle)",
+  registers: [register],
+});
+
+/**
+ * Waiting requests — callers blocked waiting for a free connection.
+ * Non-zero values indicate pool pressure; should alert when sustained.
+ */
+const dbPoolWaitingRequests = new promClient.Gauge({
+  name: "db_pool_waiting_requests",
+  help: "Number of requests waiting for a PostgreSQL connection from the pool",
+  registers: [register],
+});
+
+/** Refresh pool gauges from the live pg.Pool stats. */
+function refreshPoolMetrics(): void {
+  const total = pool.totalCount;
+  const idle = pool.idleCount;
+  const waiting = pool.waitingCount;
+  const active = total - idle;
+
+  dbPoolTotalConnections.set(total);
+  dbPoolIdleConnections.set(idle);
+  dbPoolActiveConnections.set(active);
+  dbPoolWaitingRequests.set(waiting);
+}
 
 // ---------------------------------------------------------------------------
 // Indexer state (stub — replace with real indexer state)
@@ -118,8 +178,14 @@ export function startAdminServer(): void {
     res.json({ ok: true, fromLedger });
   });
 
-  /** GET /admin/metrics — Prometheus text format */
+  /**
+   * GET /admin/metrics — Prometheus text format.
+   * Pool gauges are refreshed on every scrape so Grafana always sees live data.
+   */
   admin.get("/admin/metrics", async (_req, res) => {
+    // Refresh pool metrics immediately before serialising
+    refreshPoolMetrics();
+
     res.set("Content-Type", register.contentType);
     res.send(await register.metrics());
   });
@@ -134,8 +200,23 @@ export function startAdminServer(): void {
     }
   });
 
+  /**
+   * GET /admin/pool — real-time pool stats in JSON (useful for dashboards
+   * and health scripts that prefer JSON over the Prometheus text format).
+   */
+  admin.get("/admin/pool", (_req, res) => {
+    refreshPoolMetrics();
+    res.json({
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      active: pool.totalCount - pool.idleCount,
+      waiting: pool.waitingCount,
+    });
+  });
+
   const ADMIN_PORT = parseInt(process.env.ADMIN_PORT ?? "3002", 10);
   admin.listen(ADMIN_PORT, "127.0.0.1", () => {
     console.log(`[admin] Internal API listening on 127.0.0.1:${ADMIN_PORT}`);
+    console.log(`[admin] Pool metrics exposed at /admin/metrics (db_pool_* gauges)`);
   });
 }

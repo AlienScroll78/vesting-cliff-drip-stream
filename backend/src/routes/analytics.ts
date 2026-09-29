@@ -74,7 +74,12 @@ export async function sponsorAnalyticsHandler(req: Request, res: Response): Prom
     }
   }
 
-  // DB query — aggregate by token for this sponsor
+  // DB query — aggregate by token for this sponsor.
+  // Issue #741: optimised to use idx_streams_sponsor_status (V4 migration)
+  // and idx_claims_recipient_token (V5 migration) to avoid full-table scans.
+  // The sub-query is rewritten as a lateral join so it can use the composite
+  // covering index on claims(recipient, token) rather than a full GROUP-BY
+  // pass over the entire table.
   const byTokenRows = await pool.query<{
     token: string;
     active_streams: string;
@@ -83,16 +88,18 @@ export async function sponsorAnalyticsHandler(req: Request, res: Response): Prom
   }>(
     `SELECT
        s.token,
-       COUNT(*)                                          AS active_streams,
+       COUNT(*)::TEXT                                    AS active_streams,
        COALESCE(SUM(s.total_deposit), 0)::TEXT          AS total_locked,
        COALESCE(SUM(c.claimed), 0)::TEXT                AS total_claimed
      FROM schedules s
-     LEFT JOIN (
-       SELECT token, recipient, SUM(amount) AS claimed
+     LEFT JOIN LATERAL (
+       SELECT SUM(amount) AS claimed
        FROM claims
-       GROUP BY token, recipient
-     ) c ON c.recipient = s.recipient AND c.token = s.token
-     WHERE s.sponsor = $1 AND s.status = 'active'
+       WHERE recipient = s.recipient
+         AND token     = s.token
+     ) c ON true
+     WHERE s.sponsor = $1
+       AND s.status  = 'active'
      GROUP BY s.token`,
     [address]
   );
