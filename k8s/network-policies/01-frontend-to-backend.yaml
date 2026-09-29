@@ -1,0 +1,70 @@
+# NetworkPolicy: frontend → backend-api (port 3000)
+#
+# Allows:
+#   - frontend pods to make outbound TCP connections to backend-api on port 3000
+#   - backend-api pods to accept inbound TCP connections from frontend on port 3000
+#
+# Both policies are required together; a NetworkPolicy is only enforced when
+# the affected pod has at least one policy selecting it.  Providing both the
+# egress rule on the sender and the ingress rule on the receiver gives explicit
+# least-privilege control on both ends.
+#
+# Label assumptions (see helm/vesting-backend/templates/_helpers.tpl):
+#   frontend pods:     app.kubernetes.io/name=frontend
+#   backend-api pods:  app.kubernetes.io/name=vesting-backend
+---
+# Egress from frontend → backend-api:3000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+    - Egress
+  egress:
+    # Allow TCP to backend-api on port 3000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vesting-backend
+      ports:
+        - protocol: TCP
+          port: 3000
+    # DNS resolution (also covered by allow-dns-egress, but explicit here for
+    # clarity and for clusters where 00-default-deny is applied selectively)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Ingress to backend-api ← frontend:3000
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend-ingress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vesting-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: frontend
+      ports:
+        - protocol: TCP
+          port: 3000

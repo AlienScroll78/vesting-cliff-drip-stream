@@ -11,10 +11,23 @@
  */
 
 const { buildSchema, parse, execute } = require("graphql");
-const { checkDepth } = require("../graphql-depth-limit");
+const { validateQuery } = require("../graphql-depth-limit");
 const { StellarSdk, loadConfig } = require("../lib");
 
-const MAX_DEPTH = parseInt(process.env.GRAPHQL_MAX_DEPTH ?? "5", 10);
+// Pull limits from config; fall back to env vars for JS-only consumers.
+let graphqlConfig;
+try {
+  graphqlConfig = require("../config.js");
+} catch {
+  graphqlConfig = {
+    graphqlConfig: {
+      maxDepth: parseInt(process.env.GRAPHQL_MAX_DEPTH ?? "5", 10),
+      maxComplexity: parseInt(process.env.GRAPHQL_MAX_COMPLEXITY ?? "100", 10),
+    },
+  };
+}
+const MAX_DEPTH = graphqlConfig.graphqlConfig?.maxDepth ?? parseInt(process.env.GRAPHQL_MAX_DEPTH ?? "5", 10);
+const MAX_COMPLEXITY = graphqlConfig.graphqlConfig?.maxComplexity ?? parseInt(process.env.GRAPHQL_MAX_COMPLEXITY ?? "100", 10);
 
 const schema = buildSchema(`
   type VestingSchedule {
@@ -161,7 +174,11 @@ async function graphqlHandler(req, res) {
   }
 
   try {
-    checkDepth(document, MAX_DEPTH);
+    validateQuery(document, schema, {
+      maxDepth: MAX_DEPTH,
+      maxComplexity: MAX_COMPLEXITY,
+      query,
+    });
   } catch (err) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ errors: [{ message: err.message }] }));

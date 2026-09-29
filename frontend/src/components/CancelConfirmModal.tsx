@@ -1,140 +1,460 @@
 "use client";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, KeyboardEvent } from "react";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
+import { trapFocus } from "@/utils/focusTrap";
 
-interface CancelAmounts {
-  recipientAmount: number; // tokens already accrued (0 if cliff not reached)
-  sponsorRefund: number;   // remainder back to sponsor
-  cliffReached: boolean;
-}
+// ── Shared dialog shell ───────────────────────────────────────────────────────
 
-interface Props {
-  stream: VestingStream;
-  amounts: CancelAmounts;
-  onConfirm: () => Promise<void>;
+interface DialogShellProps {
+  titleId: string;
   onClose: () => void;
+  borderColor?: string;
+  children: React.ReactNode;
 }
 
-const CONFIRM_WORD = "CANCEL";
+function DialogShell({ titleId, onClose, borderColor = "var(--color-cancelled)", children }: DialogShellProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
-export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: Props) {
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const titleId = useId();
-
-  // Focus input on open; close on Escape
+  // Focus trap
   useEffect(() => {
-    inputRef.current?.focus();
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (!containerRef.current) return;
+    return trapFocus(containerRef.current);
+  }, []);
+
+  // Escape → dismiss.  Enter does NOT confirm (keyboard rule #378).
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      if (e.key === "Enter" && e.target === document.body) e.preventDefault();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  async function handleConfirm() {
-    setLoading(true);
-    try { await onConfirm(); } finally { setLoading(false); }
+  function handleBackdropClick(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) onClose();
   }
-
-  const confirmed = input === CONFIRM_WORD;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem",
       }}
+      onClick={handleBackdropClick}
     >
       <div
+        ref={containerRef}
         style={{
-          background: "var(--color-surface)", borderRadius: "var(--radius)",
-          border: "1.5px solid var(--color-cancelled)", width: "100%", maxWidth: "26rem",
-          padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem",
+          background: "var(--color-surface)",
+          borderRadius: "var(--radius)",
+          border: `1.5px solid ${borderColor}`,
+          width: "100%",
+          maxWidth: "28rem",
+          padding: "1.5rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          animation: "fadeScaleIn 0.18s ease-out",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id={titleId} style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-cancelled)" }}>
+        {children}
+      </div>
+      <style>{`
+        @keyframes fadeScaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Cancel Stream dialog ──────────────────────────────────────────────────────
+
+interface CancelAmounts {
+  recipientAmount: number;
+  sponsorRefund: number;
+  cliffReached: boolean;
+}
+
+interface CancelStreamProps {
+  stream: VestingStream;
+  amounts: CancelAmounts;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}
+
+export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: CancelStreamProps) {
+  const [loading, setLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const inputId = useId();
+  const titleId = useId();
+
+  // "Go back" button gets auto-focus — safer default than the destructive action
+  useEffect(() => {
+    const goBackBtn = document.getElementById("cancel-stream-go-back-btn");
+    goBackBtn?.focus();
+  }, []);
+
+  const isConfirmed = confirmText === "CANCEL";
+
+  async function handleConfirm() {
+    if (!isConfirmed) return;
+    setLoading(true);
+    try { await onConfirm(); } finally { setLoading(false); }
+  }
+
+  // Block Enter on confirm button to prevent accidental keyboard submission
+  function handleConfirmKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "Enter") { e.preventDefault(); }
+  }
+
+  return (
+    <DialogShell titleId={titleId} onClose={onClose} borderColor="var(--color-cancelled)">
+      <div>
+        <h2
+          id={titleId}
+          style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-cancelled)", margin: 0 }}
+        >
           Cancel Stream
         </h2>
-
-        {/* Recipient row */}
-        <p style={{ fontSize: "0.85rem", color: "#6b7280", margin: 0 }}>
-          Recipient: <span style={{ fontFamily: "monospace" }}>{stream.recipient}</span>
+        <p style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: "0.25rem" }}>
+          This action is permanent and cannot be undone.
         </p>
-
-        {/* Cliff warning */}
-        {!amounts.cliffReached && (
-          <div
-            role="status"
-            style={{
-              padding: "0.6rem 0.75rem", borderRadius: "var(--radius)",
-              background: "#fef2f2", border: "1px solid var(--color-cancelled)", fontSize: "0.85rem",
-            }}
-          >
-            ⚠️ Cliff not yet reached — full deposit will be refunded to the sponsor.
-          </div>
-        )}
-
-        {/* Amount breakdown */}
-        <dl style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.4rem 1rem", fontSize: "0.9rem", margin: 0 }}>
-          <dt style={{ color: "#6b7280" }}>Released to recipient</dt>
-          <dd style={{ fontWeight: 700, textAlign: "right" }}>
-            {formatAmount(amounts.recipientAmount)} {stream.token}
-          </dd>
-          <dt style={{ color: "#6b7280" }}>Refunded to sponsor</dt>
-          <dd style={{ fontWeight: 700, textAlign: "right" }}>
-            {formatAmount(amounts.sponsorRefund)} {stream.token}
-          </dd>
-        </dl>
-
-        <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
-
-        {/* Confirmation input */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-          <label htmlFor="cancel-confirm-input" style={{ fontSize: "0.875rem" }}>
-            Type <strong>{CONFIRM_WORD}</strong> to confirm
-          </label>
-          <input
-            id="cancel-confirm-input"
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            aria-describedby="cancel-confirm-hint"
-            style={{
-              padding: "0.5rem 0.75rem", borderRadius: "var(--radius)",
-              border: `1.5px solid ${confirmed ? "var(--color-cancelled)" : "var(--color-border)"}`,
-              fontFamily: "monospace", fontSize: "0.95rem", outline: "none",
-            }}
-          />
-          <span id="cancel-confirm-hint" className="sr-only">
-            This action is irreversible. Type CANCEL to enable the button.
-          </span>
-        </div>
-
-        {/* Actions */}
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-          <button className="btn btn-ghost" onClick={onClose} disabled={loading}>
-            Go back
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ background: "var(--color-cancelled)", borderColor: "var(--color-cancelled)" }}
-            disabled={!confirmed || loading}
-            onClick={handleConfirm}
-            data-testid="cancel-confirm-btn"
-          >
-            {loading ? "Cancelling…" : "Cancel Stream"}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {/* Recipient */}
+      <p style={{ fontSize: "0.85rem", color: "#6b7280", margin: 0 }}>
+        Recipient:{" "}
+        <span style={{ fontFamily: "monospace", color: "var(--color-text)" }}>{stream.recipient}</span>
+      </p>
+
+      {/* Cliff not yet reached warning */}
+      {!amounts.cliffReached && (
+        <div
+          role="status"
+          style={{
+            padding: "0.75rem",
+            borderRadius: "var(--radius)",
+            background: "#fef2f2",
+            border: "1px solid var(--color-cancelled)",
+            fontSize: "0.85rem",
+            lineHeight: 1.5,
+          }}
+        >
+          ⚠️ <strong>Cliff not yet reached</strong> — the full deposit will be refunded to the sponsor.
+          The recipient will receive nothing.
+        </div>
+      )}
+
+      {/* Refund breakdown */}
+      <dl
+        style={{
+          background: "var(--color-bg)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius)",
+          padding: "0.875rem 1rem",
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: "0.5rem 1rem",
+          fontSize: "0.9rem",
+          margin: 0,
+        }}
+      >
+        <dt style={{ color: "#6b7280" }}>Recipient receives</dt>
+        <dd style={{ fontWeight: 700, textAlign: "right", color: amounts.cliffReached ? "var(--color-completed)" : "#9ca3af" }}>
+          <span>{formatAmount(amounts.recipientAmount)}</span>{" "}
+          <span style={{ fontWeight: 400, color: "#6b7280" }}>{stream.token}</span>
+        </dd>
+        <dt style={{ color: "#6b7280" }}>Sponsor refund</dt>
+        <dd style={{ fontWeight: 700, textAlign: "right", color: "var(--color-active)" }}>
+          <span>{formatAmount(amounts.sponsorRefund)}</span>{" "}
+          <span style={{ fontWeight: 400, color: "#6b7280" }}>{stream.token}</span>
+        </dd>
+      </dl>
+
+      <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
+
+      {/* CANCEL confirmation gate – two-step: type CANCEL to unlock the button */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <label
+          htmlFor={inputId}
+          style={{ fontSize: "0.875rem", color: "#374151" }}
+        >
+          Type <strong>CANCEL</strong> to confirm
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          disabled={loading}
+          aria-label="Type CANCEL to confirm stream cancellation"
+          placeholder="CANCEL"
+          style={{
+            padding: "0.5rem 0.75rem",
+            borderRadius: "var(--radius)",
+            border: `1.5px solid ${isConfirmed ? "var(--color-cancelled)" : "var(--color-border)"}`,
+            fontFamily: "monospace",
+            fontSize: "0.95rem",
+            outline: "none",
+            transition: "border-color 0.15s",
+            background: loading ? "#f9fafb" : undefined,
+          }}
+        />
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+        <button
+          id="cancel-stream-go-back-btn"
+          className="btn btn-outline"
+          onClick={onClose}
+          disabled={loading}
+          data-testid="cancel-keep-btn"
+          autoFocus
+        >
+          Go back
+        </button>
+        <button
+          ref={confirmBtnRef}
+          className="btn btn-primary"
+          style={{
+            background: "var(--color-cancelled)",
+            borderColor: "var(--color-cancelled)",
+            opacity: isConfirmed && !loading ? 1 : 0.5,
+            cursor: isConfirmed && !loading ? "pointer" : "not-allowed",
+          }}
+          disabled={!isConfirmed || loading}
+          onClick={handleConfirm}
+          onKeyDown={handleConfirmKeyDown}
+          data-testid="cancel-confirm-btn"
+        >
+          {loading ? "Cancelling…" : "I understand, cancel stream"}
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+// ── Disconnect Wallet dialog ──────────────────────────────────────────────────
+
+interface DisconnectWalletProps {
+  hasPendingTransactions?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+export function DisconnectWalletDialog({ hasPendingTransactions = false, onConfirm, onClose }: DisconnectWalletProps) {
+  const titleId = useId();
+
+  function handleConfirmKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "Enter") e.preventDefault();
+  }
+
+  return (
+    <DialogShell titleId={titleId} onClose={onClose} borderColor="var(--color-pre-cliff)">
+      <div>
+        <h2
+          id={titleId}
+          style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-pre-cliff)", margin: 0 }}
+        >
+          Disconnect Wallet
+        </h2>
+        <p style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: "0.25rem" }}>
+          You will be signed out of your current session.
+        </p>
+      </div>
+
+      {/* Pending tx warning */}
+      {hasPendingTransactions && (
+        <div
+          role="alert"
+          style={{
+            padding: "0.75rem",
+            borderRadius: "var(--radius)",
+            background: "#fffbeb",
+            border: "1px solid var(--color-pre-cliff)",
+            fontSize: "0.85rem",
+            lineHeight: 1.5,
+          }}
+        >
+          ⚠️ <strong>You have pending transactions.</strong> Disconnecting now may leave them in
+          an incomplete state. Wait for them to confirm before disconnecting.
+        </div>
+      )}
+
+      <p style={{ fontSize: "0.875rem", color: "#6b7280", margin: 0, lineHeight: 1.6 }}>
+        Your on-chain data will not be affected. You can reconnect your wallet at any time.
+      </p>
+
+      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+        <button
+          className="btn btn-outline"
+          onClick={onClose}
+          data-testid="disconnect-keep-btn"
+          autoFocus
+        >
+          Stay Connected
+        </button>
+        <button
+          className="btn btn-primary"
+          style={{ background: "var(--color-pre-cliff)", borderColor: "var(--color-pre-cliff)" }}
+          onClick={onConfirm}
+          onKeyDown={handleConfirmKeyDown}
+          data-testid="disconnect-confirm-btn"
+        >
+          Disconnect Wallet
+        </button>
+      </div>
+    </DialogShell>
+  );
+}
+
+// ── Batch Cancel dialog ───────────────────────────────────────────────────────
+
+export interface BatchCancelStream {
+  id: string;
+  recipient: string;
+  token: string;
+  recipientAmount: number;
+  sponsorRefund: number;
+  cliffReached: boolean;
+}
+
+interface BatchCancelProps {
+  streams: BatchCancelStream[];
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+}
+
+export function BatchCancelDialog({ streams, onConfirm, onClose }: BatchCancelProps) {
+  const [loading, setLoading] = useState(false);
+  const titleId = useId();
+
+  // Aggregate totals (assumes same token for simplicity; multi-token aggregated separately)
+  const totalRecipient = streams.reduce((s, x) => s + x.recipientAmount, 0);
+  const totalRefund = streams.reduce((s, x) => s + x.sponsorRefund, 0);
+  const token = streams[0]?.token ?? "";
+
+  async function handleConfirm() {
+    setLoading(true);
+    try { await onConfirm(); } finally { setLoading(false); }
+  }
+
+  function handleConfirmKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "Enter") e.preventDefault();
+  }
+
+  return (
+    <DialogShell titleId={titleId} onClose={onClose} borderColor="var(--color-cancelled)">
+      <div>
+        <h2
+          id={titleId}
+          style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-cancelled)", margin: 0 }}
+        >
+          Cancel {streams.length} Stream{streams.length !== 1 ? "s" : ""}
+        </h2>
+        <p style={{ fontSize: "0.8rem", color: "#6b7280", marginTop: "0.25rem" }}>
+          This action is permanent and will cancel all selected streams.
+        </p>
+      </div>
+
+      {/* Aggregate impact */}
+      <dl
+        style={{
+          background: "var(--color-bg)",
+          border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius)",
+          padding: "0.875rem 1rem",
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: "0.5rem 1rem",
+          fontSize: "0.9rem",
+          margin: 0,
+        }}
+      >
+        <dt style={{ color: "#6b7280" }}>Streams affected</dt>
+        <dd style={{ fontWeight: 700, textAlign: "right" }}>{streams.length}</dd>
+        <dt style={{ color: "#6b7280" }}>Total released to recipients</dt>
+        <dd style={{ fontWeight: 700, textAlign: "right", color: "var(--color-completed)" }}>
+          {formatAmount(totalRecipient)} {token}
+        </dd>
+        <dt style={{ color: "#6b7280" }}>Total refunded to you</dt>
+        <dd style={{ fontWeight: 700, textAlign: "right", color: "var(--color-active)" }}>
+          {formatAmount(totalRefund)} {token}
+        </dd>
+      </dl>
+
+      {/* Per-stream breakdown (scrollable if long) */}
+      <div
+        style={{
+          maxHeight: "10rem",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.35rem",
+          fontSize: "0.8rem",
+        }}
+      >
+        {streams.map((s) => (
+          <div
+            key={s.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "0.5rem",
+              padding: "0.4rem 0.5rem",
+              background: "var(--color-bg)",
+              borderRadius: "0.25rem",
+              border: "1px solid var(--color-border)",
+            }}
+          >
+            <span style={{ fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {s.recipient}
+            </span>
+            <span style={{ flexShrink: 0, color: "#6b7280" }}>
+              {s.cliffReached
+                ? `${formatAmount(s.recipientAmount)} → recipient`
+                : "full refund to sponsor"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
+
+      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+        <button
+          className="btn btn-outline"
+          onClick={onClose}
+          disabled={loading}
+          data-testid="batch-cancel-keep-btn"
+          autoFocus
+        >
+          Keep All Streams
+        </button>
+        <button
+          className="btn btn-primary"
+          style={{ background: "var(--color-cancelled)", borderColor: "var(--color-cancelled)" }}
+          disabled={loading}
+          onClick={handleConfirm}
+          onKeyDown={handleConfirmKeyDown}
+          data-testid="batch-cancel-confirm-btn"
+        >
+          {loading ? "Cancelling…" : `Cancel ${streams.length} Stream${streams.length !== 1 ? "s" : ""}`}
+        </button>
+      </div>
+    </DialogShell>
   );
 }

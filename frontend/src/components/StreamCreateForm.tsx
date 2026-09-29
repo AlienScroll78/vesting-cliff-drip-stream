@@ -2,6 +2,7 @@
 import { useState, type ChangeEvent, type FocusEvent } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { getErrorInfo } from "@/errorMessages";
+import { isDepositOverflow } from "@/wizard/useWizard";
 
 // ~5 seconds per ledger on Stellar
 const LEDGERS_PER_DAY = Math.round((24 * 60 * 60) / 5);
@@ -136,6 +137,7 @@ export function StreamCreateForm({ onSuccess }: Props) {
     e.preventDefault();
     setTouched({ recipient: true, token: true, rate: true, cliffDays: true, totalDays: true });
     if (hasErrors || !sponsor) return;
+    if (isDepositOverflow(rate, totalLedgers)) return;
     setSubmitting(true);
     setContractError(null);
     try {
@@ -233,8 +235,29 @@ export function StreamCreateForm({ onSuccess }: Props) {
         hint={totalDays > 0 ? `≈ ${totalLedgers.toLocaleString()} ledgers` : undefined}
       />
 
+      {/* Overflow warning — takes precedence over deposit preview */}
+      {rate > 0 && totalLedgers > 0 && isDepositOverflow(rate, totalLedgers) && (
+        <div
+          role="alert"
+          data-testid="overflow-warning"
+          style={{
+            padding: "0.75rem 1rem",
+            background: "#fef2f2",
+            border: "1px solid var(--color-cancelled)",
+            borderRadius: "var(--radius)",
+            fontSize: "0.875rem",
+            color: "var(--color-cancelled)",
+          }}
+        >
+          <strong>⚠️ Deposit overflow!</strong>
+          <p style={{ margin: "0.25rem 0 0" }}>
+            rate × total_duration exceeds i128::MAX. Reduce the rate or duration to proceed.
+          </p>
+        </div>
+      )}
+
       {/* Deposit preview */}
-      {estimatedDeposit !== null && !hasErrors && (
+      {estimatedDeposit !== null && !hasErrors && !isDepositOverflow(rate, totalLedgers) && (
         <div
           role="status"
           aria-live="polite"

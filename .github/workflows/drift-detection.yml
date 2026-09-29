@@ -1,0 +1,132 @@
+name: Terraform Drift Detection
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # daily at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment (production)'
+        required: false
+        default: 'production'
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write   # required to open drift-tracking issues
+
+jobs:
+  drift-detect:
+    name: Detect Infrastructure Drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DRIFT_DETECTION_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.7'
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=vesting-tf-state" \
+            -backend-config="key=vesting/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -input=false
+
+      - name: Run drift detection
+        id: drift
+        working-directory: terraform
+        env:
+          TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
+        run: |
+          bash ../scripts/detect_drift.sh
+        continue-on-error: true   # script exits 2 on drift; we capture it ourselves
+
+      - name: Upload plan output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-plan-${{ github.run_id }}
+          path: terraform/drift-plan.txt
+          retention-days: 90
+
+      - name: Open GitHub issue on drift
+        if: steps.drift.outputs.drift_detected == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/drift-plan.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n\n…(truncated — see workflow artifact)' : plan;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              '## :warning: Terraform Drift Detected',
+              '',
+              `**Detected at:** ${new Date().toISOString()}`,
+              `**Workflow run:** ${runUrl}`,
+              `**Changes summary:** ${process.env.DRIFT_SUMMARY}`,
+              '',
+              '<details>',
+              '<summary>Full terraform plan output</summary>',
+              '',
+              '```',
+              truncated,
+              '```',
+              '</details>',
+              '',
+              '### Next steps',
+              '',
+              'See the [Drift Reconciliation Runbook](../blob/main/docs/runbooks/drift-reconciliation.md) for evaluation steps.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Drift] Infrastructure drift detected — ${new Date().toISOString().slice(0, 10)}`,
+              body,
+              labels: ['infrastructure', 'drift'],
+            });
+        env:
+          DRIFT_SUMMARY: ${{ steps.drift.outputs.drift_summary }}
+
+      - name: Notify Slack on drift
+        if: steps.drift.outputs.drift_detected == 'true'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: >
+            {
+              "text": ":warning: *Terraform drift detected* in production infrastructure.\n*Changes:* ${{ steps.drift.outputs.drift_summary }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>\nSee the <${{ github.server_url }}/${{ github.repository }}/blob/main/docs/runbooks/drift-reconciliation.md|Drift Reconciliation Runbook> for next steps."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Notify Slack on workflow failure
+        if: failure() && steps.drift.outputs.drift_detected != 'true'
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: >
+            {
+              "text": ":red_circle: Terraform drift detection *workflow failed* (not a drift event — the job itself errored).\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Fail job if drift was detected
+        if: steps.drift.outputs.drift_detected == 'true'
+        run: |
+          echo "::error::Terraform drift detected. See the GitHub issue and Slack notification."
+          exit 1

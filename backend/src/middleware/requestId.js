@@ -1,77 +1,82 @@
-"use strict";
-
 /**
  * Request ID middleware — closes #36
  *
- * Attaches X-Request-ID to every request (generates UUID v4 if absent).
- * Also exposes a structured logger bound to the request_id.
+ * Attaches X-Request-ID to every request (reads from header or generates
+ * a UUID v4 if absent).  Also stores the request_id in the shared
+ * AsyncLocalStorage context from logger.js so that all pino log calls
+ * made during the request automatically include the request_id field.
+ *
+ * A convenience req.log object (bound to the pino logger) is still exposed
+ * for route handlers that log directly via req.log.
  */
 
-const { randomUUID } = require("crypto");
+import { randomUUID } from 'crypto';
+import { logger, runWithIds, correlationStorage } from '../logger.js';
 
-/** Redact patterns: Stellar secret keys (S...), Bearer tokens */
+/** @type {RegExp} — matches Stellar secret keys (S...) and Bearer tokens */
 const REDACT_RE = /\b(S[A-Z2-7]{55}|Bearer\s+\S+)\b/g;
 
 function redact(str) {
-  return typeof str === "string" ? str.replace(REDACT_RE, "[REDACTED]") : str;
+  return typeof str === 'string' ? str.replace(REDACT_RE, '[REDACTED]') : str;
 }
 
-/** Build a structured log line as JSON. */
-function buildLogLine(level, requestId, message, extra = {}) {
-  return JSON.stringify({
-    level,
-    timestamp: new Date().toISOString(),
-    request_id: requestId,
-    message: redact(String(message)),
-    ...extra,
-  });
-}
-
-/** Create a logger bound to a specific request_id. */
-function createLogger(requestId) {
-  const LOG_LEVEL = process.env.LOG_LEVEL ?? "info";
-  const levels = { debug: 0, info: 1, warn: 2, error: 3 };
-  const minLevel = levels[LOG_LEVEL] ?? 1;
-
-  function log(level, message, extra) {
-    if ((levels[level] ?? 0) >= minLevel) {
-      const out = buildLogLine(level, requestId, message, extra);
-      if (level === "error" || level === "warn") {
-        process.stderr.write(out + "\n");
-      } else {
-        process.stdout.write(out + "\n");
-      }
-    }
-  }
-
+/**
+ * Create a thin logger façade that delegates to pino and ensures every call
+ * is made within the active request context (so request_id is injected).
+ *
+ * @param {string} requestId
+ */
+export function createLogger(requestId) {
+  // Return a façade; the actual request_id injection is handled by pino's
+  // log formatter reading from AsyncLocalStorage — we just need to make sure
+  // the store is populated (done in requestIdMiddleware via runWithIds).
   return {
-    debug: (msg, extra) => log("debug", msg, extra),
-    info:  (msg, extra) => log("info",  msg, extra),
-    warn:  (msg, extra) => log("warn",  msg, extra),
-    error: (msg, extra) => log("error", msg, extra),
+    debug: (msg, extra = {}) => logger.debug({ ...extra, message: redact(String(msg)) }),
+    info:  (msg, extra = {}) => logger.info({ ...extra, message: redact(String(msg)) }),
+    warn:  (msg, extra = {}) => logger.warn({ ...extra, message: redact(String(msg)) }),
+    error: (msg, extra = {}) => logger.error({ ...extra, message: redact(String(msg)) }),
   };
 }
 
 /**
  * Express-compatible middleware.
  * Sets req.requestId, req.log, and echoes X-Request-ID in the response.
+ * Merges with any existing correlation/trace IDs already in the store
+ * (e.g. set by requestLoggerMiddleware upstream).
  */
-function requestIdMiddleware(req, res, next) {
-  const requestId = req.headers["x-request-id"] || randomUUID();
+export function requestIdMiddleware(req, res, next) {
+  const requestId = req.headers['x-request-id'] || randomUUID();
+
+  // Preserve any IDs already propagated by a parent context (e.g. traceId
+  // set by requestLoggerMiddleware).  If this middleware runs first, start
+  // a fresh context; otherwise extend the existing one.
+  const existing = correlationStorage.getStore() ?? {};
+
   req.requestId = requestId;
   req.log = createLogger(requestId);
-  res.setHeader("X-Request-ID", requestId);
-  req.log.info(`${req.method} ${req.url}`);
-  next();
+
+  // Always ensure X-Request-ID is in the response.
+  res.setHeader('X-Request-ID', requestId);
+
+  runWithIds(
+    {
+      requestId,
+      traceId:       existing.traceId       ?? null,
+      correlationId: existing.correlationId ?? req.headers['x-correlation-id'] ?? requestId,
+    },
+    () => {
+      logger.info({ event: 'request_received', method: req.method, path: req.url },
+        `${req.method} ${req.url}`);
+      next();
+    },
+  );
 }
 
 /** Bare http.IncomingMessage adapter (for non-Express handlers). */
-function attachRequestId(req, res) {
-  const requestId = req.headers["x-request-id"] || randomUUID();
+export function attachRequestId(req, res) {
+  const requestId = req.headers['x-request-id'] || randomUUID();
   req.requestId = requestId;
   req.log = createLogger(requestId);
-  if (res) res.setHeader("X-Request-ID", requestId);
+  if (res) res.setHeader('X-Request-ID', requestId);
   return requestId;
 }
-
-module.exports = { requestIdMiddleware, attachRequestId, createLogger };

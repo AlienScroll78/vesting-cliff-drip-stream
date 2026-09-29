@@ -1,0 +1,309 @@
+name: Performance Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-flight runs for the same PR branch to avoid redundant benchmark jobs.
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Regression threshold applied by check_perf.js (also stored in baseline.json).
+  # Kept here as documentation; the script reads the value from baseline.json.
+  PERF_REGRESSION_THRESHOLD: "0.10"
+
+jobs:
+  # ── Job 1: WASM instruction counts ─────────────────────────────────────────
+  instruction-counts:
+    name: WASM Instruction Counts
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-perf-
+
+      - name: Run instruction-count benchmarks
+        run: |
+          mkdir -p benchmarks
+          # Run only bench_ tests; --nocapture streams stdout so we can grep BENCH lines.
+          # stderr (test harness output) is discarded to keep the pipeline clean.
+          cargo test --features testutils bench_ -- --nocapture 2>/dev/null \
+            | grep '^BENCH' \
+            | sed 's/^BENCH //' \
+            | jq -s '{benchmarks: .}' > benchmarks/results.json
+          echo "Captured $(jq '.benchmarks | length' benchmarks/results.json) benchmark entries"
+          cat benchmarks/results.json
+
+      - name: Upload instruction-count results
+        uses: actions/upload-artifact@v4
+        with:
+          name: instruction-count-results
+          path: benchmarks/results.json
+          retention-days: 7
+
+  # ── Job 2: HTTP benchmarks ──────────────────────────────────────────────────
+  http-benchmarks:
+    name: HTTP Response Times
+    runs-on: ubuntu-latest
+
+    services:
+      stellar-quickstart:
+        image: stellar/quickstart:latest
+        ports:
+          - 8000:8000
+        options: >-
+          --health-cmd "curl -sf http://localhost:8000/ || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install autocannon
+        run: npm install --no-save autocannon
+
+      - name: Wait for RPC node to be ready
+        run: |
+          echo "Waiting for Stellar quickstart node..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/ > /dev/null 2>&1; then
+              echo "Node is ready after ${i} attempts"
+              break
+            fi
+            echo "Attempt ${i}/30 — not ready yet, sleeping 5s..."
+            sleep 5
+          done
+          curl -sf http://localhost:8000/ || (echo "Node never became ready" && exit 1)
+
+      - name: Run HTTP benchmarks
+        id: http-bench
+        run: |
+          mkdir -p benchmarks
+          # Start with empty results so bench_http.js can merge into it.
+          echo '{"benchmarks":[]}' > benchmarks/results.json
+          node scripts/bench_http.js \
+            --rpc-url http://localhost:8000 \
+            --duration 15 \
+            --connections 10 \
+            --output benchmarks/results.json
+        # Continue on error so the report step still runs and annotates the PR.
+        continue-on-error: true
+
+      - name: Upload HTTP results
+        uses: actions/upload-artifact@v4
+        with:
+          name: http-benchmark-results
+          path: benchmarks/results.json
+          retention-days: 7
+
+  # ── Job 3: Lighthouse scores ────────────────────────────────────────────────
+  lighthouse:
+    name: Lighthouse Score
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Start preview server
+        run: npm run preview &
+        env:
+          # Vite preview defaults to port 4173.
+          PORT: "4173"
+
+      - name: Wait for preview server
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:4173/ > /dev/null 2>&1; then
+              echo "Preview server ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Lighthouse CI
+        id: lhci
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: http://localhost:4173/
+          uploadArtifacts: false
+          temporaryPublicStorage: false
+          configPath: .github/lighthouserc.json
+        continue-on-error: true
+
+      - name: Extract Lighthouse scores
+        run: |
+          mkdir -p ../benchmarks
+          # Parse the Lighthouse JSON output from the lhci action artifact.
+          LH_RESULTS="${{ steps.lhci.outputs.resultsPath }}"
+          if [ -z "$LH_RESULTS" ] || [ ! -f "$LH_RESULTS" ]; then
+            echo '{}' > ../benchmarks/lighthouse.json
+            echo "No Lighthouse results found — using empty object"
+            exit 0
+          fi
+          node -e "
+            const fs = require('fs');
+            const lhci = JSON.parse(fs.readFileSync('${LH_RESULTS}', 'utf8'));
+            const report = lhci[0]?.summary ?? {};
+            const scores = {
+              performance:    Math.round((report['categories/performance']?.score ?? 0) * 100),
+              accessibility:  Math.round((report['categories/accessibility']?.score ?? 0) * 100),
+              best_practices: Math.round((report['categories/best-practices']?.score ?? 0) * 100),
+              seo:            Math.round((report['categories/seo']?.score ?? 0) * 100),
+            };
+            fs.writeFileSync('../benchmarks/lighthouse.json', JSON.stringify(scores, null, 2));
+            console.log('Lighthouse scores:', JSON.stringify(scores));
+          "
+        working-directory: frontend
+
+      - name: Upload Lighthouse results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-results
+          path: benchmarks/lighthouse.json
+          retention-days: 7
+
+  # ── Job 4: Comparison and PR comment ───────────────────────────────────────
+  performance-gate:
+    name: Performance Comparison Gate
+    runs-on: ubuntu-latest
+    needs: [instruction-counts, http-benchmarks, lighthouse]
+    # Always run so the PR comment is posted even when upstream jobs fail.
+    if: always()
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Download instruction-count results
+        uses: actions/download-artifact@v4
+        with:
+          name: instruction-count-results
+          path: benchmarks/
+        continue-on-error: true
+
+      - name: Download HTTP results
+        uses: actions/download-artifact@v4
+        with:
+          name: http-benchmark-results
+          path: benchmarks/http/
+        continue-on-error: true
+
+      - name: Download Lighthouse results
+        uses: actions/download-artifact@v4
+        with:
+          name: lighthouse-results
+          path: benchmarks/lh/
+        continue-on-error: true
+
+      - name: Merge all results into single file
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+
+          // Start with instruction counts.
+          let merged = { benchmarks: [], http_response_times: {}, lighthouse: {} };
+          if (fs.existsSync('benchmarks/results.json')) {
+            merged = { ...merged, ...JSON.parse(fs.readFileSync('benchmarks/results.json', 'utf8')) };
+          }
+
+          // Merge HTTP results.
+          if (fs.existsSync('benchmarks/http/results.json')) {
+            const http = JSON.parse(fs.readFileSync('benchmarks/http/results.json', 'utf8'));
+            merged.http_response_times = { ...merged.http_response_times, ...(http.http_response_times ?? {}) };
+          }
+
+          // Merge Lighthouse results.
+          if (fs.existsSync('benchmarks/lh/lighthouse.json')) {
+            merged.lighthouse = JSON.parse(fs.readFileSync('benchmarks/lh/lighthouse.json', 'utf8'));
+          }
+
+          fs.mkdirSync('benchmarks', { recursive: true });
+          fs.writeFileSync('benchmarks/merged.json', JSON.stringify(merged, null, 2));
+          console.log('Merged results written to benchmarks/merged.json');
+          EOF
+
+      - name: Run performance comparison
+        id: perf-check
+        run: |
+          node scripts/check_perf.js \
+            --results  benchmarks/merged.json \
+            --baseline benchmarks/baseline.json \
+            --output   benchmarks/report.md
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        # Always continue so the comment step runs regardless of gate result.
+        continue-on-error: true
+
+      - name: Post PR comment with performance delta table
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: benchmarks/report.md
+          comment-tag: perf-gate
+          edit-mode: replace
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: |
+            benchmarks/merged.json
+            benchmarks/report.md
+          retention-days: 30
+
+      - name: Fail if regressions detected
+        # Use the exit code captured from check_perf.js.
+        # check_perf.js exits 1 on regression; we re-fail here so the workflow
+        # status is red even though we used continue-on-error above.
+        run: |
+          node scripts/check_perf.js \
+            --results  benchmarks/merged.json \
+            --baseline benchmarks/baseline.json

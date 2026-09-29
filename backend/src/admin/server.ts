@@ -20,6 +20,13 @@ import * as promClient from "prom-client";
 import { pool } from "../db.js";
 import { runStreamCleanup } from "../jobs/streamCleanup.js";
 import { networkConfig } from "../config/network.js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { replayDlqItem } = require("../webhookWorker.js") as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { pool } = require("../db.js") as any;
 
 // ---------------------------------------------------------------------------
 // Prometheus metrics

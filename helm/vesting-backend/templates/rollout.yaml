@@ -1,0 +1,95 @@
+{{- if .Values.canary.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "vesting-backend.fullname" . }}
+  labels:
+    {{- include "vesting-backend.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "vesting-backend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ .Values.externalSecret.remoteSecrets | toYaml | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "vesting-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "vesting-backend.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.appPort }}
+          env:
+            - name: PORT
+              value: {{ .Values.appPort | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_VERSION
+              value: {{ .Chart.AppVersion | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "vesting-backend.fullname" . }}
+            {{- if .Values.externalSecret.enabled }}
+            - secretRef:
+                name: {{ include "vesting-backend.fullname" . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  strategy:
+    canary:
+      canaryService: {{ include "vesting-backend.fullname" . }}-canary
+      stableService: {{ include "vesting-backend.fullname" . }}
+      trafficRouting:
+        nginx:
+          stableIngress: {{ include "vesting-backend.fullname" . }}
+      abortScaleDownDelaySeconds: 30
+      steps:
+        - setWeight: {{ .Values.canary.steps.initialWeight }}
+        - pause: { duration: {{ .Values.canary.steps.initialPause }} }
+        - analysis:
+            templates:
+              - templateName: {{ include "vesting-backend.fullname" . }}-error-rate
+        - setWeight: {{ .Values.canary.steps.secondWeight }}
+        - pause: { duration: {{ .Values.canary.steps.secondPause }} }
+        - analysis:
+            templates:
+              - templateName: {{ include "vesting-backend.fullname" . }}-error-rate
+        - setWeight: 100
+{{- end }}

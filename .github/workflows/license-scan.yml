@@ -1,0 +1,336 @@
+name: License Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Rust – cargo-license
+  # ──────────────────────────────────────────────────────────────
+  rust-licenses:
+    name: Rust license scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-license-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-license-
+
+      - name: Install cargo-license
+        run: cargo install cargo-license --locked
+
+      - name: Generate Rust license report
+        run: cargo license --json > rust-licenses.json
+
+      - name: Check Rust licenses against policy
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          # Load the generated license report
+          with open("rust-licenses.json") as f:
+              packages = json.load(f)
+
+          # Load the policy
+          with open(".license-policy.json") as f:
+              policy = json.load(f)
+
+          allowed = set(policy["allowed"])
+          disallowed = set(policy["disallowed"])
+          exceptions = {e["package"]: e for e in policy.get("explicit_exceptions", [])}
+
+          failures = []
+          warnings = []
+
+          for pkg in packages:
+              name = pkg.get("name", "unknown")
+              version = pkg.get("version", "unknown")
+              license_str = pkg.get("license", "") or ""
+
+              # Skip packages with no license field (typically workspace roots)
+              if not license_str.strip():
+                  warnings.append(f"  WARN  {name}@{version}: no license field")
+                  continue
+
+              # Normalize SPDX expressions – split on " OR " and " AND "
+              # For OR: package passes if ANY option is allowed
+              # For AND: ALL parts must be allowed
+              def is_allowed(spdx_expr):
+                  """Return True if the SPDX expression is policy-compliant."""
+                  # Handle parentheses
+                  expr = spdx_expr.strip("() ")
+                  # OR: pass if any component is allowed
+                  if " OR " in expr:
+                      return any(is_allowed(part) for part in expr.split(" OR "))
+                  # AND: pass only if all components are allowed
+                  if " AND " in expr:
+                      return all(is_allowed(part) for part in expr.split(" AND "))
+                  token = expr.strip("() ")
+                  return token in allowed
+
+              def is_disallowed(spdx_expr):
+                  """Return True if the SPDX expression contains any disallowed license."""
+                  expr = spdx_expr.strip("() ")
+                  if " OR " in expr:
+                      return all(is_disallowed(part) for part in expr.split(" OR "))
+                  if " AND " in expr:
+                      return any(is_disallowed(part) for part in expr.split(" AND "))
+                  token = expr.strip("() ")
+                  return token in disallowed
+
+              if name in exceptions:
+                  approved_license = exceptions[name]["license"]
+                  print(f"  SKIP  {name}@{version}: exception approved ({license_str!r})")
+                  continue
+
+              if is_disallowed(license_str):
+                  failures.append(
+                      f"  FAIL  {name}@{version}: disallowed license {license_str!r}"
+                  )
+              elif not is_allowed(license_str):
+                  failures.append(
+                      f"  FAIL  {name}@{version}: unknown/unreviewed license {license_str!r} — add to .license-policy.json"
+                  )
+              else:
+                  print(f"  OK    {name}@{version}: {license_str}")
+
+          for w in warnings:
+              print(w)
+
+          if failures:
+              print("\nLicense policy violations:")
+              for f in failures:
+                  print(f)
+              sys.exit(1)
+          else:
+              print(f"\nAll {len(packages)} Rust packages pass the license policy.")
+          EOF
+
+      - name: Upload Rust license report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-licenses
+          path: rust-licenses.json
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────
+  # Node.js (root package.json – Storybook/UI tooling)
+  # ──────────────────────────────────────────────────────────────
+  node-licenses-root:
+    name: Node.js license scan (root)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install license-checker
+        run: npm install -g license-checker@25.0.1
+
+      - name: Generate root license report
+        run: license-checker --json --out root-node-licenses.json
+
+      - name: Check root Node.js licenses against policy
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+
+          const report = JSON.parse(fs.readFileSync('root-node-licenses.json', 'utf8'));
+          const policy = JSON.parse(fs.readFileSync('.license-policy.json', 'utf8'));
+
+          const allowed = new Set(policy.allowed);
+          const disallowed = new Set(policy.disallowed);
+          const exceptions = Object.fromEntries(
+            policy.explicit_exceptions.map(e => [e.package.split('@')[0], e])
+          );
+
+          function isAllowed(spdxExpr) {
+            const expr = spdxExpr.trim().replace(/^\(|\)$/g, '');
+            if (expr.includes(' OR ')) {
+              return expr.split(' OR ').some(p => isAllowed(p));
+            }
+            if (expr.includes(' AND ')) {
+              return expr.split(' AND ').every(p => isAllowed(p));
+            }
+            return allowed.has(expr.trim());
+          }
+
+          function isDisallowed(spdxExpr) {
+            const expr = spdxExpr.trim().replace(/^\(|\)$/g, '');
+            if (expr.includes(' OR ')) {
+              return expr.split(' OR ').every(p => isDisallowed(p));
+            }
+            if (expr.includes(' AND ')) {
+              return expr.split(' AND ').some(p => isDisallowed(p));
+            }
+            return disallowed.has(expr.trim());
+          }
+
+          const failures = [];
+          for (const [pkgId, info] of Object.entries(report)) {
+            const pkgName = pkgId.split('@').slice(0, -1).join('@');
+            const licenses = (info.licenses || '').replace(/\*/g, '');
+
+            if (!licenses) {
+              console.log(`  WARN  ${pkgId}: no license field`);
+              continue;
+            }
+
+            const baseName = pkgName.replace(/^@[^/]+\//, '').split('/')[0];
+            if (exceptions[pkgName] || exceptions[baseName]) {
+              console.log(`  SKIP  ${pkgId}: explicit exception`);
+              continue;
+            }
+
+            if (isDisallowed(licenses)) {
+              failures.push(`  FAIL  ${pkgId}: disallowed license "${licenses}"`);
+            } else if (!isAllowed(licenses)) {
+              failures.push(`  FAIL  ${pkgId}: unknown license "${licenses}" — add to .license-policy.json if approved`);
+            } else {
+              console.log(`  OK    ${pkgId}: ${licenses}`);
+            }
+          }
+
+          if (failures.length > 0) {
+            console.error('\nLicense policy violations:');
+            failures.forEach(f => console.error(f));
+            process.exit(1);
+          } else {
+            console.log(`\nAll ${Object.keys(report).length} root Node.js packages pass the license policy.`);
+          }
+          EOF
+
+      - name: Upload root Node.js license report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-licenses-root
+          path: root-node-licenses.json
+          retention-days: 30
+
+  # ──────────────────────────────────────────────────────────────
+  # Node.js (frontend/package.json)
+  # ──────────────────────────────────────────────────────────────
+  node-licenses-frontend:
+    name: Node.js license scan (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install license-checker
+        run: npm install -g license-checker@25.0.1
+
+      - name: Generate frontend license report
+        run: license-checker --json --out frontend-node-licenses.json
+        working-directory: frontend
+
+      - name: Check frontend Node.js licenses against policy
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+
+          const report = JSON.parse(fs.readFileSync('frontend/frontend-node-licenses.json', 'utf8'));
+          const policy = JSON.parse(fs.readFileSync('.license-policy.json', 'utf8'));
+
+          const allowed = new Set(policy.allowed);
+          const disallowed = new Set(policy.disallowed);
+          const exceptions = Object.fromEntries(
+            policy.explicit_exceptions.map(e => [e.package.split('@')[0], e])
+          );
+
+          function isAllowed(spdxExpr) {
+            const expr = spdxExpr.trim().replace(/^\(|\)$/g, '');
+            if (expr.includes(' OR ')) {
+              return expr.split(' OR ').some(p => isAllowed(p));
+            }
+            if (expr.includes(' AND ')) {
+              return expr.split(' AND ').every(p => isAllowed(p));
+            }
+            return allowed.has(expr.trim());
+          }
+
+          function isDisallowed(spdxExpr) {
+            const expr = spdxExpr.trim().replace(/^\(|\)$/g, '');
+            if (expr.includes(' OR ')) {
+              return expr.split(' OR ').every(p => isDisallowed(p));
+            }
+            if (expr.includes(' AND ')) {
+              return expr.split(' AND ').some(p => isDisallowed(p));
+            }
+            return disallowed.has(expr.trim());
+          }
+
+          const failures = [];
+          for (const [pkgId, info] of Object.entries(report)) {
+            const pkgName = pkgId.split('@').slice(0, -1).join('@');
+            const licenses = (info.licenses || '').replace(/\*/g, '');
+
+            if (!licenses) {
+              console.log(`  WARN  ${pkgId}: no license field`);
+              continue;
+            }
+
+            const baseName = pkgName.replace(/^@[^/]+\//, '').split('/')[0];
+            if (exceptions[pkgName] || exceptions[baseName]) {
+              console.log(`  SKIP  ${pkgId}: explicit exception`);
+              continue;
+            }
+
+            if (isDisallowed(licenses)) {
+              failures.push(`  FAIL  ${pkgId}: disallowed license "${licenses}"`);
+            } else if (!isAllowed(licenses)) {
+              failures.push(`  FAIL  ${pkgId}: unknown license "${licenses}" — add to .license-policy.json if approved`);
+            } else {
+              console.log(`  OK    ${pkgId}: ${licenses}`);
+            }
+          }
+
+          if (failures.length > 0) {
+            console.error('\nLicense policy violations:');
+            failures.forEach(f => console.error(f));
+            process.exit(1);
+          } else {
+            console.log(`\nAll ${Object.keys(report).length} frontend Node.js packages pass the license policy.`);
+          }
+          EOF
+
+      - name: Upload frontend Node.js license report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-licenses-frontend
+          path: frontend/frontend-node-licenses.json
+          retention-days: 30

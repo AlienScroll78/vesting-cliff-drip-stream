@@ -1,4 +1,19 @@
-"use strict";
+/**
+ * db.js — PostgreSQL connection pool with structured query logging.
+ *
+ * Every query is logged at debug level with the following fields so that
+ * database activity can be correlated to the originating HTTP request:
+ *   request_id     — propagated automatically via AsyncLocalStorage
+ *   trace_id       — propagated automatically via AsyncLocalStorage
+ *   correlation_id — propagated automatically via AsyncLocalStorage
+ *   db.query       — normalised SQL text (parameters replaced by $N placeholders)
+ *   db.duration_ms — round-trip time in milliseconds
+ *
+ * Usage (drop-in replacement for the bare Pool):
+ *   import { pool, query } from './db.js';
+ *   // Use pool directly for transactions, or use the helper:
+ *   const result = await query('SELECT * FROM streams WHERE id = $1', [id]);
+ */
 
 /**
  * Shared PostgreSQL connection pool (CommonJS entry point).
@@ -15,7 +30,7 @@
 const { Pool } = require("pg");
 
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required for database access");
+  throw new Error('DATABASE_URL is required for database access');
 }
 
 const pool = new Pool({
@@ -36,4 +51,21 @@ pool.on("error", (err) => {
   console.error("[db] Idle client error:", err.message);
 });
 
-module.exports = { pool };
+    return result;
+  } catch (err) {
+    const durationMs = Number(process.hrtime.bigint() - startNs) / 1e6;
+
+    logger.error(
+      {
+        event:            'db_query_error',
+        'db.system':      'postgresql',
+        'db.query':       text,
+        'db.duration_ms': Math.round(durationMs * 100) / 100,
+        err,
+      },
+      'db query failed',
+    );
+
+    throw err;
+  }
+}

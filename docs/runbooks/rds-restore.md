@@ -6,7 +6,11 @@ This runbook covers restoring the PostgreSQL RDS instance from an automated or m
 
 ## Automated Backups
 
-RDS automated backups are enabled with **7-day retention**. Automated backups occur daily during the configured maintenance window and support point-in-time recovery (PITR) within the retention period.
+RDS automated backups are enabled with **35-day retention**. Amazon RDS
+continuously archives PostgreSQL write-ahead logs (WAL) alongside automated
+backups, enabling point-in-time recovery (PITR) to any restorable time in that
+window. Storage, snapshots, backups, and WAL are encrypted with the
+environment PostgreSQL KMS key; snapshot tags are copied for cost allocation.
 
 To verify automated backups are enabled:
 ```bash
@@ -31,6 +35,23 @@ aws rds describe-db-snapshots \
 ```
 
 ## Restore Procedure
+
+### Point-in-time restore (preferred for data corruption)
+
+Choose the latest safe UTC timestamp inside the 35-day recovery window and
+restore to a new instance. RDS replays archived WAL up to this time.
+
+```bash
+aws rds restore-db-instance-to-point-in-time \
+  --source-db-instance-identifier "$RDS_INSTANCE_ID" \
+  --target-db-instance-identifier vesting-restored \
+  --restore-time '2026-01-01T01:55:00Z' \
+  --db-instance-class db.t3.micro
+aws rds wait db-instance-available --db-instance-identifier vesting-restored
+```
+
+Then complete the data-integrity and promotion steps below. Do not restore over
+the source instance: keeping it intact preserves additional recovery options.
 
 ### 1. Identify the snapshot
 
@@ -93,3 +114,8 @@ If a **backup failure** Slack alert fires:
 2. Check the `Create snapshot` step for AWS API errors.
 3. Verify `RDS_INSTANCE_ID` and `AWS_BACKUP_ROLE_ARN` secrets are set correctly.
 4. Re-run the workflow once the issue is resolved.
+
+RDS backup and failure events also publish to the Terraform-managed
+`<environment>-vesting-rds-backup-failure` SNS topic. Confirm subscription
+emails and investigate its event message, RDS events, KMS key access, backup
+retention, and free storage before retrying.

@@ -1,0 +1,62 @@
+{{- if .Values.eventWorker.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vesting-backend.fullname" . }}-event-worker
+  labels:
+    {{- include "vesting-backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: event-worker
+spec:
+  replicas: {{ .Values.eventWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vesting-backend.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: event-worker
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ .Values.externalSecret.remoteSecrets | toYaml | sha256sum }}
+        {{- with .Values.eventWorker.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "vesting-backend.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: event-worker
+    spec:
+      serviceAccountName: {{ include "vesting-backend.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: event-worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.eventWorker.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: SERVICE_NAME
+              value: {{ include "vesting-backend.fullname" . }}-event-worker
+          envFrom:
+            - configMapRef:
+                name: {{ include "vesting-backend.fullname" . }}
+            {{- if .Values.externalSecret.enabled }}
+            - secretRef:
+                name: {{ include "vesting-backend.fullname" . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.eventWorker.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
