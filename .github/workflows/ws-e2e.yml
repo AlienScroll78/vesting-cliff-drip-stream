@@ -1,0 +1,47 @@
+name: WebSocket E2E Tests
+
+# Runs on every pull request and every push to main.
+# No external services (Redis, Postgres, Stellar) are required — events are
+# injected directly via publishEvent() and the Stellar SDK is stubbed.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  ws-e2e:
+    name: WS E2E — real-time notification delivery
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run WebSocket E2E tests
+        run: npm run test:ws-e2e
+        env:
+          STELLAR_NETWORK: testnet
+          # No REDIS_URL / DATABASE_URL required — tests use in-process stubs.
+          CI: "true"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ws-e2e-results
+          path: backend/test-results/
+          retention-days: 7

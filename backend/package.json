@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
+    "test:ws-e2e": "vitest run --config vitest.ws-e2e.config.ts",
     "migrate": "node-pg-migrate up --migration-file-language ts",
     "migrate:down": "node-pg-migrate down --migration-file-language ts",
     "migrate:down:all": "node-pg-migrate down --count 999 --migration-file-language ts"
