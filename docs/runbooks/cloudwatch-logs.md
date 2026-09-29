@@ -8,6 +8,30 @@
 | `/ecs/vesting-worker` | 30 days |
 | `/ecs/vesting-migrate` | 30 days |
 
+## Kubernetes Fluent Bit Sidecars
+
+The Helm staging values send JSON logs to `/vesting/staging/backend-api` and
+`/vesting/staging/event-worker`. The CloudWatch Logs output creates the log
+groups when absent. The workload's AWS identity must allow
+`logs:CreateLogGroup`, `logs:CreateLogStream`, and `logs:PutLogEvents` for
+`arn:aws:logs:<region>:<account-id>:log-group:/vesting/staging/*`.
+
+Deploy or update staging with the existing staging override:
+
+```bash
+helm upgrade --install vesting-backend ./helm/vesting-backend \
+  --namespace vesting-staging --create-namespace \
+  -f helm/vesting-backend/values-staging.yaml
+```
+
+Confirm the sidecar is ready and the streams are receiving events:
+
+```bash
+kubectl get pods -n vesting-staging
+aws logs describe-log-streams --log-group-name /vesting/staging/backend-api
+aws logs describe-log-streams --log-group-name /vesting/staging/event-worker
+```
+
 ## Running Log Insights Queries
 
 1. Open [CloudWatch Log Insights](https://console.aws.amazon.com/cloudwatch/home#logsV2:logs-insights)

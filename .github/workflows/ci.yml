@@ -40,6 +40,18 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Setup Node for JSON log lint
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend logger dependencies
+        run: npm install --prefix backend --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+
+      - name: Validate structured log JSON
+        working-directory: backend
+        run: node scripts/validate-structured-logs.mjs
+
   # ── contract-test ───────────────────────────────────────────────────────────
   # Required status check: "contract-test"
   # Runs the full Soroban test suite with testutils enabled.
