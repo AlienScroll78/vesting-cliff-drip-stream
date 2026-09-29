@@ -6,7 +6,8 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 
 | Runbook | When to use |
 |---------|-------------|
-| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary |
+| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary (planned release) |
+| [Emergency Contract Upgrade](./emergency-contract-upgrade.md) | Accelerated upgrade path during an active security incident or critical regression |
 
 ## Infrastructure
 
