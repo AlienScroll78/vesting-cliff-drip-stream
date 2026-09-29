@@ -38,7 +38,7 @@ fn make_stream(
     let (token, _) = create_token(&env, &sponsor);
     mint_to(&env, &token, &sponsor, rate * total as i128);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &rate, &cliff, &total)
+        .create_vesting_stream(&sponsor, &recipient, &token, &rate, &cliff, &total, &None)
         .unwrap();
     (env, cid, client, sponsor, recipient, token)
 }
@@ -58,7 +58,7 @@ fn m01_negative_rate_rejected() {
     let (token, _) = create_token(&env, &sponsor);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token, &-1, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &-1, &50, &200, &None)
         .unwrap_err();
     assert_eq!(err, VestingError::InvalidRate.into());
 }
@@ -79,14 +79,14 @@ fn m02_total_equals_cliff_duration_rejected() {
 
     // total == cliff: must fail
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &100, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &100, &100, &None)
         .unwrap_err();
     assert_eq!(err, VestingError::InvalidDuration.into());
 
     // total == cliff + 1: must succeed
     mint_to(&env, &token, &sponsor, 10);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &1)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &1, &None)
         .unwrap();
 }
 
@@ -105,12 +105,12 @@ fn m03_cancel_exactly_at_cliff_pays_earned_tokens() {
     // rate=10, cliff=50, total=200 → deposit=2000; cliff at ledger 150
     mint_to(&env, &token, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
 
     // Advance exactly to cliff_ledger (100 + 50 = 150)
     advance_ledger(&env, 50);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // earned = 50 ledgers × 10 = 500; refund = 150 ledgers × 10 = 1500
     assert_eq!(token_client.balance(&recipient), 500);
@@ -131,12 +131,12 @@ fn m04_cancel_after_end_ledger_caps_at_end() {
     // rate=10, cliff=50, total=100 → deposit=1000; end at ledger 200
     mint_to(&env, &token, &sponsor, 1_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &100, &None)
         .unwrap();
 
     // Advance well past end_ledger
     advance_ledger(&env, 200);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // All tokens belong to recipient; nothing left for sponsor.
     assert_eq!(token_client.balance(&recipient), 1_000);
@@ -158,11 +158,11 @@ fn m05_cancel_at_start_with_cliff_zero_no_recipient_transfer() {
     // cliff_duration=0 → cliff_ledger == start_ledger; cancel immediately
     mint_to(&env, &token, &sponsor, 100);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &10)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &10, &None)
         .unwrap();
 
     // No ledger advance — current == start == cliff; earned = 0
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // Recipient earned nothing; full deposit back to sponsor.
     assert_eq!(token_client.balance(&recipient), 0);
@@ -184,7 +184,7 @@ fn m06_claim_at_exact_cliff_ledger_succeeds() {
     advance_ledger(&env, 10);
     assert_eq!(env.ledger().sequence(), 110); // sanity-check
 
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, 50); // 10 ledgers × 5
     assert_eq!(token_client.balance(&recipient), 50);
 }
@@ -200,10 +200,10 @@ fn m07_zero_claimable_amount_returns_nothing_to_claim() {
 
     // Advance to cliff, claim everything accrued so far.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 
     // Do NOT advance. Claimable == 0 → must return NothingToClaim.
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(err, VestingError::NothingToClaim.into());
 }
 
@@ -219,17 +219,17 @@ fn m08_schedule_removed_only_at_end_ledger() {
 
     // Claim at cliff (105) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim 10 ledgers before end (ledger 110) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim exactly at end_ledger — schedule must be removed
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
     assert!(client.get_schedule(&recipient).is_none());
 }
 
@@ -312,17 +312,17 @@ fn m14_cancel_after_partial_claim_uses_last_claimed_ledger() {
     // rate=10, cliff=50, total=200 → deposit=2000
     mint_to(&env, &token, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
 
     // Claim at cliff (ledger 150) → 500 tokens to recipient
     advance_ledger(&env, 50);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, 500);
 
     // Cancel 20 ledgers later (ledger 170) → earned since last claim: 20×10=200
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient);
 
     // Recipient: 500 (claim) + 200 (cancel) = 700
     assert_eq!(token_client.balance(&recipient), 700);
@@ -344,9 +344,10 @@ fn m15_deposit_equals_rate_times_total_duration() {
 
     // rate=7, total=300 → deposit=2100
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &7, &50, &300)
+        .create_vesting_stream(&sponsor, &recipient, &token, &7, &50, &300, &None)
         .unwrap();
 
     assert_eq!(token_client.balance(&sponsor), 7_900); // 10000 - 2100
     assert_eq!(token_client.balance(&cid), 2_100);
 }
+

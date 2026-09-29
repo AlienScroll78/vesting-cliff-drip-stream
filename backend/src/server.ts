@@ -61,14 +61,3 @@ httpServer.listen(PORT, () => {
   console.log(`[server] Listening on :${PORT}`);
   console.log(`[server] WebSocket: ws://0.0.0.0:${PORT}/ws/claimable`);
 });
-
-// Start background jobs and admin server
-scheduleCleanupJob();
-startAdminServer();
-
-// Issue #27 — Start event indexer (only if DATABASE_URL is set)
-if (process.env.DATABASE_URL) {
-  startIndexer();
-} else {
-  console.warn("[indexer] DATABASE_URL not set — indexer disabled");
-}

@@ -1,0 +1,54 @@
+# CODEOWNERS
+#
+# Each line is a file pattern followed by one or more owners.
+# Owners are matched in order; the last matching rule takes precedence.
+# Teams must be referenced as @org/team-slug.
+# Individuals as @username.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ── Default fallback (catches anything not matched below) ─────────────────────
+*                               @your-org/maintainers
+
+# ── Smart contract (Rust / Soroban) ──────────────────────────────────────────
+/src/                           @your-org/smart-contract-reviewers
+/Cargo.toml                     @your-org/smart-contract-reviewers
+/Cargo.lock                     @your-org/smart-contract-reviewers
+/.cargo/                        @your-org/smart-contract-reviewers
+/tests/                         @your-org/smart-contract-reviewers
+
+# ── Backend (Node.js / TypeScript) ────────────────────────────────────────────
+/backend/                       @your-org/backend-reviewers
+
+# ── Frontend (React / Vite) ───────────────────────────────────────────────────
+/frontend/                      @your-org/frontend-reviewers
+/ui/                            @your-org/frontend-reviewers
+/design-system/                 @your-org/frontend-reviewers
+/public/                        @your-org/frontend-reviewers
+
+# ── DevOps / Infrastructure ───────────────────────────────────────────────────
+/terraform/                     @your-org/devops-reviewers
+/k8s/                           @your-org/devops-reviewers
+/helm/                          @your-org/devops-reviewers
+/infra/                         @your-org/devops-reviewers
+/Dockerfile                     @your-org/devops-reviewers
+/docker-compose*.yml            @your-org/devops-reviewers
+
+# ── CI / GitHub Actions ───────────────────────────────────────────────────────
+/.github/                       @your-org/devops-reviewers
+/.github/workflows/             @your-org/devops-reviewers
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+/scripts/                       @your-org/devops-reviewers
+
+# ── Security-sensitive files (require maintainer sign-off) ───────────────────
+/SECURITY.md                    @your-org/maintainers
+/audit.toml                     @your-org/maintainers
+/.github/CODEOWNERS             @your-org/maintainers
+/scripts/apply_branch_protection.sh  @your-org/maintainers
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+/docs/                          @your-org/maintainers
+/README.md                      @your-org/maintainers
+/CHANGELOG.md                   @your-org/maintainers
+/CONTRIBUTING.md                @your-org/maintainers

@@ -1,0 +1,160 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TerraformStateReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vesting-tf-state",
+        "arn:aws:s3:::vesting-tf-state/*"
+      ]
+    },
+    {
+      "Sid": "TerraformStateLockRead",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/vesting-tf-locks"
+    },
+    {
+      "Sid": "EC2ReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:Describe*",
+        "ec2:Get*",
+        "ec2:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:Describe*",
+        "ecs:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RDSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "rds:Describe*",
+        "rds:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ElasticLoadBalancingReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:Describe*",
+        "cloudwatch:Get*",
+        "cloudwatch:List*",
+        "logs:Describe*",
+        "logs:List*",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManagerDescribeOnly",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecrets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManagerGetValueDenyAll",
+      "Effect": "Deny",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyAllWriteActions",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:Create*",
+        "ec2:Delete*",
+        "ec2:Modify*",
+        "ec2:Run*",
+        "ec2:Start*",
+        "ec2:Stop*",
+        "ec2:Terminate*",
+        "ec2:Attach*",
+        "ec2:Detach*",
+        "ec2:Associate*",
+        "ec2:Disassociate*",
+        "ecs:Create*",
+        "ecs:Delete*",
+        "ecs:DeregisterContainerInstance",
+        "ecs:DeregisterTaskDefinition",
+        "ecs:RegisterTaskDefinition",
+        "ecs:RunTask",
+        "ecs:StartTask",
+        "ecs:StopTask",
+        "ecs:SubmitContainerStateChange",
+        "ecs:SubmitTaskStateChange",
+        "ecs:UpdateContainerAgent",
+        "ecs:UpdateContainerInstancesState",
+        "ecs:UpdateService",
+        "rds:Create*",
+        "rds:Delete*",
+        "rds:Modify*",
+        "rds:Restore*",
+        "iam:Create*",
+        "iam:Delete*",
+        "iam:Attach*",
+        "iam:Detach*",
+        "iam:Put*",
+        "iam:Update*",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "elasticloadbalancing:Create*",
+        "elasticloadbalancing:Delete*",
+        "elasticloadbalancing:Modify*",
+        "elasticloadbalancing:Register*",
+        "elasticloadbalancing:Deregister*",
+        "secretsmanager:Create*",
+        "secretsmanager:Delete*",
+        "secretsmanager:Put*",
+        "secretsmanager:Update*",
+        "secretsmanager:RotateSecret",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:UpdateItem",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

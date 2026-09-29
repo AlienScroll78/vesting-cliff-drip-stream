@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# vesting-backend — Staging overrides
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Use a lighter resource profile for staging
+replicaCount: 1
+appPort: 3001
+
+image:
+  tag: "latest"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+ingress:
+  enabled: true
+  host: api.staging.vesting.example.com
+  tls:
+    enabled: false
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+
+externalSecret:
+  enabled: true
+  secretStoreRef:
+    name: aws-secretsmanager-staging
+    kind: ClusterSecretStore
+  remoteSecrets:
+    DATABASE_URL:
+      remoteKey: vesting/staging/app-secrets
+      property: database_url
+    REDIS_URL:
+      remoteKey: vesting/staging/app-secrets
+      property: redis_url
+    ADMIN_API_KEY:
+      remoteKey: vesting/staging/app-secrets
+      property: admin_api_key
+    SPONSOR_SECRET_KEY:
+      remoteKey: vesting/staging/app-secrets
+      property: sponsor_secret_key
+    JWT_SECRET:
+      remoteKey: vesting/staging/app-secrets
+      property: jwt_secret
+    HORIZON_API_KEY:
+      remoteKey: vesting/staging/app-secrets
+      property: horizon_api_key
+
+config:
+  horizonUrl: "https://horizon-testnet.stellar.org"
+  networkPassphrase: "Test SDF Network ; September 2015"
+  sorobanRpcUrl: "https://soroban-testnet.stellar.org"
+  logLevel: "debug"
+  contractId: ""
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+
+eventWorker:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi

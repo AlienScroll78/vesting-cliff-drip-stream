@@ -1,3 +1,4 @@
+{{- if not .Values.canary.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,6 +14,11 @@ spec:
       {{- include "vesting-backend.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/secret: {{ .Values.externalSecret.remoteSecrets | toYaml | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       labels:
         {{- include "vesting-backend.selectorLabels" . | nindent 8 }}
     spec:
@@ -23,7 +29,17 @@ spec:
         fsGroup: 1000
       containers:
         - name: {{ .Chart.Name }}
+          {{- /*
+            Prefer digest-pinned reference when .Values.image.digest is set.
+            This prevents tag-mutability attacks in production deployments.
+            The digest is populated automatically by pin-image-digest.sh after
+            each release via the container-registry GitHub Actions workflow.
+          */}}
+          {{- if .Values.image.digest }}
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          {{- else }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -73,3 +89,4 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+{{- end }}

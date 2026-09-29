@@ -1,6 +1,7 @@
 "use client";
 import { TxType } from "@/types";
 import { useTransactions } from "@/hooks/useTransactions";
+import { TxHistoryEmpty } from "@/components/EmptyStates";
 
 const STELLAR_EXPERT = "https://stellar.expert/explorer/testnet/tx";
 
@@ -62,13 +63,10 @@ export default function TransactionHistoryPage() {
       )}
 
       {loading ? (
-        <p aria-busy="true" style={{ textAlign: "center", padding: "2rem 0", color: "#6b7280" }}>
-          Loading…
-        </p>
+        <TransactionTableSkeleton rows={5} />
       ) : transactions.length === 0 ? (
-        <p style={{ textAlign: "center", padding: "2rem 0", color: "#6b7280" }}>
-          No transactions found.
-        </p>
+        /* #373 — illustrated empty state */
+        <TxHistoryEmpty />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table

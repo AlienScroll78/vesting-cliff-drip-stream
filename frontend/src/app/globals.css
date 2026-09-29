@@ -46,13 +46,40 @@
   font-size: 1.1rem;
   padding: 0.25rem 0.5rem;
   min-width: 2.5rem;
+  gap: 0.3rem;
 }
 
+/* Icon fades in and does a quarter-turn when the key changes (mode switch).
+   The prefers-reduced-motion block at the bottom overrides this to 0.001ms. */
+@keyframes dark-mode-icon-enter {
+  from { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+  to   { opacity: 1; transform: rotate(0deg)  scale(1);   }
+}
+.dark-mode-icon {
+  display: inline-block;
+  animation: dark-mode-icon-enter 200ms ease both;
+}
+
+/* Only show the text label on screens wide enough to afford the space */
+.dark-mode-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+@media (max-width: 360px) {
+  .dark-mode-label { display: none; }
+}
+
+/* ── Theme-switch transitions (200ms) ──
+   Applied to body and common surface elements so the dark/light toggle
+   feels smooth.  All of these are unconditionally overridden to 0.001ms
+   by the prefers-reduced-motion block at the bottom of this file, so
+   users who prefer reduced motion are fully protected. */
 body {
   font-family: system-ui, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   overflow-x: hidden;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 /* ── Buttons ── */
@@ -60,7 +87,8 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 44px; min-width: 44px;
   padding: 0.5rem 1.25rem; border-radius: var(--radius); font-weight: 600;
-  cursor: pointer; border: 2px solid transparent; transition: opacity 0.15s;
+  cursor: pointer; border: 2px solid transparent;
+  transition: opacity 0.15s, background-color 200ms ease, color 200ms ease, border-color 200ms ease;
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -68,6 +96,24 @@ body {
 .btn-outline  { background: transparent; border-color: var(--color-active); color: var(--color-active); }
 .btn-ghost    { background: transparent; color: var(--color-text); }
 .btn-full     { width: 100%; margin-top: 0.75rem; }
+
+/* ── Claim button pulse (claimable > 0) — compositor-only (transform/opacity) ── */
+.btn-pulse { position: relative; }
+.btn-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--color-active);
+  opacity: 0;
+  animation: btn-pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  pointer-events: none;
+}
+@keyframes btn-pulse-ring {
+  0%   { transform: scale(0.92); opacity: 0.55; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
 
 /* ── Wallet ── */
 .wallet-connected { display: flex; align-items: center; gap: 0.75rem; }
@@ -78,6 +124,7 @@ body {
   display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
   border: 1.5px solid currentColor;
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
 }
 .badge-active    { color: var(--color-active);    background: #eff6ff; }
 .badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
@@ -98,6 +145,11 @@ body {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); padding: 1rem;
   display: flex; flex-direction: column; gap: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 100ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+.stream-card:hover {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.15), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Card inner row: recipient+badge on left, amount+button on right */
@@ -204,4 +256,17 @@ body {
 .skeleton {
   background: var(--color-border);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Reduced motion (#374) ──
+   Belt-and-suspenders on top of the JS-side useReducedMotion checks:
+   any transition/animation still reaching the DOM under this preference
+   (e.g. from a component that doesn't check the hook) is neutralized here. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

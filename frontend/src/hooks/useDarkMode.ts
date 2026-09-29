@@ -17,6 +17,7 @@ function getInitialDark(): boolean {
 export function useDarkMode(): [boolean, () => void] {
   const [dark, setDark] = useState(getInitialDark);
 
+  // Apply class and persist preference whenever dark state changes
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     try {
@@ -26,7 +27,40 @@ export function useDarkMode(): [boolean, () => void] {
     }
   }, [dark]);
 
-  const toggle = () => setDark((d) => !d);
+  // Listen for OS-level preference changes.
+  // Only takes effect when the user has NOT explicitly set a preference via
+  // the toggle (i.e. no localStorage entry exists), so manual choices are
+  // always respected.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const handleChange = (e: MediaQueryListEvent) => {
+      try {
+        // If a manual preference exists, honour it — don't override.
+        if (localStorage.getItem(STORAGE_KEY) !== null) return;
+      } catch {
+        // localStorage unavailable — fall through and follow OS
+      }
+      setDark(e.matches);
+    };
+
+    mq.addEventListener("change", handleChange);
+    return () => mq.removeEventListener("change", handleChange);
+  }, []);
+
+  const toggle = () =>
+    setDark((d) => {
+      const next = !d;
+      // Writing here is redundant with the first effect, but makes the intent
+      // explicit: a manual toggle always creates a stored preference so that
+      // the OS-change listener above knows to stand down.
+      try {
+        localStorage.setItem(STORAGE_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
 
   return [dark, toggle];
 }
