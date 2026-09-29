@@ -172,8 +172,8 @@ The chart wires the Node.js health endpoints defined in `backend/src/routes/heal
 
 | Probe | Path | Notes |
 |---|---|---|
-| Liveness | `GET /health` | Always 200 if process is alive |
-| Readiness | `GET /ready` | 503 if DB or RPC is unreachable |
+| Liveness | `GET /health` | 503 if PostgreSQL, Soroban RPC, or Redis is unreachable |
+| Readiness | `GET /ready` | Includes dependency checks and returns 503 if indexer freshness exceeds 60 seconds |
 
 ---
 

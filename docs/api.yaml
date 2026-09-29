@@ -12,16 +12,16 @@ paths:
 
   /health:
     get:
-      summary: Liveness probe
+      summary: Dependency health check
       description: >
-        Returns 200 if the process is alive. Used by container orchestrators
-        (ECS, Kubernetes) as a liveness check.
+        Checks PostgreSQL, Soroban RPC, and Redis with bounded timeouts.
+        Used by container orchestrators as a liveness check.
       operationId: getHealth
       tags:
         - Health
       responses:
         '200':
-          description: Service is alive.
+          description: PostgreSQL, Soroban RPC, and Redis are reachable.
           content:
             application/json:
               schema:
@@ -30,6 +30,37 @@ paths:
                 status: ok
                 version: 1.2.3
                 uptime: 86400
+                checks:
+                  db: ok
+                  rpc: ok
+                  redis: ok
+        '503':
+          description: One or more dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Checks dependencies and requires indexer lag below 60 seconds. This endpoint bypasses authentication and rate limiting.
+      operationId: getReadiness
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Dependencies are healthy and the indexer is current.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: A dependency is unavailable or indexer lag is at least 60 seconds.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
 
   /health/horizon:
     get:
@@ -101,6 +132,67 @@ paths:
                 type: object
 
   # ── Schedule Queries ──────────────────────────────────────────────────────
+
+  /api/streams/{recipient}:
+    get:
+      summary: Get a stream by recipient
+      description: >
+        Returns stream details from PostgreSQL and obtains the current
+        `claimable_now` amount from Soroban RPC. The claimable amount is cached
+        in Redis for 30 seconds. Limited to 60 public read requests per minute
+        per IP address.
+      operationId: getStreamByRecipient
+      tags:
+        - Streams
+      parameters:
+        - in: path
+          name: recipient
+          required: true
+          schema:
+            type: string
+            pattern: '^G[A-Z2-7]{55}$'
+          description: Stellar public key of the stream recipient.
+      responses:
+        '200':
+          description: Stream found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamDetailsResponse'
+        '400':
+          description: Invalid Stellar recipient address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No stream exists for this recipient.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Public read rate limit exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Soroban RPC is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Database query failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/schedules/{recipient}:
     get:
@@ -845,14 +937,14 @@ components:
 
     HealthResponse:
       type: object
-      description: Liveness probe response.
+      description: Health or readiness response with dependency checks.
       required:
         - status
       properties:
         status:
           type: string
-          enum: [ok]
-          description: Always "ok" when the process is alive.
+          enum: [ok, degraded]
+          description: "ok" only when all checks pass.
           example: ok
         version:
           type: string
@@ -862,6 +954,80 @@ components:
           type: integer
           description: Process uptime in seconds.
           example: 86400
+        uptime_seconds:
+          type: integer
+          description: Process uptime in seconds.
+          example: 86400
+        contract_version:
+          type: string
+          description: Deployed contract version when available.
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          description: Status of DB, RPC, Redis, and (for readiness) indexer checks.
+        horizon_circuit:
+          type: string
+          description: Horizon circuit breaker state.
+
+    StreamDetailsResponse:
+      type: object
+      required:
+        - recipient
+        - sponsor
+        - token
+        - rate
+        - cliff_ledger
+        - end_ledger
+        - total_deposited
+        - total_claimed
+        - claimable_now
+        - status
+        - created_at
+      properties:
+        recipient:
+          type: string
+          pattern: '^G[A-Z2-7]{55}$'
+        sponsor:
+          type: string
+          pattern: '^G[A-Z2-7]{55}$'
+        token:
+          type: string
+          pattern: '^C[A-Z2-7]{55}$'
+        rate:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: string
+          description: Amount per ledger; large values are returned as decimal strings to avoid precision loss.
+        cliff_ledger:
+          type: integer
+        end_ledger:
+          type: integer
+        total_deposited:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: string
+          description: Decimal integer token amount.
+        total_claimed:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: string
+          description: Decimal integer token amount.
+        claimable_now:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: string
+          description: Live Soroban claimable amount, cached for 30 seconds.
+        status:
+          type: string
+          enum: [active, pre_cliff, completed, expired, cancelled]
+        created_at:
+          type: string
+          format: date-time
 
     HorizonHealthResponse:
       type: object

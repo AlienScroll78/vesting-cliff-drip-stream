@@ -25,6 +25,7 @@ import { requireAdminAuth } from "./auth.js";
 import { streamsRouter } from "./streams.js";
 import { indexerRouter } from "./indexer.js";
 import { webhooksRouter } from "./webhooks.js";
+import { registry } from "../metrics.js";
 
 export const adminRouter = Router();
 
@@ -35,3 +36,7 @@ adminRouter.use(requireAdminAuth);
 adminRouter.use("/streams", streamsRouter);
 adminRouter.use("/indexer", indexerRouter);
 adminRouter.use("/webhooks", webhooksRouter);
+adminRouter.get("/metrics", async (_req, res) => {
+	res.setHeader("Content-Type", registry.contentType);
+	res.send(await registry.metrics());
+});

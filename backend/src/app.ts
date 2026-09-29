@@ -1,6 +1,10 @@
 import express, { type Request, type Response, NextFunction } from 'express';
-import rateLimit from 'express-rate-limit';
-import { validateAddress } from './validation.js';
+import { RecipientParamsSchema } from './validation.js';
+import { validate } from './middleware/validate.js';
+import { rateLimitMiddleware } from './middleware/tokenBucketRateLimit.js';
+import { adminRouter } from './admin/index.js';
+import { healthHandler, readyHandler } from './routes/health.js';
+import { streamDetailsRouter } from './routes/streamDetails.js';
 import { createScheduleController } from './controllers/schedules.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
@@ -14,17 +18,12 @@ app.set('trust proxy', 1);
 app.use(requestLoggerMiddleware);
 
 app.use(express.json());
-app.use(
-  rateLimit({
-    windowMs: 60_000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (_req, res) => {
-      res.status(429).json({ error: 'Too many requests' });
-    },
-  }),
-);
+
+app.get('/health', healthHandler);
+app.get('/ready', readyHandler);
+app.use(rateLimitMiddleware);
+
+app.use('/api/streams', streamDetailsRouter);
 
 app.get(
   '/api/v1/schedules/:recipient',

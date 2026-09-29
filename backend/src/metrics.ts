@@ -69,6 +69,14 @@ export const indexerPollLagSeconds = new Gauge({
   registers: [registry],
 });
 
+/** Requests rejected by the API token-bucket limiter. */
+export const rateLimitHitsTotal = new Counter({
+  name: 'rate_limit_hit_total',
+  help: 'Total number of requests rejected by rate limiting',
+  labelNames: ['endpoint', 'type'] as const,
+  registers: [registry],
+});
+
 // ---------------------------------------------------------------------------
 // Database metrics
 // ---------------------------------------------------------------------------

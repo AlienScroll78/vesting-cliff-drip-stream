@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update db-migrate db-rollback db-migrate-dry-run
 
 all: build
 
@@ -147,4 +147,16 @@ bench-update:
 		| sed 's/^BENCH //' \
 		| jq -s '{benchmarks: .}' > benchmarks/results.json
 	@echo "Benchmark results captured in benchmarks/results.json"
+
+## Apply pending PostgreSQL migrations (requires DATABASE_URL).
+db-migrate:
+	cd backend && npm run migrate
+
+## Revert the most recently applied PostgreSQL migration.
+db-rollback:
+	cd backend && npm run migrate:down
+
+## Preview pending migrations without applying them.
+db-migrate-dry-run:
+	cd backend && npm run migrate:dry-run
 

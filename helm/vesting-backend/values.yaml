@@ -108,6 +108,11 @@ config:
   requestTimeoutMs: "30000"
   # GraphQL query depth limit
   graphqlMaxDepth: "5"
+  # Redis token-bucket limits for API requests
+  rateLimitReadMax: "60"
+  rateLimitBuildTxMax: "10"
+  rateLimitAdminMax: "5"
+  rateLimitWindowSec: "60"
 
 # ── External Secrets Operator (ExternalSecret CRD → AWS Secrets Manager) ─────
 #
