@@ -12,7 +12,221 @@ servers:
   - url: https://api.vesting.example.com/api
     description: Production
 
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        RS256-signed JWT obtained from POST /api/auth/token.
+        Payload: { sub: address, role: 'admin'|'user', exp, iat, kid }.
+
 paths:
+  # ── Auth (#742) ──────────────────────────────────────────────────────────────
+
+  /auth/challenge:
+    post:
+      operationId: authChallenge
+      summary: Request a sign-in challenge nonce
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                address:
+                  type: string
+                  description: Stellar public key (G...)
+      responses:
+        "200":
+          description: Challenge nonce issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nonce:       { type: string }
+                  expires_in:  { type: integer, description: "Seconds until nonce expires (300)" }
+                  created_at:  { type: integer, description: Unix millisecond timestamp }
+                  message:     { type: string, description: "Exact string to sign: address:nonce:timestamp" }
+        "400":
+          description: Invalid address
+
+  /auth/token:
+    post:
+      operationId: authToken
+      summary: Exchange a signed challenge for a JWT
+      tags: [Auth]
+      description: |
+        Sign the `message` string from `/auth/challenge` with your Stellar wallet's
+        Ed25519 private key, base64-encode the 64-byte signature, then POST here.
+
+        On success you receive:
+          - `access_token`: RS256 JWT, 24-hour TTL
+          - `refresh_token`: opaque 30-day token for token renewal
+          - `role`: `admin` or `user` (admin if address is in `ADMIN_ADDRESSES` env)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address, nonce, timestamp, signature]
+              properties:
+                address:   { type: string }
+                nonce:     { type: string }
+                timestamp: { type: integer }
+                signature: { type: string, description: "Base64-encoded Ed25519 signature" }
+      responses:
+        "200":
+          description: JWT issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:  { type: string }
+                  refresh_token: { type: string }
+                  token_type:    { type: string, example: Bearer }
+                  expires_in:    { type: integer, example: 86400 }
+                  role:          { type: string, enum: [admin, user] }
+        "400": { description: Missing/invalid fields or stale nonce }
+        "401": { description: Signature verification failed }
+
+  /auth/refresh:
+    post:
+      operationId: authRefresh
+      summary: Refresh an access token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type:   { type: string, example: Bearer }
+                  expires_in:   { type: integer, example: 86400 }
+                  role:         { type: string, enum: [admin, user] }
+        "401": { description: Refresh token not found or expired }
+
+  /.well-known/jwks.json:
+    get:
+      operationId: jwks
+      summary: Public keys for RS256 JWT verification
+      tags: [Auth]
+      responses:
+        "200":
+          description: JWKS key set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kty: { type: string, example: RSA }
+                        kid: { type: string }
+                        use: { type: string, example: sig }
+                        alg: { type: string, example: RS256 }
+                        n:   { type: string }
+                        e:   { type: string }
+
+  # ── Admin contract endpoints (#742) ──────────────────────────────────────────
+
+  /admin/set_min_deposit:
+    post:
+      operationId: setMinDeposit
+      summary: Update the contract's minimum deposit threshold
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      description: |
+        Requires JWT with `role=admin`.
+        Returns 401 if unauthenticated, 403 if role is not admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [min_deposit]
+              properties:
+                min_deposit:
+                  type: string
+                  description: New minimum deposit as a decimal integer string (i128)
+                  example: "1000000"
+      responses:
+        "200":
+          description: Contract updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:          { type: boolean }
+                  min_deposit: { type: string }
+                  tx_hash:     { type: string }
+        "400": { description: Invalid min_deposit value }
+        "401": { description: Missing or invalid JWT }
+        "403": { description: JWT role is not admin }
+        "502": { description: Soroban RPC error }
+
+  /admin/pause_stream:
+    post:
+      operationId: pauseStream
+      summary: Pause a vesting stream for a recipient
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      description: |
+        Requires JWT with `role=admin`.
+        Returns 401 if unauthenticated, 403 if role is not admin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient]
+              properties:
+                recipient:
+                  type: string
+                  description: Stellar public key of the stream recipient
+      responses:
+        "200":
+          description: Stream paused
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:        { type: boolean }
+                  recipient: { type: string }
+                  tx_hash:   { type: string }
+        "400": { description: Invalid recipient address }
+        "401": { description: Missing or invalid JWT }
+        "403": { description: JWT role is not admin }
+        "502": { description: Soroban RPC error }
+
   /schedules/{recipient}:
     get:
       operationId: getSchedule
@@ -112,7 +326,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-components:
   schemas:
     VestingSchedule:
       type: object

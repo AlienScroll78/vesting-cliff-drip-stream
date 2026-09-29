@@ -10,7 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "pg": "^8.13.3",
     "prom-client": "^15.1.3",

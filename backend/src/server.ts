@@ -7,6 +7,18 @@ import { scheduleCleanupJob } from "./jobs/streamCleanup.js";
 import { startAdminServer } from "./admin/server.js";
 import { healthHandler, readyHandler } from "./routes/health.js";
 import { sponsorAnalyticsHandler } from "./routes/analytics.js";
+// Issue #742 — JWT auth v2 (RS256 + RBAC)
+import {
+  challengeHandler,
+  tokenHandler,
+  refreshHandler,
+  jwksHandler,
+} from "./routes/authV2.js";
+import { adminContractRouter } from "./routes/adminContract.js";
+import { initKeyStore } from "./auth/keyStore.js";
+
+// Initialise RSA key store on startup
+initKeyStore();
 
 const app = express();
 app.use(express.json());
@@ -23,6 +35,16 @@ app.get("/ready", readyHandler);
 
 // Analytics (#34)
 app.get("/analytics/sponsor/:address", sponsorAnalyticsHandler);
+
+// Issue #742 — Auth endpoints (RS256 JWT + Stellar wallet signature)
+app.post("/api/auth/challenge", challengeHandler);
+app.post("/api/auth/token", tokenHandler);
+app.post("/api/auth/refresh", refreshHandler);
+// JWKS endpoint for public-key discovery
+app.get("/.well-known/jwks.json", jwksHandler);
+
+// Issue #742 — Protected admin contract endpoints (require admin JWT)
+app.use("/api/admin", adminContractRouter);
 
 // Issue #26 — REST API for vesting schedule queries
 app.use("/api", vestingRouter);
