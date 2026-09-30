@@ -257,6 +257,64 @@ export const WebhookHeaderSchema = z.object({
   "x-sponsor-id": StellarAddressSchema,
 });
 
+// ── Ledger number schema ──────────────────────────────────────────────────────
+
+/**
+ * Ledger sequence number: must be a positive integer.
+ * Accepted as a string from query params and coerced to number.
+ */
+export const LedgerNumberSchema = z
+  .string()
+  .pipe(
+    z.coerce
+      .number({ invalid_type_error: "ledger must be a number" })
+      .int("ledger must be an integer")
+      .positive("ledger must be a positive integer"),
+  );
+
+/** Params for endpoints that accept a ledger query filter */
+export const LedgerQuerySchema = z.object({
+  since_ledger: LedgerNumberSchema.optional(),
+  until_ledger: LedgerNumberSchema.optional(),
+}).refine(
+  (data) =>
+    data.since_ledger === undefined ||
+    data.until_ledger === undefined ||
+    data.since_ledger <= data.until_ledger,
+  {
+    message: "since_ledger must be less than or equal to until_ledger",
+    path: ["since_ledger"],
+  },
+);
+
+// ── Stream status param ───────────────────────────────────────────────────────
+
+export const STREAM_STATUS_VALUES = ["active", "pre_cliff", "expired", "cancelled", "drained"] as const;
+
+export const StreamStatusSchema = z.enum(STREAM_STATUS_VALUES, {
+  errorMap: () => ({
+    message: `status must be one of: ${STREAM_STATUS_VALUES.join(", ")}`,
+  }),
+});
+
+// ── Build claim tx body (Issue #752) ─────────────────────────────────────────
+
+export const BuildClaimTxBodySchema = z.object({
+  /** Optional fee budget in stroops. Defaults to BASE_FEE when omitted. */
+  fee_stroops: z
+    .number()
+    .int("fee_stroops must be an integer")
+    .positive("fee_stroops must be positive")
+    .max(100_000_000, "fee_stroops must not exceed 100,000,000")
+    .optional(),
+});
+
+// ── Analytics sponsor query ───────────────────────────────────────────────────
+
+export const AnalyticsSponsorQuerySchema = z.object({
+  sponsor: StellarAddressSchema,
+});
+
 // ── Type exports ──────────────────────────────────────────────────────────────
 
 export type RecipientParams = z.infer<typeof RecipientParamsSchema>;
@@ -268,6 +326,8 @@ export type SchedulesQuery = z.infer<typeof SchedulesQuerySchema>;
 export type CreateStreamBody = z.infer<typeof CreateStreamBodySchema>;
 export type ExportQuery = z.infer<typeof ExportQuerySchema>;
 export type WebhookBody = z.infer<typeof WebhookBodySchema>;
+export type LedgerQuery = z.infer<typeof LedgerQuerySchema>;
+export type BuildClaimTxBody = z.infer<typeof BuildClaimTxBodySchema>;
 
 // ── Legacy helper (kept for backwards compatibility) ──────────────────────────
 
