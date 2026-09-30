@@ -48,20 +48,21 @@ or view call after the upgraded contract is deployed.
 
 ## Dry-run (optional pre-check)
 
-Use the `migrate-dry-run` Makefile target to estimate how many on-chain
-schedules will be touched:
+Use the `migrate-dry-run` Makefile target to list likely legacy schedules from
+indexed lifecycle events. Set `SCHEMA_V2_LEDGER` to the first ledger containing
+the upgraded contract:
 
 ```bash
 make migrate-dry-run \
-  CONTRACT_ID=<contract-id> \
-  SOROBAN_RPC_URL=https://soroban-testnet.stellar.org \
-  NETWORK=testnet
+  SCHEMA_V2_LEDGER=<upgrade-ledger> \
+  DATABASE_URL=<postgres-connection-string>
 ```
 
-The script queries the indexer's `stream_events` table to count distinct
-recipients that were created before the V2 upgrade.  It cannot read raw
-storage (Soroban does not expose an enumeration API), so the count is a
-best-effort estimate based on indexed creation events.
+The script lists recipients whose most recent indexed lifecycle event is a
+creation before the upgrade ledger. It cannot read or enumerate raw contract
+storage, so this is a best-effort candidate list, not a definitive inventory.
+Streams missing from the event index must be checked separately. Reading a
+candidate schedule after upgrade lazily migrates and persists it.
 
 ---
 

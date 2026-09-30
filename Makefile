@@ -6,7 +6,7 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update migrate-dry-run
 
 all: build
 
@@ -97,23 +97,15 @@ mutants:
 		--file src/contract.rs --file src/storage.rs \
 		--output mutants.out
 
-## Dry-run schema migration: prints which stored schedules need migrating.
-## Requires SOROBAN_RPC_URL, CONTRACT_ID, and NETWORK env vars.
+## Dry-run schema migration: lists likely legacy schedules from indexed events.
+## Requires DATABASE_URL and SCHEMA_V2_LEDGER.
 ## Example:
-##   make migrate-dry-run CONTRACT_ID=CXXXXX SOROBAN_RPC_URL=https://soroban-testnet.stellar.org NETWORK=testnet
+##   make migrate-dry-run SCHEMA_V2_LEDGER=123456 DATABASE_URL=postgres://...
 migrate-dry-run:
 	@echo "=== Schema Migration Dry-Run ==="
-	@echo "Checking on-chain schedules for schema_version < $(CURRENT_SCHEMA_VERSION) ..."
-	@if [ -z "$(CONTRACT_ID)" ]; then \
-		echo "ERROR: CONTRACT_ID is required."; \
-		echo "Run: make migrate-dry-run CONTRACT_ID=<id> SOROBAN_RPC_URL=<url> NETWORK=<net>"; \
-		exit 1; \
-	fi
-	@node scripts/migrate_dry_run.js \
-		--contract-id "$(CONTRACT_ID)" \
-		--rpc-url "$(SOROBAN_RPC_URL)" \
-		--network "$(NETWORK)" \
-	2>/dev/null || echo "[migrate-dry-run] script not available; migration applies automatically on next read."
+	@test -n "$(DATABASE_URL)" || (echo "ERROR: DATABASE_URL is required."; exit 1)
+	@test -n "$(SCHEMA_V2_LEDGER)" || (echo "ERROR: SCHEMA_V2_LEDGER is required."; exit 1)
+	@DATABASE_URL="$(DATABASE_URL)" SCHEMA_V2_LEDGER="$(SCHEMA_V2_LEDGER)" node backend/scripts/migrate_dry_run.js
 
 ## Remove build artifacts
 clean:
