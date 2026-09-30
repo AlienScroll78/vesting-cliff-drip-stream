@@ -4,6 +4,7 @@ import { validateAddress } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { docsRouter } from './routes/docs.js';
 
 const app = express();
 
@@ -34,6 +35,9 @@ app.get(
 
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
+
+// Swagger UI — served at /api/docs (no auth required)
+app.use('/api/docs', docsRouter);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
