@@ -84,10 +84,13 @@ pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingS
 
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    let schedule = env
+    let mut schedule = env
         .storage()
         .persistent()
         .get::<DataKey, VestingSchedule>(&key)?;
+    // Apply forward-compatible schema migration before returning.
+    // This is a no-op when the record is already at CURRENT_SCHEMA_VERSION.
+    crate::migration::migrate_schedule(env, recipient, &mut schedule);
     ensure_ttl_for_stream(env, recipient, &schedule);
     Some(schedule)
 }
@@ -95,10 +98,12 @@ pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
 /// Returns the vesting schedule for `recipient` and bumps TTL via [`ensure_ttl_for_stream`].
 pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    let schedule = env
+    let mut schedule = env
         .storage()
         .persistent()
         .get::<DataKey, VestingSchedule>(&key)?;
+    // Apply forward-compatible schema migration.
+    crate::migration::migrate_schedule(env, recipient, &mut schedule);
     ensure_ttl_for_stream(env, recipient, &schedule);
     Some(schedule)
 }

@@ -281,6 +281,7 @@ impl VestingDrips {
             paused_at_ledger: None,
             accumulated_pause_ledgers: 0,
             version: 1,
+            schema_version: crate::types::CURRENT_SCHEMA_VERSION,
         };
         storage::set_schedule(&env, &recipient, &schedule);
 

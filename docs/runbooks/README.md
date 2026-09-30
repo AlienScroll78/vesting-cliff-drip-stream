@@ -7,6 +7,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary |
+| [Schema Migration](./schema-migration.md) | Migrate on-chain `VestingSchedule` records after a struct field addition |
 
 ## Infrastructure
 

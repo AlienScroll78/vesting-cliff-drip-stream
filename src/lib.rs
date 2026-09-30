@@ -24,6 +24,7 @@ extern crate std;
 mod contract;
 mod error;
 mod events;
+mod migration;
 mod storage;
 mod types;
 

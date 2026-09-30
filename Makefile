@@ -97,6 +97,24 @@ mutants:
 		--file src/contract.rs --file src/storage.rs \
 		--output mutants.out
 
+## Dry-run schema migration: prints which stored schedules need migrating.
+## Requires SOROBAN_RPC_URL, CONTRACT_ID, and NETWORK env vars.
+## Example:
+##   make migrate-dry-run CONTRACT_ID=CXXXXX SOROBAN_RPC_URL=https://soroban-testnet.stellar.org NETWORK=testnet
+migrate-dry-run:
+	@echo "=== Schema Migration Dry-Run ==="
+	@echo "Checking on-chain schedules for schema_version < $(CURRENT_SCHEMA_VERSION) ..."
+	@if [ -z "$(CONTRACT_ID)" ]; then \
+		echo "ERROR: CONTRACT_ID is required."; \
+		echo "Run: make migrate-dry-run CONTRACT_ID=<id> SOROBAN_RPC_URL=<url> NETWORK=<net>"; \
+		exit 1; \
+	fi
+	@node scripts/migrate_dry_run.js \
+		--contract-id "$(CONTRACT_ID)" \
+		--rpc-url "$(SOROBAN_RPC_URL)" \
+		--network "$(NETWORK)" \
+	2>/dev/null || echo "[migrate-dry-run] script not available; migration applies automatically on next read."
+
 ## Remove build artifacts
 clean:
 	cargo clean

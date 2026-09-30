@@ -7,9 +7,21 @@ use soroban_sdk::{contracttype, Address, String, Vec};
 
 use crate::error::VestingError;
 
+/// Current schema version written into every new `VestingSchedule`.
+///
+/// Increment this constant when adding new fields. The `migrate_schedule`
+/// function maps each prior version to the current one by filling defaults.
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+
 /// Represents a single fixed-rate vesting schedule stored per recipient.
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
+///
+/// ## Schema versions
+/// | Version | Description                                          |
+/// |---------|------------------------------------------------------|
+/// | 1       | Original schema (no `schema_version` field present). |
+/// | 2       | Added `schema_version` field (this release, #736).   |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(missing_docs)]
@@ -35,6 +47,13 @@ pub struct VestingSchedule {
     /// Monotonically increasing mutation counter (starts at 1).
     /// Field placed last for XDR forward-compatibility.
     pub version: u32,
+    /// On-storage schema version, used by `migrate_schedule` to apply
+    /// forward-compatible defaults when the struct gains new fields.
+    ///
+    /// Default: [`CURRENT_SCHEMA_VERSION`].
+    /// Old records stored without this field will decode as `0`; the
+    /// migration function treats `0` as V1 and upgrades automatically.
+    pub schema_version: u32,
 }
 
 impl VestingSchedule {
