@@ -141,6 +141,9 @@ pub fn create_vesting_stream(
 
 Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
 
+`cliff_duration` must be at least `1`; a zero-length cliff is rejected with
+`InvalidCliffDuration` (code 12) because it provides no lockup guarantee.
+
 ### `claim_vested`
 
 ```rust
@@ -224,7 +227,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 9 | `TransferFailed` | Token transfer failed |
 | 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
-| 12 | `InvalidCliffDuration` | `cliff_duration` is zero |
+| 12 | `InvalidCliffDuration` | `cliff_duration` is zero; a cliff must have positive length |
 | 13 | `AlreadyInitialized` | `initialize` has already been called |
 | 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
 | 15 | `StreamPaused` | Claim attempted on a paused stream |
@@ -239,6 +242,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
 | 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
 | 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 27 | `InvalidToken` | `token` is not a valid SAC; the `try_balance` probe failed |
 
 ---
 

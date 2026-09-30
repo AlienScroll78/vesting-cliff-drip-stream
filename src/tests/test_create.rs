@@ -68,6 +68,68 @@ fn test_create_stream_invalid_duration_fails() {
     assert_eq!(err2, Ok(VestingError::InvalidDuration));
 }
 
+/// A zero-length `cliff_duration` is rejected with `InvalidCliffDuration` (12).
+///
+/// A zero-length cliff provides no lockup guarantee, so `create_vesting_stream`
+/// must refuse to create the stream. The numeric pin guards the client-facing
+/// contract: code 12 is `InvalidCliffDuration` in the documented error table.
+#[test]
+fn test_create_stream_zero_cliff_fails() {
+    let env = setup_env();
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    let (token_id, token_client) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    let rate = 10 * RATE_DECIMALS;
+
+    let err = client
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &0, &200, &None)
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        Ok(VestingError::InvalidCliffDuration),
+        "expected code 12 (InvalidCliffDuration) when cliff_duration == 0"
+    );
+    assert_eq!(
+        VestingError::InvalidCliffDuration as u32,
+        12,
+        "InvalidCliffDuration must be code 12"
+    );
+
+    // No schedule is stored and no deposit is taken.
+    assert_eq!(client.get_schedule(&recipient), None);
+    assert_eq!(token_client.balance(&sponsor), 2_000);
+    assert_eq!(token_client.balance(&contract_id), 0);
+}
+
+/// The smallest legal cliff (`cliff_duration = 1`) is still accepted.
+#[test]
+fn test_create_stream_minimum_cliff_succeeds() {
+    let env = setup_env();
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    let (token_id, token_client) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    let rate = 10 * RATE_DECIMALS;
+
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &1, &200, &None);
+
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.rate_per_ledger, rate);
+    assert_eq!(schedule.start_ledger, 100);
+    assert_eq!(schedule.cliff_ledger, 101);
+    assert_eq!(schedule.end_ledger, 300);
+
+    // deposit = rate (10 tokens/ledger) * 200 = 2000
+    assert_eq!(token_client.balance(&sponsor), 0);
+    assert_eq!(token_client.balance(&contract_id), 2_000);
+}
+
 #[test]
 fn test_create_duplicate_stream_fails() {
     let env = setup_env();

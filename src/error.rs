@@ -50,8 +50,12 @@ pub enum VestingError {
     /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
     InvalidRecipient = 11,
 
-    /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
-    InvalidToken = 12,
+    /// **Code 12** — `cliff_duration` is zero; a cliff must have positive length.
+    ///
+    /// A zero-length cliff provides no lockup guarantee: the whole stream would
+    /// vest from `start_ledger` onwards. Callers must pass a `cliff_duration`
+    /// that is at least `1` and strictly less than `total_duration`.
+    InvalidCliffDuration = 12,
 
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
@@ -68,4 +72,13 @@ pub enum VestingError {
     /// Reason strings are stored on-chain in the emitted event. Trim the reason
     /// to at most 256 UTF-8 bytes before retrying.
     ReasonTooLong = 22,
+
+    /// **Code 27** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
+    ///
+    /// Historically this variant occupied code 12, which the documented error
+    /// table (README, `docs/api-reference.md`) and issue #730 reserve for
+    /// `InvalidCliffDuration`. It was moved to 27 so that the two variants no
+    /// longer share a discriminant and clients can switch on code 12
+    /// unambiguously.
+    InvalidToken = 27,
 }

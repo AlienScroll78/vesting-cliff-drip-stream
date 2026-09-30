@@ -164,6 +164,7 @@ impl VestingDrips {
     /// Creates a new cliff-vesting stream for `recipient`.
     ///
     /// # Errors
+    /// * `InvalidCliffDuration`   – `cliff_duration` is zero.
     /// * `InvalidRate`            – `rate` is zero or negative.
     /// * `InvalidDuration`        – `total_duration` ≤ `cliff_duration`.
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
@@ -203,6 +204,11 @@ impl VestingDrips {
         }
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
+        }
+        // A zero-length cliff provides no lockup guarantee — the entire stream
+        // would vest from `start_ledger` onwards. Must be at least 1 ledger.
+        if cliff_duration == 0 {
+            return Err(VestingError::InvalidCliffDuration);
         }
         // Validate cliff ratio does not exceed configured max.
         let max_cliff_ratio_bps = storage::get_max_cliff_ratio(&env);
