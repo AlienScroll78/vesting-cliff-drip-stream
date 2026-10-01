@@ -1,4 +1,5 @@
 import type { WizardStep } from './useWizard'
+import styles from './wizard.module.css'
 
 const LABELS: Record<WizardStep, string> = {
   recipient: 'Recipient',
@@ -10,100 +11,85 @@ const LABELS: Record<WizardStep, string> = {
 interface WizardProgressProps {
   steps: readonly WizardStep[]
   current: number
+  /** Longest step the user has reached — drives which circles show a checkmark. */
+  furthest?: number
+  /** Jump to a step. Only steps up to `furthest` are reachable. */
+  onGoToStep?: (index: number) => void
 }
 
-export function WizardProgress({ steps, current }: WizardProgressProps) {
+/**
+ * Numbered step indicator (#822).
+ *
+ * Renders "Step N of M", a checkmark on every completed step, and makes each
+ * circle a 44px tap target so a user can jump back to a step they already
+ * finished without losing their answers.
+ */
+export function WizardProgress({ steps, current, furthest, onGoToStep }: WizardProgressProps) {
+  const done = furthest ?? current
+
   return (
-    <div style={styles.container}>
-      <nav aria-label="Wizard progress" style={styles.nav}>
+    <div className={styles.progress}>
+      <nav aria-label="Wizard progress" className={styles.progressNav}>
         {steps.map((s, i) => {
-          const done = i < current
+          const complete = i < done
           const active = i === current
+          // Only allow jumping backwards — forwards navigation is gated by
+          // each step's own validation.
+          const reachable = onGoToStep && (complete || active)
           return (
-            <div key={s} style={styles.item}>
-              <div
-                aria-current={active ? 'step' : undefined}
-                style={{
-                  ...styles.circle,
-                  background: done || active ? 'var(--color-active)' : 'var(--color-border)',
-                  color: done || active ? '#fff' : 'var(--color-text)',
-                }}
-              >
-                {done ? '✓' : i + 1}
-              </div>
+            <div key={s} className={styles.progressItem}>
+              {reachable ? (
+                <button
+                  type="button"
+                  onClick={() => onGoToStep(i)}
+                  aria-current={active ? 'step' : undefined}
+                  aria-label={`Step ${i + 1}: ${LABELS[s]}${complete ? ' (completed)' : ''}`}
+                  data-testid={`wizard-step-${i}`}
+                  className={[
+                    styles.progressCircle,
+                    complete ? styles.progressCircleDone : '',
+                    active ? styles.progressCircleActive : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  {complete ? '✓' : i + 1}
+                </button>
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={[
+                    styles.progressCircle,
+                    complete ? styles.progressCircleDone : '',
+                    active ? styles.progressCircleActive : '',
+                  ].filter(Boolean).join(' ')}
+                >
+                  {complete ? '✓' : i + 1}
+                </span>
+              )}
               <span
-                style={{
-                  ...styles.label,
-                  fontWeight: active ? 700 : 400,
-                  color: active ? 'var(--color-active)' : 'var(--color-text)',
-                }}
+                className={[
+                  styles.progressLabel,
+                  active ? styles.progressLabelActive : '',
+                ].filter(Boolean).join(' ')}
+                aria-hidden="true"
               >
                 {LABELS[s]}
               </span>
               {i < steps.length - 1 && (
-                <div
+                <span
                   aria-hidden="true"
-                  style={{
-                    ...styles.line,
-                    background: done ? 'var(--color-active)' : 'var(--color-border)',
-                  }}
+                  className={[
+                    styles.progressLine,
+                    complete ? styles.progressLineDone : '',
+                  ].filter(Boolean).join(' ')}
                 />
               )}
             </div>
           )
         })}
       </nav>
-      <span style={styles.counter}>
+      <span className={styles.progressCounter} data-testid="wizard-step-counter">
         Step {current + 1} of {steps.length}
       </span>
     </div>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '0.5rem',
-  },
-  nav: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 0,
-    padding: '1rem 0 0',
-  },
-  item: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.375rem',
-  },
-  circle: {
-    width: '2rem',
-    height: '2rem',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    flexShrink: 0,
-    transition: 'background 0.2s',
-  },
-  label: {
-    fontSize: '0.75rem',
-    whiteSpace: 'nowrap' as const,
-  },
-  line: {
-    width: '2rem',
-    height: '2px',
-    flexShrink: 0,
-    marginLeft: '0.375rem',
-    transition: 'background 0.2s',
-  },
-  counter: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
-  },
 }
