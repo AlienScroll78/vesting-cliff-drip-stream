@@ -16,6 +16,24 @@ variable "domain_name" {
   default     = "vesting.example.com"
 }
 
+variable "waf_rate_limit" {
+  description = "Requests per IP allowed during the WAF five-minute evaluation window"
+  type        = number
+  default     = 1000
+}
+
+variable "waf_sanctioned_country_codes" {
+  description = "ISO country codes blocked by the WAF geo rule"
+  type        = list(string)
+  default     = ["AF", "BY", "CU", "IR", "KP", "LY", "MM", "RU", "SD", "SS", "SY", "VE", "YE", "ZW"]
+}
+
+variable "waf_log_retention_days" {
+  description = "Retention period for WAF decision logs"
+  type        = number
+  default     = 90
+}
+
 variable "db_password" {
   description = "Master password for the PostgreSQL RDS instance"
   type        = string

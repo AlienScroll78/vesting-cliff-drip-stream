@@ -18,6 +18,21 @@ output "alb_dns_name" {
   value       = module.compute.alb_dns_name
 }
 
+output "waf_web_acl_arn" {
+  description = "Regional WAF Web ACL ARN"
+  value       = module.compute.waf_web_acl_arn
+}
+
+output "waf_log_group_name" {
+  description = "CloudWatch log group receiving WAF decisions"
+  value       = module.compute.waf_log_group_name
+}
+
+output "waf_dashboard_name" {
+  description = "CloudWatch dashboard name for WAF metrics"
+  value       = module.compute.waf_dashboard_name
+}
+
 output "ecs_cluster_name" {
   description = "ECS cluster name"
   value       = module.compute.ecs_cluster_name
