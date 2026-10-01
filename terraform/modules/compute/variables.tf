@@ -27,26 +27,49 @@ variable "container_memory" {
   default     = 512
 }
 
-variable "aws_region" {
-  description = "AWS region for regional WAF and CloudWatch resources"
+variable "container_image" {
+  description = "Container image used by the ECS task definition"
   type        = string
-  default     = "us-east-1"
+  default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
 }
 
-variable "waf_rate_limit" {
-  description = "Requests per IP allowed during the WAF evaluation window"
+variable "container_name" {
+  description = "Name of the application container"
+  type        = string
+  default     = "vesting-backend"
+}
+
+variable "codedeploy_bake_minutes" {
+  description = "Minutes CodeDeploy waits for the green task before routing traffic"
   type        = number
-  default     = 1000
+  default     = 10
 }
 
-variable "waf_sanctioned_country_codes" {
-  description = "ISO country codes blocked by the geo rule"
-  type        = list(string)
-  default     = ["AF", "BY", "CU", "IR", "KP", "LY", "MM", "RU", "SD", "SS", "SY", "VE", "YE", "ZW"]
-}
-
-variable "waf_log_retention_days" {
-  description = "Retention period for WAF decision logs"
+variable "codedeploy_timeout_minutes" {
+  description = "Maximum deployment duration enforced by the deployment workflow"
   type        = number
-  default     = 90
+  default     = 15
+}
+
+variable "traffic_shift_percentages" {
+  description = "Traffic shift milestones for the blue-green rollout"
+  type        = list(number)
+  default     = [10, 50, 100]
+
+  validation {
+    condition     = try(var.traffic_shift_percentages == [10, 50, 100], false)
+    error_message = "traffic_shift_percentages must be [10, 50, 100]."
+  }
+}
+
+variable "health_check_failure_threshold_percent" {
+  description = "Target health failure percentage that stops a deployment"
+  type        = number
+  default     = 5
+}
+
+variable "deployment_notification_emails" {
+  description = "Email recipients for CodeDeploy lifecycle notifications"
+  type        = set(string)
+  default     = []
 }

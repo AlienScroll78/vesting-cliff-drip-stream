@@ -57,6 +57,10 @@ variable "cost_alert_emails" {
   type        = set(string)
 }
 
+variable "deployment_alert_emails" {
+  description = "Email recipients for CodeDeploy lifecycle notifications."
+  type        = set(string)
+  default     = []
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for cost alert relay to #ops channel."
   type        = string

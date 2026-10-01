@@ -60,15 +60,12 @@ module "dns" {
 }
 
 module "compute" {
-  source                       = "./modules/compute"
-  environment                  = var.environment
-  aws_region                   = var.aws_region
-  vpc_id                       = module.network.vpc_id
-  public_subnet_ids            = module.network.public_subnet_ids
-  private_subnet_ids           = module.network.private_subnet_ids
-  waf_rate_limit               = var.waf_rate_limit
-  waf_sanctioned_country_codes = var.waf_sanctioned_country_codes
-  waf_log_retention_days       = var.waf_log_retention_days
+  source                  = "./modules/compute"
+  environment             = var.environment
+  vpc_id                  = module.network.vpc_id
+  public_subnet_ids       = module.network.public_subnet_ids
+  private_subnet_ids      = module.network.private_subnet_ids
+  deployment_alert_emails = var.deployment_alert_emails
 }
 
 module "data" {

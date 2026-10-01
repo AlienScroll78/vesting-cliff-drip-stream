@@ -24,17 +24,42 @@ output "alb_security_group_id" {
   value       = aws_lb.main.security_groups[0]
 }
 
-output "waf_web_acl_arn" {
-  description = "ARN of the regional WAF Web ACL"
-  value       = aws_wafv2_web_acl.api.arn
+output "ecs_service_name" {
+  description = "Name of the ECS API service"
+  value       = aws_ecs_service.backend.name
 }
 
-output "waf_log_group_name" {
-  description = "CloudWatch log group receiving WAF decisions"
-  value       = aws_cloudwatch_log_group.waf.name
+output "ecs_task_definition_arn" {
+  description = "ARN of the current ECS task definition"
+  value       = aws_ecs_task_definition.backend.arn
 }
 
-output "waf_dashboard_name" {
-  description = "CloudWatch dashboard name for WAF metrics"
-  value       = aws_cloudwatch_dashboard.waf.dashboard_name
+output "alb_listener_arn" {
+  description = "ARN of the production ALB listener"
+  value       = aws_lb_listener.http.arn
+}
+
+output "codedeploy_application_name" {
+  description = "Name of the CodeDeploy application"
+  value       = aws_codedeploy_app.api.name
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "Name of the CodeDeploy deployment group"
+  value       = "${var.environment}-vesting-api"
+}
+
+output "codedeploy_deployment_config_name" {
+  description = "Name of the CodeDeploy traffic shifting configuration"
+  value       = aws_codedeploy_deployment_config.api.id
+}
+
+output "codedeploy_notification_topic_arn" {
+  description = "SNS topic receiving CodeDeploy lifecycle notifications"
+  value       = aws_sns_topic.deployment_notifications.arn
+}
+
+output "deployment_timeout_minutes" {
+  description = "Deployment timeout enforced by the deployment workflow"
+  value       = var.codedeploy_timeout_minutes
 }
