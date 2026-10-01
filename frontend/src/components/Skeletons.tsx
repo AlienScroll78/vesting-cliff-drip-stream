@@ -19,6 +19,13 @@
  *   StreamListSkeleton          — list of StreamCardSkeletons (max 3)
  *   DashboardSkeleton           — StatsRow + StreamList
  *   FormSkeleton                — generic form field skeleton
+ *   SponsorStreamListSkeleton   — sponsor list rows with varying widths (#823)
+ *   StreamExplorerSkeleton      — explorer table rows (#823)
+ *   NotificationListSkeleton    — notification items (#823)
+ *   AnalyticsSummarySkeleton    — stat cards + chart placeholder (#823)
+ *
+ * Motion: the shimmer is a CSS animation that is switched off entirely under
+ * `prefers-reduced-motion: reduce`, leaving a static placeholder block.
  */
 
 import React from "react";
@@ -253,3 +260,184 @@ export function FormSkeleton({ fields = 4 }: { fields?: number }) {
     </div>
   );
 }
+
+// ─── SponsorStreamListSkeleton (#823) ──────────────────────────────────────────
+
+/**
+ * Sponsor stream list. Row widths deliberately vary so the placeholder reads as
+ * a list of real records rather than a uniform grid.
+ */
+const SPONSOR_ROW_WIDTHS: string[][] = [
+  ["70%", "45%", "55%"],
+  ["55%", "60%", "40%"],
+  ["80%", "35%", "65%"],
+  ["62%", "50%", "48%"],
+  ["72%", "42%", "58%"],
+];
+
+const MAX_SPONSOR_ROWS = 5;
+
+export function SponsorStreamListSkeleton({ rows = 5 }: { rows?: number }) {
+  const count = Math.min(rows, MAX_SPONSOR_ROWS);
+  return (
+    <ul
+      style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}
+      aria-busy="true"
+      aria-label="Loading sponsor streams"
+    >
+      {Array.from({ length: count }).map((_, i) => {
+        const w = SPONSOR_ROW_WIDTHS[i % SPONSOR_ROW_WIDTHS.length]!;
+        return (
+          <li key={i} className={styles.streamCard} data-testid="sponsor-stream-skeleton-row" aria-hidden="true">
+            <div className={styles.row} style={{ justifyContent: "space-between" }}>
+              <div className={styles.stack} style={{ gap: "0.4rem" }}>
+                <Skeleton width={w[0]!} height="0.9rem" />
+                <Skeleton width={w[1]!} height="0.7rem" />
+              </div>
+              <Skeleton width="4.5rem" height="1.25rem" shape="rect" />
+            </div>
+            <Skeleton width="100%" height="0.5rem" shape="rect" />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// ─── StreamExplorerSkeleton (#823) ─────────────────────────────────────────────
+
+/**
+ * Stream explorer table. Mirrors the explorer's column set so column widths
+ * survive the load and the table doesn't reflow when data arrives.
+ */
+const EXPLORER_COLUMNS = ["2fr", "1.5fr", "1.25fr", "1fr"] as const;
+const MAX_EXPLORER_ROWS = 6;
+
+export function StreamExplorerSkeleton({ rows = 6 }: { rows?: number }) {
+  const count = Math.min(rows, MAX_EXPLORER_ROWS);
+  const cols = EXPLORER_COLUMNS.join(" ");
+  return (
+    <div className={styles.table} aria-busy="true" aria-label="Loading stream explorer">
+      <div className={styles.tableHeader} style={{ gridTemplateColumns: cols }} aria-hidden="true">
+        {EXPLORER_COLUMNS.map((_, i) => (
+          <Skeleton key={i} width="70%" height="0.65rem" />
+        ))}
+      </div>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className={styles.tableRow}
+          data-testid="explorer-skeleton-row"
+          style={{ gridTemplateColumns: cols }}
+          aria-hidden="true"
+        >
+          {EXPLORER_COLUMNS.map((_, j) => (
+            <Skeleton
+              key={j}
+              width={j === 0 ? "85%" : "65%"}
+              height="0.875rem"
+              style={{ fontFamily: j === 0 ? "monospace" : undefined }}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── NotificationListSkeleton (#823) ───────────────────────────────────────────
+
+/** Notification item: leading icon, two text lines, and a trailing timestamp. */
+const MAX_NOTIFICATION_ITEMS = 6;
+
+export function NotificationListSkeleton({ items = 4 }: { items?: number }) {
+  const count = Math.min(items, MAX_NOTIFICATION_ITEMS);
+  return (
+    <ul
+      style={{ listStyle: "none", padding: 0, margin: 0 }}
+      aria-busy="true"
+      aria-label="Loading notifications"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <li
+          key={i}
+          data-testid="notification-skeleton-item"
+          aria-hidden="true"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            padding: "0.875rem 1rem",
+            borderBottom: "1px solid var(--color-border, #e5e7eb)",
+          }}
+        >
+          <Skeleton width="2rem" height="2rem" shape="circle" />
+          <div className={styles.stack} style={{ gap: "0.35rem" }}>
+            <Skeleton width={i % 2 === 0 ? "60%" : "48%"} height="0.8rem" />
+            <Skeleton width={i % 2 === 0 ? "40%" : "55%"} height="0.7rem" />
+          </div>
+          <Skeleton width="3.5rem" height="0.65rem" style={{ marginLeft: "auto" }} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─── AnalyticsSummarySkeleton (#823) ───────────────────────────────────────────
+
+/** Analytics page: a row of stat cards above a chart placeholder. */
+const ANALYTICS_CARDS = 4;
+const CHART_BAR_HEIGHTS = [45, 70, 55, 85, 60, 75, 50, 90];
+
+/**
+ * Analytics summary. Pass `showChart={false}` for contexts that only render the
+ * stat cards (e.g. the sponsor dashboard header), so no phantom chart is
+ * reserved for content that will never appear.
+ */
+export function AnalyticsSummarySkeleton({
+  cards = ANALYTICS_CARDS,
+  showChart = true,
+}: {
+  cards?: number;
+  showChart?: boolean;
+}) {
+  const count = Math.min(cards, ANALYTICS_CARDS);
+  return (
+    <div aria-busy="true" aria-label="Loading analytics">
+      <div
+        className={styles.statsGrid}
+        style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+      >
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className={styles.statCell} data-testid="analytics-skeleton-card" aria-hidden="true">
+            <Skeleton width="55%" height="0.65rem" />
+            <Skeleton width="70%" height="1.5rem" />
+            <Skeleton width="40%" height="0.6rem" />
+          </div>
+        ))}
+      </div>
+
+      {/* Chart placeholder — fixed height so the page doesn't jump on load. */}
+      {showChart && (
+        <div
+          aria-hidden="true"
+          style={{
+            height: "12rem",
+            marginTop: "1rem",
+            border: "1px solid var(--color-border, #e5e7eb)",
+            borderRadius: "0.5rem",
+            padding: "1rem",
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "0.5rem",
+          }}
+        >
+          {CHART_BAR_HEIGHTS.map((h, i) => (
+            <Skeleton key={i} width="100%" height={`${h}%`} shape="rect" style={{ flex: 1 }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
