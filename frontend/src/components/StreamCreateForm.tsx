@@ -1,7 +1,7 @@
 "use client";
 import { useState, type ChangeEvent, type FocusEvent } from "react";
 import { useWallet } from "@/contexts/WalletContext";
-import { getErrorInfo } from "@/errorMessages";
+import { getErrorInfo } from "@/lib/errorMessages";
 import { isDepositOverflow } from "@/wizard/useWizard";
 
 // ~5 seconds per ledger on Stellar

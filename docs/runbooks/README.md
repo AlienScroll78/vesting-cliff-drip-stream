@@ -21,6 +21,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [RDS Restore](./rds-restore.md) | Restore the production database from a snapshot |
+| [Backup Restore Verification](./backup-restore-verification.md) | The weekly restore check failed, or you want to test a restore on demand without touching production |
 | [Disaster Recovery](./disaster-recovery.md) | Full system recovery — database, indexer re-sync, contract re-deploy |
 | [Backfill Stream Events](./backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or a decoder bug fix |
 
@@ -29,6 +30,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [CloudWatch Logs](./cloudwatch-logs.md) | Query application logs, set up alarms, export log data |
+| [Alert Response](./alert-response.md) | A Grafana/CloudWatch alert has fired (indexer lag, error rate, DB pool, RPC, WASM deploy) |
 | [Cost Monitoring](./cost-monitoring.md) | AWS cost anomaly alerts, budget notifications, and Slack relay |
 
 ---

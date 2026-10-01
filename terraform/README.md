@@ -35,10 +35,10 @@ infrastructure required by the vesting application.
 
 ## Environments
 
-| Environment | Variables file | Domain | Monthly budget |
-|-------------|---------------|--------|---------------|
-| staging | `envs/staging.tfvars` | `staging.vesting.example.com` | $250 |
-| production | `envs/production.tfvars` | `vesting.example.com` | $1,500 |
+| Environment | Variables file | Domain | RDS class | Monthly budget |
+|-------------|---------------|--------|-----------|---------------|
+| staging | `envs/staging.tfvars` | `staging.vesting.example.com` | `db.t3.micro` | $500 |
+| production | `envs/production.tfvars` | `vesting.example.com` | `db.t3.small` | $500 |
 
 ## Prerequisites
 
@@ -147,18 +147,27 @@ for the secret inventory, rotation procedure and audit queries.
 
 | Service | Configuration | Staging | Production |
 |---------|--------------|---------|------------|
-| ECS Fargate | 256 CPU / 512 MB, 1 task | ~$10 | ~$35 (3 tasks) |
+| ECS Fargate | backend 256 CPU / 512 MB on on-demand | ~$10 | ~$35 (3 tasks) |
+| ECS Fargate Spot | indexer 512 CPU / 1024 MB, ~60-70% discount | ~$4 | ~$12 |
 | ALB | 1 LB, idle timeout 60s | ~$22 | ~$22 |
-| RDS PostgreSQL | db.t3.micro, 20GB gp2 | ~$17 | ~$70 (db.t3.small, HA) |
+| RDS PostgreSQL | db.t3.micro (stg) / db.t3.small (prod), 20GB gp2 | ~$17 | ~$35 |
 | ElastiCache Redis | cache.t3.micro, 1 node | ~$14 | ~$28 (cache.t3.small, 2 nodes) |
 | NAT Gateway | 2 AZ | ~$64 | ~$64 |
+| VPC endpoints | S3 gateway only (free) | ~$0 | ~$0 |
 | Route53 | 1 hosted zone + 3 records | ~$1 | ~$1 |
 | S3 (state + audit) | Versioning enabled | ~$2 | ~$3 |
-| CloudWatch Logs | Container + RDS logs | ~$5 | ~$15 |
+| CloudWatch Logs | Container + RDS + audit logs | ~$5 | ~$15 |
 | KMS | 1 customer key | ~$1 | ~$1 |
-| **Total** | | **~$136/mo** | **~$239/mo** |
+| **Total** | | **~$141/mo** | **~$221/mo** |
 
 > Costs are estimates for us-east-1 as of July 2026. Actual costs may vary
 > based on data transfer, storage consumption, and request volume.
-> Use AWS Cost Explorer and the budget alerts in `cost-monitoring.tf` to track
-> actual spending.
+>
+> The S3 gateway endpoint is free and removes the highest-volume NAT traffic.
+> Interface endpoints are opt-in (`interface_endpoint_services`) because at
+> ~$7.20 per AZ per month they cost more than the NAT traffic they avoid at
+> current volume. See the cost optimization section of
+> [docs/runbooks/cost-monitoring.md](../docs/runbooks/cost-monitoring.md).
+>
+> A pull request that changes this directory gets an Infracost cost comment
+> showing the delta, so the effect of a change is visible before it merges.
