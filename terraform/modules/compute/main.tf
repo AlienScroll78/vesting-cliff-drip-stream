@@ -6,6 +6,24 @@ resource "aws_ecs_cluster" "main" {
   name = "${var.environment}-vesting"
 }
 
+# Spot capacity for the interruptible workloads. The backend API stays on
+# on-demand Fargate; only the indexer runs on Spot, because an interrupted indexer
+# catches up from the event log rather than dropping user-facing work.
+resource "aws_capacity_provider" "fargate_spot" {
+  name = "${var.environment}-fargate-spot"
+
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 1
+    base              = 0
+  }
+}
+
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name       = aws_ecs_cluster.main.name
+  capacity_providers = ["FARGATE", aws_capacity_provider.fargate_spot.name]
+}
+
 resource "aws_ecs_task_definition" "backend" {
   family                   = "vesting-backend"
   requires_compatibilities = ["FARGATE"]
