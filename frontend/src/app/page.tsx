@@ -18,6 +18,10 @@ import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #820 — first-time-user onboarding tour
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { ReplayTourButton } from "@/components/ReplayTourButton";
+import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -292,6 +296,7 @@ function StreamList() {
                         setClaimTarget(s);
                       }}
                       data-testid={`claim-btn-${s.id}`}
+                      data-tour="claim"
                     >
                       {t("claim")}
                     </button>
@@ -301,6 +306,7 @@ function StreamList() {
             </div>
 
             <SegmentedProgressBar
+              data-tour="claimable"
               total={s.totalDeposit ?? 3000}
               dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? (s.totalDeposit ?? 3000) : 0}
               cliffCatchUp={s.status === "active" ? 500 : 0}
@@ -309,7 +315,7 @@ function StreamList() {
             />
 
             {timelineTarget?.id === s.id && s.startLedger && s.cliffLedger && s.endLedger && (
-              <div style={{ marginTop: "0.5rem" }}>
+              <div style={{ marginTop: "0.5rem" }} data-tour="timeline">
                 <VestingTimeline
                   schedule={{
                     startLedger: s.startLedger,
@@ -353,9 +359,13 @@ export default function Home() {
   const { t } = useTranslation();
   const { showCreate, setShowCreate } = useSponsorDashboard();
   const [showCompare, setShowCompare] = useState(false);
+  // #820 — the tour only auto-starts once a wallet is connected
+  const { address } = useWallet();
 
   return (
     <TxProvider>
+      {/* #820 — onboarding tour; adapts copy to pre-cliff / post-cliff state */}
+      <OnboardingTour enabled={address !== null} streamState="pre-cliff" />
       <main id="main-content" className="page">
         <header className="header">
           <h1>{t("appTitle")}</h1>
@@ -363,8 +373,12 @@ export default function Home() {
             <a href="/streams" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
               My Streams
             </a>
+            {/* #820 — Settings → replay the onboarding tour on demand */}
+            <ReplayTourButton />
             <LanguageSwitcher />
-            <WalletButton />
+            <div data-tour="wallet">
+              <WalletButton />
+            </div>
           </div>
         </header>
 
