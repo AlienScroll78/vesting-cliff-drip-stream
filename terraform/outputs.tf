@@ -23,6 +23,41 @@ output "ecs_cluster_name" {
   value       = module.compute.ecs_cluster_name
 }
 
+output "ecs_service_name" {
+  description = "ECS API service name"
+  value       = module.compute.ecs_service_name
+}
+
+output "ecs_task_definition_arn" {
+  description = "Current ECS API task definition ARN"
+  value       = module.compute.ecs_task_definition_arn
+}
+
+output "codedeploy_application_name" {
+  description = "CodeDeploy application name"
+  value       = module.compute.codedeploy_application_name
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "CodeDeploy deployment group name"
+  value       = module.compute.codedeploy_deployment_group_name
+}
+
+output "codedeploy_deployment_config_name" {
+  description = "CodeDeploy deployment configuration name"
+  value       = module.compute.codedeploy_deployment_config_name
+}
+
+output "codedeploy_notification_topic_arn" {
+  description = "CodeDeploy lifecycle notification topic ARN"
+  value       = module.compute.codedeploy_notification_topic_arn
+}
+
+output "deployment_timeout_minutes" {
+  description = "Deployment timeout enforced by CI"
+  value       = module.compute.deployment_timeout_minutes
+}
+
 output "db_endpoint" {
   description = "PostgreSQL RDS endpoint"
   value       = module.data.db_endpoint

@@ -60,11 +60,12 @@ module "dns" {
 }
 
 module "compute" {
-  source            = "./modules/compute"
-  environment       = var.environment
-  vpc_id            = module.network.vpc_id
-  public_subnet_ids = module.network.public_subnet_ids
-  private_subnet_ids = module.network.private_subnet_ids
+  source                  = "./modules/compute"
+  environment             = var.environment
+  vpc_id                  = module.network.vpc_id
+  public_subnet_ids       = module.network.public_subnet_ids
+  private_subnet_ids      = module.network.private_subnet_ids
+  deployment_alert_emails = var.deployment_alert_emails
 }
 
 module "data" {
