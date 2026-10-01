@@ -45,8 +45,8 @@ resource "aws_ecs_task_definition" "backend" {
         "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
       }
-    }
-  }])
+    },
+  ])
 }
 
 resource "aws_lb" "main" {
@@ -360,4 +360,43 @@ resource "aws_codedeploy_deployment_group" "api" {
     trigger_name       = "${var.environment}-deployment-events"
     trigger_target_arn = aws_sns_topic.deployment_notifications.arn
   }
+}
+
+# ─── Task role for the log shipper ────────────────────────────────────────────
+#
+# The execution role is for the ECS agent (pulling images, creating log streams
+# for the awslogs driver). The shipper is an ordinary container, so it needs a
+# task role of its own.
+
+data "aws_iam_policy_document" "ecs_task_logs" {
+  statement {
+    sid    = "WriteApplicationLogStreams"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    # Fluent Bit scopes writes per stream, which is expressed as a suffix on
+    # the group ARN. Scoping to these groups means a compromised task cannot
+    # write into an account's other log groups.
+    resources = [for arn in var.app_log_group_arns : "${arn}:*"]
+  }
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name = "${var.environment}-ecs-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_logs" {
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_logs.json
 }

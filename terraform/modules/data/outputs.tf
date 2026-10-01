@@ -47,6 +47,16 @@ output "db_instance_id" {
   value       = aws_db_instance.postgres.id
 }
 
+output "rds_postgresql_log_group_name" {
+  description = <<-EOT
+    CloudWatch log group that RDS writes PostgreSQL logs to, derived from
+    enabled_cloudwatch_logs_exports. This is the AWS-managed path; the logging
+    module copies it into /rds/postgresql so all three application log groups
+    sit side by side.
+  EOT
+  value       = "/aws/rds/instance/${aws_db_instance.postgres.id}/postgresql"
+}
+
 output "redis_cluster_id" {
   description = "Redis cluster identifier"
   value       = aws_elasticache_cluster.redis.cluster_id

@@ -42,22 +42,34 @@ variable "alb_idle_timeout" {
   default     = 60
 }
 
-variable "container_port" {
-  description = "Port the backend container listens on"
-  type        = number
-  default     = 8080
+variable "app_log_group_name" {
+  type = string
+
+  description = <<-EOT
+    CloudWatch log group the API server ships to, e.g. /ecs/api-server. Both the
+    app container's awslogs driver and the Fluent Bit sidecar write here.
+  EOT
 }
 
-variable "container_cpu" {
-  description = "Task-level CPU units (Fargate)"
-  type        = number
-  default     = 256
+variable "app_log_group_arns" {
+  type = list(string)
+
+  description = <<-EOT
+    ARNs the task role may write log streams to. Scoping this to the application
+    log groups is what keeps the sidecar from being an account-wide log writer.
+  EOT
 }
 
-variable "container_memory" {
-  description = "Task-level memory in MB (Fargate)"
-  type        = number
-  default     = 512
+variable "log_level" {
+  description = "Minimum level the application logger emits: debug, info, warn or error."
+  type        = string
+  default     = "info"
+}
+
+variable "fluentbit_image" {
+  description = "Fluent Bit image used as the log shipper sidecar."
+  type        = string
+  default     = "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
 }
 
 variable "container_image" {
