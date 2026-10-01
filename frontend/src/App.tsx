@@ -7,7 +7,7 @@ import './App.css'
 // #123 — field tooltips
 import { Tooltip } from './Tooltip'
 // #122 — error message map
-import { getErrorInfo } from './errorMessages'
+import { getErrorInfo } from './lib/errorMessages'
 // #121 — Framer Motion animations
 import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animations'
 // #120 — onboarding tour (state lives in useOnboardingTour)
