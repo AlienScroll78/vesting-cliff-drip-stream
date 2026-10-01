@@ -65,6 +65,11 @@ function formatMessage(snsMessage) {
     detail = { raw: snsMessage.Message || snsMessage };
   }
 
+  // The monthly cost report builds its own Slack markdown, so pass it through.
+  if (detail.reportType === "monthly_cost") {
+    return detail.text || "Monthly cost report was published with no body.";
+  }
+
   const header = "🚨 *AWS Cost Anomaly Alert*";
   const monitor = detail.MonitorName || detail.monitor_name || "Unknown monitor";
   const impact = detail.AnomalyTotalImpactAbsolute || detail.total_impact || "N/A";

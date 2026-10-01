@@ -1,0 +1,103 @@
+name: WAF Monthly Effectiveness Report
+
+on:
+  schedule:
+    - cron: "0 5 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  WAF_WEB_ACL_NAME: ${{ vars.WAF_WEB_ACL_NAME || 'staging-api' }}
+  WAF_LOG_GROUP_NAME: ${{ vars.WAF_LOG_GROUP_NAME }}
+
+jobs:
+  report:
+    name: Generate WAF effectiveness report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_WAF_REPORT_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Collect WAF metrics
+        id: metrics
+        run: |
+          set -euo pipefail
+          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          START_TIME=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          get_metric() {
+            aws cloudwatch get-metric-statistics \
+              --namespace AWS/WAFV2 \
+              --metric-name "$1" \
+              --dimensions Name=WebACL,Value="$WAF_WEB_ACL_NAME" Name=Region,Value="$AWS_REGION" \
+              --start-time "$START_TIME" \
+              --end-time "$END_TIME" \
+              --period 86400 \
+              --statistics Sum \
+              --output json | jq '[.Datapoints[]?.Sum] | add // 0 | round'
+          }
+
+          BLOCKED=$(get_metric BlockedRequests)
+          ALLOWED=$(get_metric AllowedRequests)
+          COUNTED=$(get_metric CountedRequests)
+          PASSED=$(get_metric PassedRequests)
+          TOTAL=$((BLOCKED + ALLOWED + COUNTED + PASSED))
+          BLOCK_RATE=$(awk "BEGIN { if ($TOTAL == 0) print 0; else printf \"%.2f\", ($BLOCKED / $TOTAL) * 100 }")
+
+          {
+            echo "# WAF Monthly Effectiveness Report"
+            echo
+            echo "- Period: ${START_TIME} to ${END_TIME}"
+            echo "- Web ACL: ${WAF_WEB_ACL_NAME}"
+            echo "- Log group: ${WAF_LOG_GROUP_NAME:-not configured}"
+            echo
+            echo "| Metric | Requests |"
+            echo "|---|---:|"
+            echo "| Blocked | ${BLOCKED} |"
+            echo "| Allowed | ${ALLOWED} |"
+            echo "| Counted | ${COUNTED} |"
+            echo "| Passed | ${PASSED} |"
+            echo "| Block rate | ${BLOCK_RATE}% |"
+          } > waf-effectiveness.md
+
+          echo "blocked=$BLOCKED" >> "$GITHUB_OUTPUT"
+          echo "allowed=$ALLOWED" >> "$GITHUB_OUTPUT"
+          echo "block_rate=$BLOCK_RATE" >> "$GITHUB_OUTPUT"
+          cat waf-effectiveness.md
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: waf-effectiveness-report-${{ github.run_id }}
+          path: waf-effectiveness.md
+          retention-days: 90
+
+      - name: Publish monthly report
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f waf-effectiveness.md ]; then
+            echo "No report was generated."
+            exit 0
+          fi
+          BODY=$(cat waf-effectiveness.md)
+          BODY="${BODY}"$'\n\nWorkflow run: '"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title WAF monthly effectiveness" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "WAF monthly effectiveness report — $(date -u +%Y-%m-%d)" --body "$BODY" --label security
+          fi

@@ -16,10 +16,34 @@ variable "domain_name" {
   default     = "vesting.example.com"
 }
 
+variable "waf_rate_limit" {
+  description = "Requests per IP allowed during the WAF five-minute evaluation window"
+  type        = number
+  default     = 1000
+}
+
+variable "waf_sanctioned_country_codes" {
+  description = "ISO country codes blocked by the WAF geo rule"
+  type        = list(string)
+  default     = ["AF", "BY", "CU", "IR", "KP", "LY", "MM", "RU", "SD", "SS", "SY", "VE", "YE", "ZW"]
+}
+
+variable "waf_log_retention_days" {
+  description = "Retention period for WAF decision logs"
+  type        = number
+  default     = 90
+}
+
 variable "db_password" {
   description = "Master password for the PostgreSQL RDS instance"
   type        = string
   sensitive   = true
+}
+
+variable "project_name" {
+  description = "Cost allocation tag value applied to every resource and activated in Cost Explorer."
+  type        = string
+  default     = "vesting-drips"
 }
 
 variable "additional_tags" {
@@ -37,39 +61,21 @@ variable "monthly_budget_limit_usd" {
 variable "cost_alert_emails" {
   description = "Email recipients for budget and Cost Explorer anomaly alerts."
   type        = set(string)
+  default     = []
 }
 
+variable "deployment_alert_emails" {
+  description = "Email recipients for CodeDeploy lifecycle notifications."
+  type        = set(string)
+  default     = []
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for cost alert relay to #ops channel."
   type        = string
   sensitive   = true
 }
 
-variable "pagerduty_integration_key" {
-  description = <<-EOT
-    PagerDuty "Amazon SNS" integration key used to page on failed backup
-    restore verification and on sustained log error bursts. Leave empty to
-    create the topic without a PagerDuty subscription, which is useful in an
-    environment where nobody should be paged.
-  EOT
-  type      = string
-  sensitive = true
-  default   = ""
-}
-
-variable "backup_restore_test_class" {
-  description = <<-EOT
-    Instance class for the throwaway database created by the weekly restore
-    verification. Deliberately the smallest class that boots PostgreSQL: this
-    instance exists to prove the snapshot restores and the data is queryable,
-    and it is billed for the few minutes it is up.
-  EOT
-  type    = string
-  default = "db.t3.micro"
-}
-
-variable "backup_verify_alert_emails" {
-  description = "Email recipients for backup restore verification failures."
-  type        = set(string)
-  default     = []
+variable "db_instance_class" {
+  description = "RDS instance class. db.t3.micro for testnet/staging, db.t3.small for production."
+  type        = string
+  default     = "db.t3.micro"
 }

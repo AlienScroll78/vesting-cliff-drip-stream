@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { AppNotification, NotificationEventType } from "@/hooks/useNotifications";
 import { trapFocus } from "@/utils/focusTrap";
+import { NotificationListSkeleton } from "@/components/Skeletons";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
 
@@ -137,6 +138,9 @@ export function NotificationCenter() {
   const { notifications, unreadCount, markRead, markAllRead } = useNotificationContext();
   const [open, setOpen] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
+  // #823 — show skeleton rows briefly on open so the list has a stable height
+  // instead of popping between "empty" and "full".
+  const [listLoading, setListLoading] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const titleId = "notification-drawer-title";
 
@@ -172,7 +176,13 @@ export function NotificationCenter() {
       <button
         type="button"
         className="btn btn-ghost"
-        onClick={() => { setOpen(true); setShowPrefs(false); }}
+        onClick={() => {
+          setOpen(true);
+          setShowPrefs(false);
+          // #823 — brief skeleton pass so the panel doesn't jump in height.
+          setListLoading(true);
+          window.setTimeout(() => setListLoading(false), 300);
+        }}
         aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
         data-testid="notification-bell"
         style={{ position: "relative", padding: "0.35rem 0.5rem", minWidth: "auto" }}
@@ -324,7 +334,10 @@ export function NotificationCenter() {
               aria-label="Notifications list"
               style={{ flex: 1, overflowY: "auto" }}
             >
-              {notifications.length === 0 ? (
+              {listLoading ? (
+                // #823 — skeleton rows keep the panel height stable while loading.
+                <NotificationListSkeleton items={4} />
+              ) : notifications.length === 0 ? (
                 <div
                   style={{
                     display: "flex",
