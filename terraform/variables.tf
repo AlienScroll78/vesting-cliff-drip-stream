@@ -59,7 +59,7 @@ variable "monthly_budget_limit_usd" {
 }
 
 variable "cost_alert_emails" {
-  description = "Email recipients for budget and Cost Explorer anomaly alerts."
+  description = "Email recipients for budget, cost anomaly and secret rotation alerts."
   type        = set(string)
   default     = []
 }
@@ -69,8 +69,28 @@ variable "deployment_alert_emails" {
   type        = set(string)
   default     = []
 variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL for cost alert relay to #ops channel."
+  description = "Bootstrap Slack incoming webhook for the alert relay. Applied once, then managed in AWS Secrets Manager."
   type        = string
+  sensitive   = true
+}
+
+variable "db_password_rotation_days" {
+  description = "Days between automatic PostgreSQL master password rotations."
+  type        = number
+  default     = 30
+}
+
+variable "soroban_rpc_api_key" {
+  description = "Optional Soroban RPC API key. When empty a random placeholder is stored in Secrets Manager."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "sentry_dsn" {
+  description = "Optional Sentry DSN. When empty a random placeholder is stored in Secrets Manager."
+  type        = string
+  default     = ""
   sensitive   = true
 }
 

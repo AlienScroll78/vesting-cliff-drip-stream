@@ -41,8 +41,8 @@ resource "aws_ecs_task_definition" "backend" {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        "awslogs-group"         = "/ecs/vesting-backend"
-        "awslogs-region"        = "us-east-1"
+        "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+        "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
       }
     }
@@ -100,6 +100,7 @@ resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend.arn
@@ -165,9 +166,10 @@ resource "aws_iam_role" "ecs_exec" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_exec" {
-  role       = aws_iam_role.ecs_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+resource "aws_iam_role_policy" "ecs_exec" {
+  name   = "${var.environment}-ecs-exec"
+  role   = aws_iam_role.ecs_exec.id
+  policy = data.aws_iam_policy_document.ecs_exec.json
 }
 
 resource "aws_iam_role" "codedeploy" {
