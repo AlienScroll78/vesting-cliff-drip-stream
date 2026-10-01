@@ -18,9 +18,59 @@ output "alb_dns_name" {
   value       = module.compute.alb_dns_name
 }
 
+output "waf_web_acl_arn" {
+  description = "Regional WAF Web ACL ARN"
+  value       = module.compute.waf_web_acl_arn
+}
+
+output "waf_log_group_name" {
+  description = "CloudWatch log group receiving WAF decisions"
+  value       = module.compute.waf_log_group_name
+}
+
+output "waf_dashboard_name" {
+  description = "CloudWatch dashboard name for WAF metrics"
+  value       = module.compute.waf_dashboard_name
+}
+
 output "ecs_cluster_name" {
   description = "ECS cluster name"
   value       = module.compute.ecs_cluster_name
+}
+
+output "ecs_service_name" {
+  description = "ECS API service name"
+  value       = module.compute.ecs_service_name
+}
+
+output "ecs_task_definition_arn" {
+  description = "Current ECS API task definition ARN"
+  value       = module.compute.ecs_task_definition_arn
+}
+
+output "codedeploy_application_name" {
+  description = "CodeDeploy application name"
+  value       = module.compute.codedeploy_application_name
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "CodeDeploy deployment group name"
+  value       = module.compute.codedeploy_deployment_group_name
+}
+
+output "codedeploy_deployment_config_name" {
+  description = "CodeDeploy deployment configuration name"
+  value       = module.compute.codedeploy_deployment_config_name
+}
+
+output "codedeploy_notification_topic_arn" {
+  description = "CodeDeploy lifecycle notification topic ARN"
+  value       = module.compute.codedeploy_notification_topic_arn
+}
+
+output "deployment_timeout_minutes" {
+  description = "Deployment timeout enforced by CI"
+  value       = module.compute.deployment_timeout_minutes
 }
 
 output "db_endpoint" {
@@ -55,29 +105,44 @@ output "backup_failure_topic_arn" {
   value       = module.data.backup_failure_topic_arn
 }
 
-# ─── Log aggregation ──────────────────────────────────────────────────────────
+# ─── Cost monitoring ─────────────────────────────────────────────────────────
 
-output "application_log_groups" {
-  description = "Application log groups written by the Fluent Bit sidecars."
-  value       = local.ecs_log_groups
+output "monthly_budget_limit_usd" {
+  description = "Configured monthly AWS cost budget."
+  value       = var.monthly_budget_limit_usd
 }
 
-output "rds_log_group_name" {
-  description = "Log group holding the PostgreSQL audit and error logs."
-  value       = aws_cloudwatch_log_group.rds.name
+output "monthly_budget_name" {
+  description = "AWS Budget that alerts at 80% forecasted, 80% actual and 100% actual."
+  value       = aws_budgets_budget.monthly.name
 }
 
-output "logging_alert_topic_arn" {
-  description = "SNS topic that pages PagerDuty when the error alarm fires."
-  value       = aws_sns_topic.logging_alerts.arn
+output "cost_alert_topic_arn" {
+  description = "SNS topic carrying budget, anomaly and monthly report notifications."
+  value       = aws_sns_topic.cost_alerts.arn
 }
 
-output "application_error_alarm_name" {
-  description = "CloudWatch alarm on ApplicationErrorCount."
-  value       = aws_cloudwatch_metric_alarm.application_errors.alarm_name
+output "cost_allocation_tag" {
+  description = "Cost allocation tag activated in Cost Explorer."
+  value       = "${var.project_name}"
 }
 
-output "pagerduty_enabled" {
-  description = "Whether the PagerDuty SNS subscription exists."
-  value       = var.pagerduty_integration_key != ""
+output "monthly_cost_report_function" {
+  description = "Lambda that publishes the automated monthly cost report."
+  value       = aws_lambda_function.monthly_cost_report.function_name
+}
+
+output "monthly_cost_report_schedule" {
+  description = "EventBridge Scheduler schedule that triggers the monthly report."
+  value       = aws_scheduler_schedule.monthly_cost_report.name
+}
+
+output "fargate_spot_capacity_provider" {
+  description = "Capacity provider backing the Spot indexer."
+  value       = aws_capacity_provider.fargate_spot.name
+}
+
+output "indexer_service_name" {
+  description = "ECS service running the indexer on Fargate Spot."
+  value       = aws_ecs_service.indexer.name
 }
