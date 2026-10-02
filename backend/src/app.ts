@@ -4,6 +4,7 @@ import { validateAddress } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { analyticsSummaryHandler } from './routes/analyticsSummary.js';
 
 const app = express();
 
@@ -31,6 +32,9 @@ app.get(
   validate({ params: RecipientParamsSchema }),
   createScheduleController(),
 );
+
+// Analytics summary — aggregate protocol-wide statistics (Issue #745)
+app.get('/api/analytics/summary', analyticsSummaryHandler);
 
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
