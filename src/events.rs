@@ -32,7 +32,7 @@ pub struct StreamCreatedData {
 /// Emitted when a new vesting stream is created.
 ///
 /// Topics: `[Symbol("StreamCreated"), sponsor, recipient]`
-/// Data:   `StreamCreatedData { token, rate, start_ledger, cliff_ledger, end_ledger, total_deposit }`
+/// Data:   `(StreamCreatedData, metadata_hash)`
 pub fn emit_stream_created(
     env: &Env,
     sponsor: &Address,
@@ -53,6 +53,7 @@ pub fn emit_stream_created(
         end_ledger,
         total_deposit,
     };
+    // metadata is stored in the schedule; we pass it alongside data for indexers
     env.events().publish(
         (
             Symbol::new(env, "StreamCreated"),
@@ -65,7 +66,7 @@ pub fn emit_stream_created(
 
 /// Emitted when a variable-rate vesting stream is created.
 ///
-/// Topics: `["vc_vrcreat", recipient]`
+/// Topics: `["vc_vrcre", recipient]`
 /// Data:   `(sponsor, token, start_ledger, cliff_ledger, end_ledger, total_deposited)`
 pub fn emit_variable_stream_created(
     env: &Env,
@@ -313,6 +314,17 @@ pub fn emit_stream_drained(
 
 /// Emitted when the contract is initialized.
 ///
+/// Topics: `["vc_emgdr", recipient]`
+/// Data:   `(sponsor, amount)`
+pub fn emit_emergency_drain(env: &Env, recipient: &Address, sponsor: &Address, amount: i128) {
+    env.events().publish(
+        (symbol_short!("vc_emgdr"), recipient.clone()),
+        (sponsor.clone(), amount),
+    );
+}
+
+/// Emitted when the contract is initialized.
+///
 /// Topics: `["ContractInit", admin]`
 /// Data:   `(fee_bps, treasury)`
 pub fn emit_contract_initialized(env: &Env, admin: &Address, fee_bps: u32, treasury: &Address) {
@@ -322,11 +334,109 @@ pub fn emit_contract_initialized(env: &Env, admin: &Address, fee_bps: u32, treas
     );
 }
 
+/// Emitted when the contract is upgraded to a new WASM.
+///
+/// Topics: `["ContractUpgraded", admin]`
+/// Data:   `(new_wasm_hash)`
+pub fn emit_contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: &BytesN<32>) {
+    env.events().publish(
+        (Symbol::new(env, "ContractUpgraded"), admin.clone()),
+        new_wasm_hash.clone(),
+    );
+}
+
+/// Emitted when the token allowlist is updated (token added or removed).
+///
+/// Topics: `["AllowlistUpdated", admin]`
+/// Data:   `(token, added)`
+pub fn emit_allowlist_updated(env: &Env, admin: &Address, token: &Address, added: bool) {
+    env.events().publish(
+        (Symbol::new(env, "AllowlistUpdated"), admin.clone()),
+        (token.clone(), added),
+    );
+}
+
+/// Emitted when the recipient allowlist is updated.
+///
+/// Topics: `["RecipientAllowlist", admin]`
+/// Data:   `(recipient, allowed)`
+pub fn emit_recipient_allowlist_updated(
+    env: &Env,
+    admin: &Address,
+    recipient: &Address,
+    allowed: bool,
+) {
+    env.events().publish(
+        (Symbol::new(env, "RecipientAllowlist"), admin.clone()),
+        (recipient.clone(), allowed),
+    );
+}
+
+/// Emitted when a stream is paused by its sponsor.
+///
+/// Topics: `["StreamPaused", recipient]`
+/// Data:   `(sponsor, paused_at_ledger)`
+pub fn emit_stream_paused(env: &Env, recipient: &Address, sponsor: &Address, paused_at: u32) {
+    env.events().publish(
+        (Symbol::new(env, "StreamPaused"), recipient.clone()),
+        (sponsor.clone(), paused_at),
+    );
+}
+
+/// Emitted when a paused stream is resumed by its sponsor.
+///
+/// Topics: `["StreamResumed", recipient]`
+/// Data:   `(sponsor, new_end_ledger)`
+pub fn emit_stream_resumed(env: &Env, recipient: &Address, sponsor: &Address, new_end_ledger: u32) {
+    env.events().publish(
+        (Symbol::new(env, "StreamResumed"), recipient.clone()),
+        (sponsor.clone(), new_end_ledger),
+    );
+}
+
+/// Emitted when a batch of streams is created.
+///
+/// Topics: `["BatchStreamCreated", sponsor]`
+/// Data:   `(count, total_deposit)`
+pub fn emit_batch_stream_created(
+    env: &Env,
+    sponsor: &Address,
+    count: u32,
+    total_deposit: i128,
+) {
+    env.events().publish(
+        (Symbol::new(env, "BatchStreamCreated"), sponsor.clone()),
+        (count, total_deposit),
+    );
+}
+
+/// Emitted when a protocol fee is collected.
+///
+/// Topics: `["FeeCollected", sponsor]`
+/// Data:   `(treasury, amount)`
+pub fn emit_fee_collected(env: &Env, sponsor: &Address, treasury: &Address, amount: i128) {
+    env.events().publish(
+        (Symbol::new(env, "FeeCollected"), sponsor.clone()),
+        (treasury.clone(), amount),
+    );
+}
+
+/// Emitted when a milestone is claimed.
+///
+/// Topics: `["MilestoneClaimed", recipient]`
+/// Data:   `(amount)`
+pub fn emit_milestone_claimed(env: &Env, recipient: &Address, amount: i128) {
+    env.events().publish(
+        (Symbol::new(env, "MilestoneClaimed"), recipient.clone()),
+        amount,
+    );
+}
+
 // ── Multi-token events ────────────────────────────────────────────────────────
 
 /// Emitted when a new multi-token vesting stream is created.
 ///
-/// Topics: `["vmt_create", recipient]`
+/// Topics: `["vmt_crt", recipient]`
 /// Data:   `(sponsor, allocations, start_ledger, cliff_ledger, end_ledger)`
 #[allow(dead_code)]
 pub fn emit_multi_stream_created(
@@ -352,7 +462,7 @@ pub fn emit_multi_stream_created(
 
 /// Emitted when a recipient claims all vested tokens from a multi-token stream.
 ///
-/// Topics: `["vmt_claim", recipient]`
+/// Topics: `["vmt_clm", recipient]`
 /// Data:   `(ledger_claimed_through)`
 ///
 /// The per-token amounts are implicit from the stored allocations and can be
@@ -375,15 +485,13 @@ pub fn emit_multi_tokens_claimed(
 /// Data:   `()` — no additional payload; completion is self-explanatory.
 #[allow(dead_code)]
 pub fn emit_multi_stream_completed(env: &Env, recipient: &Address) {
-    env.events().publish(
-        (symbol_short!("vmt_don"), recipient.clone()),
-        (),
-    );
+    env.events()
+        .publish((symbol_short!("vmt_don"), recipient.clone()), ());
 }
 
 /// Emitted when a sponsor cancels a multi-token vesting stream.
 ///
-/// Topics: `["vmt_cancel", recipient]`
+/// Topics: `["vmt_cnl", recipient]`
 /// Data:   `(sponsor)`
 #[allow(dead_code)]
 pub fn emit_multi_stream_cancelled(env: &Env, recipient: &Address, sponsor: &Address) {

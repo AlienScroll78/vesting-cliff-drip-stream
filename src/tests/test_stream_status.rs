@@ -27,6 +27,12 @@ fn test_stream_status_not_found_when_no_schedule() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let recipient = Address::generate(&env);
     assert_eq!(client.stream_status(&recipient), StreamStatus::NotFound);
@@ -39,6 +45,12 @@ fn test_stream_status_pre_cliff_immediately_after_creation() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -55,6 +67,12 @@ fn test_stream_status_pre_cliff_one_ledger_before_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -74,6 +92,12 @@ fn test_stream_status_active_exactly_at_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -91,6 +115,12 @@ fn test_stream_status_active_mid_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -108,6 +138,12 @@ fn test_stream_status_active_one_ledger_before_end() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -127,6 +163,12 @@ fn test_stream_status_expired_exactly_at_end_ledger() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -144,6 +186,12 @@ fn test_stream_status_expired_well_past_end() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -163,6 +211,12 @@ fn test_stream_status_not_found_after_full_claim() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -172,7 +226,7 @@ fn test_stream_status_not_found_after_full_claim() {
     create_stream(&client, &sponsor, &recipient, &token_id);
 
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     assert_eq!(client.stream_status(&recipient), StreamStatus::NotFound);
 }
@@ -182,6 +236,12 @@ fn test_stream_status_not_found_after_cancel() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -189,7 +249,7 @@ fn test_stream_status_not_found_after_cancel() {
     mint_to(&env, &token_id, &sponsor, 5_000);
 
     create_stream(&client, &sponsor, &recipient, &token_id);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(client.stream_status(&recipient), StreamStatus::NotFound);
 }

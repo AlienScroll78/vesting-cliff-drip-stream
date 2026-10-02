@@ -3,6 +3,7 @@ import { useWallet } from '../contexts/WalletContext'
 import { Tooltip } from '../Tooltip'
 import { tokenSchema } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData
@@ -87,12 +88,14 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
           <Tooltip content="Stellar Asset Contract (SAC) address starting with C. Must be an issued Soroban token on this network." />
         </span>
         <input
+          id="wizard-token-custom-input"
           type="text"
           placeholder="C…"
           value={custom}
           onChange={e => handleCustomChange(e.target.value.trim())}
           onBlur={handleBlur}
           aria-invalid={!!schemaError}
+          aria-describedby={schemaError ? "wizard-token-custom-error" : undefined}
           style={{
             ...styles.input,
             borderColor: schemaError ? 'var(--color-cancelled)' : 'var(--color-border)',
@@ -100,7 +103,7 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
           data-testid="wizard-token-custom"
         />
         {schemaError && (
-          <span role="alert" style={styles.error} data-testid="token-error">
+          <span id="wizard-token-custom-error" role="alert" style={styles.error} data-testid="token-error">
             {schemaError}
           </span>
         )}

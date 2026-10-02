@@ -9,7 +9,7 @@
 //! 3. Once the cliff passes, all tokens accrued since `start_ledger` unlock instantly.
 //! 4. Remaining tokens continue to drip linearly per ledger until `end_ledger`.
 //!
-//! ## Fixed-Point Rates (Issue #5)
+//! ## Fixed-Point Rates
 //! `rate_per_ledger` is stored scaled by `RATE_DECIMALS = 10_000_000`.
 //! Pass `rate = 10_000_000` for 1 token/ledger, `rate = 5_000_000` for 0.5/ledger.
 
@@ -24,6 +24,7 @@ extern crate std;
 mod contract;
 mod error;
 mod events;
+mod migration;
 mod storage;
 mod types;
 

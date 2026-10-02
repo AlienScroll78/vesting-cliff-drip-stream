@@ -1,4 +1,5 @@
 import type { WizardStep } from './useWizard'
+import styles from './wizard.module.css'
 
 const LABELS: Record<WizardStep, string> = {
   recipient: 'Recipient',
