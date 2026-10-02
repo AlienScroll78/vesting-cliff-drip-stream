@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { abbreviateAmount, formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
-import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 import { VestingStream } from "@/types";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
+import { TransactionReviewSummary } from "@/components/TransactionReviewSummary";
 
 /** Convert a ledger count to a human-readable duration string (~5 s/ledger). */
 function ledgersToHuman(ledgers: number): string {
@@ -38,7 +38,6 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
   const [claimed, setClaimed] = useState(false);
   const [justSucceeded, setJustSucceeded] = useState(false);
   const [optimisticAmount, setOptimisticAmount] = useState(claimableAmount);
-  const [fee, setFee] = useState<FeeEstimate | null | "loading">("loading");
   const [txError, setTxError] = useState<string | null>(null);
   const [translateY, setTranslateY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -60,10 +59,6 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
     stream.totalDeposit && stream.totalDeposit > 0
       ? Math.min(100, ((stream.totalVested ?? 0) / stream.totalDeposit) * 100)
       : null;
-
-  useEffect(() => {
-    estimateFee().then(setFee);
-  }, []);
 
   // ── Touch / drag to dismiss ─────────────────────────────────────────────────
 
@@ -358,29 +353,8 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
             </div>
           )}
 
-          {/* Fee estimate */}
-          <div
-            data-testid="fee-estimate"
-            style={{
-              fontSize: "0.82rem",
-              color: fee === null ? "var(--color-cancelled)" : "#6b7280",
-              marginBottom: "0.5rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.35rem",
-              width: "100%",
-            }}
-            aria-live="polite"
-          >
-            {fee === "loading" && <span data-testid="fee-loading">⏳ Estimating fee…</span>}
-            {fee === null && <span data-testid="fee-unknown">⚠️ Fee estimate unavailable</span>}
-            {fee !== null && fee !== "loading" && (
-              <span data-testid="fee-value">
-                Estimated fee: <strong>{fee.xlm} XLM</strong>
-                {fee.usd && <> ({fee.usd})</>}
-              </span>
-            )}
-          </div>
+          {/* Transaction review: fee in XLM + USD, warning, ETA, raw XDR */}
+          <TransactionReviewSummary kind="claim" />
 
           {/* Error */}
           {txError && (

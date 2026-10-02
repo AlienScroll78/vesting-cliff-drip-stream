@@ -344,6 +344,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/smoke/requirements.txt
+
+      - name: Install smoke test dependencies
+        run: pip install -r tests/smoke/requirements.txt
+
       - name: Install Stellar CLI
         run: |
           curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
