@@ -8,7 +8,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, token, Address, BytesN, 
 use crate::{
     error::VestingError,
     events, storage,
-    types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule},
+    types::{DataKey, RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule},
 };
 
 /// ~1 year at ~5 s/ledger.
@@ -1258,6 +1258,62 @@ impl VestingDrips {
             return Err(VestingError::InvalidRate);
         }
         storage::set_min_deposit(&env, min_deposit);
+        Ok(())
+    }
+
+    /// Permissionless TTL refresh for a fixed-rate vesting stream (Issue #727).
+    ///
+    /// Any address may call this to extend the persistent storage TTL of a
+    /// recipient's schedule entry so it survives beyond the standard ~60-day
+    /// passive bump window. This is critical for multi-year streams that may
+    /// have extended periods of inactivity between claims.
+    ///
+    /// The TTL is extended to cover at least `end_ledger + TTL_BUFFER_LEDGERS`
+    /// (capped at Soroban's maximum, `PERSISTENT_BUMP_AMOUNT`). Schedule state
+    /// is **not modified** — this function is purely a storage maintenance call.
+    ///
+    /// Off-chain keepers should call this function periodically for any stream
+    /// whose `end_ledger` is more than `PERSISTENT_BUMP_AMOUNT` ledgers away
+    /// from the current ledger.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No active fixed-rate schedule exists for `recipient`.
+    pub fn keeper_bump(env: Env, recipient: Address) -> Result<(), VestingError> {
+        // Read without modifying — ensure_ttl_for_stream is called inside
+        // get_schedule_readonly to set the proactive TTL based on end_ledger.
+        storage::get_schedule_readonly(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        // Bump instance storage as well so it stays in sync.
+        storage::bump_instance(&env);
+
+        Ok(())
+    }
+
+    /// Permissionless TTL refresh for a variable-rate vesting stream (Issue #727).
+    ///
+    /// Equivalent to `keeper_bump` but operates on variable-rate (`create_variable_stream`)
+    /// schedules. Any address may call this to extend persistent storage TTL for
+    /// the recipient's variable-rate schedule without modifying schedule state.
+    ///
+    /// # Errors
+    /// * `ScheduleNotFound` – No active variable-rate schedule exists for `recipient`.
+    pub fn keeper_bump_variable(env: Env, recipient: Address) -> Result<(), VestingError> {
+        let schedule = storage::get_variable_schedule_readonly(&env, &recipient)
+            .ok_or(VestingError::ScheduleNotFound)?;
+
+        // Proactively extend the variable schedule's persistent TTL.
+        let key = crate::types::DataKey::VariableSchedule(recipient.clone());
+        if env.storage().persistent().has(&key) {
+            let ttl = storage::compute_stream_ttl(&env, schedule.end_ledger);
+            env.storage().persistent().extend_ttl(
+                &key,
+                storage::PERSISTENT_LEDGER_THRESHOLD,
+                ttl.max(storage::PERSISTENT_BUMP_AMOUNT),
+            );
+        }
+        storage::bump_instance(&env);
+
         Ok(())
     }
 
