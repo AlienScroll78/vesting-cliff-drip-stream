@@ -7,6 +7,39 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },
+  build: {
+    // #771 — code splitting: keep initial bundle lean
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          // Vendor: React core
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
+            return "vendor-react";
+          }
+          // Wallet SDK
+          if (id.includes("node_modules/@stellar")) {
+            return "vendor-wallet-sdk";
+          }
+          // Charts (recharts + dependencies)
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3") || id.includes("node_modules/victory")) {
+            return "vendor-charts";
+          }
+          // Animation
+          if (id.includes("node_modules/framer-motion")) {
+            return "vendor-animations";
+          }
+          // i18n
+          if (id.includes("node_modules/i18next") || id.includes("node_modules/react-i18next")) {
+            return "vendor-i18n";
+          }
+          // Admin pages (rarely visited)
+          if (id.includes("/src/app/admin")) {
+            return "page-admin";
+          }
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

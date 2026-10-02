@@ -1,0 +1,5 @@
+---
+source: src/tests/test_insta_event_snapshots.rs
+expression: "serde_json::json!({\n            \"event\": \"TokensClaimed\",\n            \"symbol\": \"vc_claim\",\n            \"topics\": {\n                \"count\": 2,\n                \"0\": { \"type\": \"Symbol\", \"value\": \"vc_claim\" },\n                \"1\": { \"type\": \"Address\", \"description\": \"recipient\" }\n            },\n            \"data\": {\n                \"count\": 2,\n                \"0\": { \"type\": \"i128\", \"description\": \"amount claimed\",          \"example\": 1000 },\n                \"1\": { \"type\": \"u32\",  \"description\": \"ledger_claimed_through\",  \"example\": 200  }\n            }\n        })\n        .to_string()"
+---
+{"data":{"0":{"description":"amount claimed","example":1000,"type":"i128"},"1":{"description":"ledger_claimed_through","example":200,"type":"u32"},"count":2},"event":"TokensClaimed","symbol":"vc_claim","topics":{"0":{"type":"Symbol","value":"vc_claim"},"1":{"description":"recipient","type":"Address"},"count":2}}

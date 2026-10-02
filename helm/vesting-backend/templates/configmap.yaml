@@ -12,4 +12,8 @@ data:
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   REQUEST_TIMEOUT_MS: {{ .Values.config.requestTimeoutMs | quote }}
   GRAPHQL_MAX_DEPTH: {{ .Values.config.graphqlMaxDepth | quote }}
+  RATE_LIMIT_READ_MAX: {{ .Values.config.rateLimitReadMax | quote }}
+  RATE_LIMIT_BUILD_TX_MAX: {{ .Values.config.rateLimitBuildTxMax | quote }}
+  RATE_LIMIT_ADMIN_MAX: {{ .Values.config.rateLimitAdminMax | quote }}
+  RATE_LIMIT_WINDOW_SEC: {{ .Values.config.rateLimitWindowSec | quote }}
   SERVICE_NAME: {{ include "vesting-backend.fullname" . | quote }}

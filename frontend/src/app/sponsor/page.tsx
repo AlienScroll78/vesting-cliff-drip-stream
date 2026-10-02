@@ -1,4 +1,11 @@
 "use client";
+/**
+ * Sponsor dashboard — #776
+ *
+ * Shows all vesting streams the connected wallet has sponsored.
+ * Includes the full cancel stream flow: preview modal → address confirmation →
+ * transaction signing → optimistic status update with rollback on failure.
+ */
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/contexts/WalletContext";
@@ -107,6 +114,7 @@ export default function SponsorPage() {
     }
 
     fetchStreams();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, page]);
 
   const handleExportCsv = useCallback(() => {
@@ -180,6 +188,15 @@ export default function SponsorPage() {
         onCancelStream={handleCancelStream}
         onViewDetails={handleViewDetails}
       />
+
+      {/* Cancel stream confirmation modal — rendered portal-style at page root */}
+      {cancelTargetStream && (
+        <CancelStreamModal
+          stream={cancelTargetStream}
+          onSuccess={handleCancelSuccess}
+          onClose={handleCancelClose}
+        />
+      )}
     </div>
   );
 }

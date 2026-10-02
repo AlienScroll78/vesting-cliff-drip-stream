@@ -19,6 +19,13 @@
  *   StreamListSkeleton          — list of StreamCardSkeletons (max 3)
  *   DashboardSkeleton           — StatsRow + StreamList
  *   FormSkeleton                — generic form field skeleton
+ *   SponsorStreamListSkeleton   — sponsor list rows with varying widths (#823)
+ *   StreamExplorerSkeleton      — explorer table rows (#823)
+ *   NotificationListSkeleton    — notification items (#823)
+ *   AnalyticsSummarySkeleton    — stat cards + chart placeholder (#823)
+ *
+ * Motion: the shimmer is a CSS animation that is switched off entirely under
+ * `prefers-reduced-motion: reduce`, leaving a static placeholder block.
  */
 
 import React from "react";
@@ -250,6 +257,22 @@ export function FormSkeleton({ fields = 4 }: { fields?: number }) {
         shape="rect"
         style={{ marginTop: "0.5rem", borderRadius: "0.5rem" }}
       />
+    </div>
+  );
+}
+
+/** Generic full-page loading skeleton for routes with no specific skeleton. */
+export function FullPageSkeleton() {
+  return (
+    <div
+      style={{ padding: "2rem", maxWidth: 720, margin: "0 auto" }}
+      aria-busy="true"
+      aria-label="Loading page"
+    >
+      <Skeleton width="40%" height="1.75rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="1rem" style={{ marginBottom: "0.5rem" }} />
+      <Skeleton width="80%" height="1rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="8rem" shape="rect" style={{ borderRadius: "0.5rem" }} />
     </div>
   );
 }

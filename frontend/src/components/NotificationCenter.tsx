@@ -89,6 +89,27 @@ function NotificationItem({
           {notification.message}
         </p>
       </div>
+
+      {/* Dismiss button */}
+      <button
+        type="button"
+        aria-label={`Dismiss notification: ${notification.title}`}
+        data-testid={`dismiss-notification-${notification.id}`}
+        onClick={(e) => { e.stopPropagation(); onDismiss(notification.id); }}
+        style={{
+          flexShrink: 0,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#9ca3af",
+          fontSize: "0.85rem",
+          padding: "0.1rem 0.25rem",
+          lineHeight: 1,
+          alignSelf: "flex-start",
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -311,6 +332,49 @@ export function NotificationCenter() {
                 </button>
               </div>
             </div>
+
+            {/* Browser push permission prompt */}
+            {showCliffReachedPrompt && (
+              <div
+                data-testid="push-permission-prompt"
+                role="alert"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  background: "var(--color-bg)",
+                  borderBottom: "1px solid var(--color-border)",
+                  flexShrink: 0,
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: "1.25rem", flexShrink: 0 }}>🔔</span>
+                <p style={{ flex: 1, fontSize: "0.825rem", margin: 0, lineHeight: 1.4 }}>
+                  Your cliff was reached! Enable browser notifications to stay
+                  updated even when the app is in the background.
+                </p>
+                <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={() => void requestPermission()}
+                    data-testid="push-permission-enable"
+                  >
+                    Enable
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={dismissPrompt}
+                    data-testid="push-permission-dismiss"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Preferences panel */}
             {showPrefs && (
