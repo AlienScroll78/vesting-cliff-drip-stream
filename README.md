@@ -78,6 +78,8 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 
 A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
 
+> For the full event schema with field types, topic discriminators, and XDR/JSON examples for indexers, see [docs/events.md](docs/events.md).
+
 ```mermaid
 flowchart TD
     UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
