@@ -28,10 +28,17 @@ export function ContractErrorState({
   onRetry,
   className,
 }: ContractErrorStateProps) {
+  const { t } = useTranslation();
   const info = getErrorInfo(code);
   const isNetwork = info.category === "network";
   const isUnexpected = info.category === "unexpected";
   const showRetry = info.retryable && onRetry;
+
+  // Look copy up by i18n key, falling back to the English string in the map so
+  // a missing translation still renders readable text (#821).
+  const title = t(`${info.i18nKey}.title`, info.title);
+  const explanation = t(`${info.i18nKey}.explanation`, info.explanation);
+  const action = t(`${info.i18nKey}.action`, info.action);
 
   return (
     <div

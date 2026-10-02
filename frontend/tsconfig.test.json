@@ -4,5 +4,5 @@
     "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
     "noEmit": true
   },
-  "include": ["**/*.test.ts", "**/*.test.tsx", "src/test/setup.ts"]
+  "include": ["**/*.test.ts", "**/*.test.tsx", "src/**/*.d.ts", "src/test/setup.ts"]
 }

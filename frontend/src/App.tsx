@@ -45,6 +45,8 @@ function App() {
   return (
     // #121 — page fade-in on mount
     <PageTransition>
+      {/* #820 — first-time-user onboarding tour */}
+      <OnboardingTour />
       <section id="center">
         <div className="hero">
           <img src={heroImg} className="base" width="170" height="179" alt="" />

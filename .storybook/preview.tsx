@@ -10,7 +10,6 @@ const preview: Preview = {
     chromatic: {
       viewports: [390, 768, 1280],
     },
-    // A11y addon: run WCAG 2.0 A/AA and 2.1 AA checks on every story
     a11y: {
       config: {},
       options: {

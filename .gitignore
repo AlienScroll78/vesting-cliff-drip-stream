@@ -10,8 +10,26 @@ package-lock.json
 proptest-regressions/
 test_snapshots/
 
+# Terraform
+terraform/**/*.zip
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/tfplan
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+
 # Frontend
 frontend/node_modules/
 frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
+
+# Terraform
+**/.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars.local
+terraform/drift-plan.txt

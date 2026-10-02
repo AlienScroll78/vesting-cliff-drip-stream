@@ -1,0 +1,148 @@
+name: ECS Blue Green Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_definition_arn:
+        description: "ECS task definition ARN to deploy"
+        required: false
+        type: string
+      smoke_test_url:
+        description: "Base URL for the green test listener"
+        required: false
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - "terraform/modules/compute/**"
+      - ".github/workflows/blue-green-deploy.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ecs-blue-green-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECS_CLUSTER_NAME: ${{ vars.ECS_CLUSTER_NAME || 'staging-vesting' }}
+  ECS_SERVICE_NAME: ${{ vars.ECS_SERVICE_NAME || 'vesting-backend' }}
+  CODEFPLOY_APPLICATION_NAME: ${{ vars.CODEDEPLOY_APPLICATION_NAME || 'staging-vesting-api' }}
+  CODEFPLOY_DEPLOYMENT_GROUP_NAME: ${{ vars.CODEDEPLOY_DEPLOYMENT_GROUP_NAME || 'staging-vesting-api' }}
+  TASK_DEFINITION_ARN: ${{ inputs.task_definition_arn || vars.ECS_TASK_DEFINITION_ARN }}
+  CONTAINER_NAME: ${{ vars.ECS_CONTAINER_NAME || 'vesting-backend' }}
+  CONTAINER_PORT: ${{ vars.ECS_CONTAINER_PORT || '8080' }}
+  SMOKE_TEST_URL: ${{ inputs.smoke_test_url || vars.SMOKE_TEST_URL }}
+  DEPLOYMENT_TIMEOUT_MINUTES: ${{ vars.DEPLOYMENT_TIMEOUT_MINUTES || '15' }}
+
+jobs:
+  deploy:
+    name: Create CodeDeploy blue-green deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate deployment inputs
+        run: |
+          test -n "$TASK_DEFINITION_ARN" || {
+            echo "Set ECS_TASK_DEFINITION_ARN or provide task_definition_arn."
+            exit 1
+          }
+          test -n "$SMOKE_TEST_URL" || {
+            echo "Set SMOKE_TEST_URL or provide smoke_test_url."
+            exit 1
+          }
+          test "$DEPLOYMENT_TIMEOUT_MINUTES" -le 15 || {
+            echo "DEPLOYMENT_TIMEOUT_MINUTES must not exceed 15."
+            exit 1
+          }
+
+      - name: Verify ECS service exists
+        run: |
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER_NAME" \
+            --services "$ECS_SERVICE_NAME" \
+            --query 'services[0].serviceName' \
+            --output text | grep -Fx "$ECS_SERVICE_NAME"
+
+      - name: Create CodeDeploy AppSpec revision
+        run: |
+          cat > appspec.yml <<EOF
+          version: 0.0
+          Resources:
+            - TargetService:
+                Type: AWS::ECS::Service
+                Properties:
+                  TaskDefinition: ${TASK_DEFINITION_ARN}
+                  LoadBalancerInfo:
+                    ContainerName: ${CONTAINER_NAME}
+                    ContainerPort: ${CONTAINER_PORT}
+                  PlatformVersion: LATEST
+          EOF
+          jq -n --arg content "$(cat appspec.yml)" \
+            '{revisionType: "AppSpecContent", appSpecContent: {content: $content}}' > revision.json
+
+      - name: Start CodeDeploy deployment
+        id: deployment
+        run: |
+          REVISION_JSON=$(cat revision.json)
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name "$CODEDEPLOY_APPLICATION_NAME" \
+            --deployment-group-name "$CODEDEPLOY_DEPLOYMENT_GROUP_NAME" \
+            --revision "$REVISION_JSON" \
+            --description "Blue-green deployment ${GITHUB_SHA}" \
+            --output json | jq -r '.deploymentId')
+          test -n "$DEPLOYMENT_ID" && test "$DEPLOYMENT_ID" != "null"
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "Deployment ID: $DEPLOYMENT_ID"
+
+      - name: Poll deployment and run bake smoke tests
+        env:
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 "$DEPLOYMENT_TIMEOUT_MINUTES"); do
+            STATUS=$(aws deploy get-deployment \
+              --deployment-id "$DEPLOYMENT_ID" \
+              --query 'deploymentInfo.status' \
+              --output text)
+
+            case "$STATUS" in
+              Succeeded)
+                echo "CodeDeploy deployment succeeded."
+                exit 0
+                ;;
+              Failed|Stopped|Superseded|ReplacementFailed)
+                echo "CodeDeploy deployment ended with status $STATUS."
+                exit 1
+                ;;
+            esac
+
+            if [ -n "$SMOKE_TEST_URL" ]; then
+              if ! curl --fail --silent --show-error --max-time 10 "${SMOKE_TEST_URL%/}/health" >/dev/null; then
+                aws deploy stop-deployment \
+                  --deployment-id "$DEPLOYMENT_ID" \
+                  --auto-rollback-enabled
+                echo "Green health smoke test failed; automatic rollback requested."
+                exit 1
+              fi
+            fi
+
+            sleep 60
+          done
+
+          aws deploy stop-deployment \
+            --deployment-id "$DEPLOYMENT_ID" \
+            --auto-rollback-enabled
+          echo "Deployment exceeded the configured timeout; automatic rollback requested."
+          exit 1
