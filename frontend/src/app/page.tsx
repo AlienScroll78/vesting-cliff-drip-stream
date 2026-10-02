@@ -1,14 +1,16 @@
 "use client";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "@/i18n";
 import { WalletButton } from "@/components/WalletButton";
 import { StatusBadge, StatusLegend } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
+import { ClaimButton } from "@/components/ClaimButton";
 import { CancelConfirmModal } from "@/components/CancelConfirmModal";
 import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
-import { SponsorStreamListEmpty } from "@/components/EmptyStates";
+import { NewUserEmpty } from "@/components/EmptyStates";
+import { useWallet } from "@/contexts/WalletContext";
 import { StreamListSkeleton } from "@/components/Skeletons";
 import { CopyButton } from "@/components/CopyButton";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
@@ -18,6 +20,10 @@ import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #820 — first-time-user onboarding tour
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { ReplayTourButton } from "@/components/ReplayTourButton";
+import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -110,7 +116,7 @@ function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamCla
   const [optimisticAmount, setOptimisticAmount] = useState(stream.claimableAmount);
 
   const claimFn = useCallback(async (_recipient: string): Promise<number> => {
-    analytics.claimSubmitted(stream.token, optimisticAmount);
+    analytics.claimInitiated(stream.token);
     // TODO: replace with real Soroban SDK call:
     // return await sorobanClient.claimVested(recipient);
     await new Promise((r) => setTimeout(r, 1_200));
@@ -120,11 +126,11 @@ function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamCla
   const { state, claim } = useClaimVested({
     claimFn,
     recipient: stream.recipient,
-    onSuccess: (amount) => {
+    onSuccess: () => {
       // Optimistic update: zero out the claimable amount
       setOptimisticAmount(0);
       setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
-      analytics.claimSubmitted(stream.token, amount);
+      analytics.claimCompleted(stream.token);
     },
   });
 
@@ -167,6 +173,7 @@ function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamCla
 
 function StreamList() {
   const { t } = useTranslation();
+  const { address } = useWallet();
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
@@ -188,7 +195,7 @@ function StreamList() {
   });
 
   async function handleClaim() {
-    if (claimTarget) analytics.claimSubmitted(claimTarget.token, claimTarget.claimableAmount);
+    if (claimTarget) analytics.claimInitiated(claimTarget.token);
     const target = claimTarget;
     setClaimTarget(null);
     setPending();
@@ -215,11 +222,7 @@ function StreamList() {
   if (loading) return <StreamListSkeleton count={4} />;
 
   if (MOCK_STREAMS.length === 0) {
-    return (
-      <SponsorStreamListEmpty
-        onCreateStream={() => { analytics.streamCreated("USDC"); }}
-      />
-    );
+    return <NewUserEmpty address={address} />;
   }
 
   return (
@@ -292,6 +295,7 @@ function StreamList() {
                         setClaimTarget(s);
                       }}
                       data-testid={`claim-btn-${s.id}`}
+                      data-tour="claim"
                     >
                       {t("claim")}
                     </button>
@@ -301,6 +305,7 @@ function StreamList() {
             </div>
 
             <SegmentedProgressBar
+              data-tour="claimable"
               total={s.totalDeposit ?? 3000}
               dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? (s.totalDeposit ?? 3000) : 0}
               cliffCatchUp={s.status === "active" ? 500 : 0}
@@ -387,6 +392,7 @@ export default function Home() {
               style={{ whiteSpace: "nowrap" }}
               onClick={() => setShowCreate((v) => !v)}
               aria-expanded={showCreate}
+              aria-controls="create-stream-section"
               data-testid="toggle-create-form"
             >
               {showCreate ? "✕ Cancel" : "+ New Stream"}
@@ -403,7 +409,9 @@ export default function Home() {
         )}
 
         {showCreate && (
-          <CreateStreamWizard onClose={() => setShowCreate(false)} />
+          <section id="create-stream-section" aria-label="Create new vesting stream">
+            <CreateStreamWizard onClose={() => setShowCreate(false)} />
+          </section>
         )}
 
         <StreamList />

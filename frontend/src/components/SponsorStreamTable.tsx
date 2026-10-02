@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
 import { StatusBadge } from "./StatusBadge";
+import { StreamExplorerSkeleton } from "./Skeletons";
 import styles from "./SponsorStreamTable.module.css";
 
 interface SponsorStreamTableProps {

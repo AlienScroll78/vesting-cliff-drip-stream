@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ledgersToDuration, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData

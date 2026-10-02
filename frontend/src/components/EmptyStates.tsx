@@ -1,181 +1,351 @@
 "use client";
-import type { ReactNode } from "react";
 
-// ── Base layout ───────────────────────────────────────────────────────────────
+import { useCallback, useId, useState, type ReactNode } from "react";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
+import { formatAmount } from "@/utils/formatAmount";
+import type { StreamCompletionEvidence } from "@/utils/streamCompletion";
+import styles from "./EmptyStates.module.css";
 
-interface EmptyStateProps {
+export { isExpiredAndFullyClaimed } from "@/utils/streamCompletion";
+
+const COLORS = {
+  surface: "var(--color-bg-surface, var(--color-surface, var(--color-neutral-800, #1e293b)))",
+  text: "var(--color-text-primary, var(--color-text, var(--color-neutral-900, #0f172a)))",
+  secondary: "var(--color-text-secondary, var(--color-text, var(--color-neutral-600, #475569)))",
+  primary: "var(--color-brand-primary, var(--color-active, var(--color-primary-600, #7c3aed)))",
+  accent: "var(--color-accent, var(--color-secondary-500, #06b6d4))",
+  success: "var(--color-success, var(--color-completed, var(--color-success-500, #10b981)))",
+  warning: "var(--color-warning, var(--color-pre-cliff, var(--color-warning-500, #f59e0b)))",
+  danger: "var(--color-danger, var(--color-cancelled, var(--color-error-500, #ef4444)))",
+  contrast: "var(--color-neutral-50, #f8fafc)",
+  muted: "var(--color-neutral-300, var(--color-neutral-500, #94a3b8))",
+};
+
+export interface EmptyStateProps {
   illustration: ReactNode;
   heading: string;
-  subtext: string;
-  cta: ReactNode;
+  subtext?: ReactNode;
+  cta?: ReactNode;
+  testId?: string;
+  stateId?: string;
+  className?: string;
 }
 
-function EmptyState({ illustration, heading, subtext, cta }: EmptyStateProps) {
+export function EmptyState({
+  illustration,
+  heading,
+  subtext,
+  cta,
+  testId = "empty-state",
+  stateId,
+  className,
+}: EmptyStateProps) {
+  const id = useId();
+  const headingId = `${id}-heading`;
+  const subtextId = `${id}-subtext`;
+
   return (
-    <div
-      data-testid="empty-state"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "3rem 1.5rem",
-        textAlign: "center",
-        gap: "0.75rem",
-      }}
+    <section
+      role="region"
+      aria-labelledby={headingId}
+      aria-describedby={subtext ? subtextId : undefined}
+      data-testid={testId}
+      data-state={stateId}
+      className={`${styles.emptyState}${className ? ` ${className}` : ""}`}
     >
-      <div style={{ marginBottom: "0.5rem" }}>{illustration}</div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)", margin: 0 }}>
+      <div className={styles.illustration}>{illustration}</div>
+      <h2 id={headingId} className={styles.heading}>
         {heading}
       </h2>
-      <p style={{ fontSize: "0.9rem", color: "#6b7280", maxWidth: "26rem", margin: 0, lineHeight: 1.6 }}>
-        {subtext}
-      </p>
-      <div style={{ marginTop: "0.5rem" }}>{cta}</div>
-    </div>
+      {subtext && (
+        <div id={subtextId} className={styles.subtext}>
+          {subtext}
+        </div>
+      )}
+      {cta && <div className={styles.actionGroup}>{cta}</div>}
+    </section>
   );
 }
 
-// ── SVG illustrations ─────────────────────────────────────────────────────────
-// All use currentColor so they adapt to dark mode automatically.
-// Stroke colours reference CSS vars; background fills use opacity so they
-// stay readable on both light (#f9fafb) and dark (#0f172a) backgrounds.
+function Illustration({
+  label,
+  testId,
+  children,
+}: {
+  label: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <svg
+      width="120"
+      height="100"
+      viewBox="0 0 120 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label={label}
+      data-testid={testId}
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
 
 function StreamsIllustration() {
   return (
-    <svg
-      width="120"
-      height="100"
-      viewBox="0 0 120 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="No streams illustration"
-      role="img"
+    <Illustration
+      label="An address card with a share arrow, representing an address ready to share"
+      testId="empty-illustration-new-user"
     >
-      {/* Background circle */}
-      <circle cx="60" cy="50" r="44" fill="var(--color-active)" fillOpacity="0.08" />
-      {/* Coin stack */}
-      <ellipse cx="60" cy="68" rx="22" ry="7" fill="var(--color-active)" fillOpacity="0.18" stroke="var(--color-active)" strokeWidth="1.5" />
-      <ellipse cx="60" cy="60" rx="22" ry="7" fill="var(--color-surface)" stroke="var(--color-active)" strokeWidth="1.5" />
-      <ellipse cx="60" cy="52" rx="22" ry="7" fill="var(--color-surface)" stroke="var(--color-active)" strokeWidth="1.5" />
-      {/* Stream flow arrow */}
-      <path d="M38 38 Q60 28 82 38" stroke="var(--color-active)" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round" fill="none" />
-      <polyline points="76,34 82,38 76,42" stroke="var(--color-active)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      {/* Plus circle */}
-      <circle cx="60" cy="22" r="10" fill="var(--color-active)" />
-      <line x1="60" y1="17" x2="60" y2="27" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
-      <line x1="55" y1="22" x2="65" y2="22" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function HistoryIllustration() {
-  return (
-    <svg
-      width="120"
-      height="100"
-      viewBox="0 0 120 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="No transaction history illustration"
-      role="img"
-    >
-      <circle cx="60" cy="50" r="44" fill="var(--color-pre-cliff)" fillOpacity="0.08" />
-      {/* Clock face */}
-      <circle cx="60" cy="50" r="26" fill="var(--color-surface)" stroke="var(--color-pre-cliff)" strokeWidth="2" />
-      {/* Clock hands */}
-      <line x1="60" y1="50" x2="60" y2="33" stroke="var(--color-pre-cliff)" strokeWidth="2.5" strokeLinecap="round" />
-      <line x1="60" y1="50" x2="71" y2="57" stroke="var(--color-pre-cliff)" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="60" cy="50" r="2.5" fill="var(--color-pre-cliff)" />
-      {/* Tick marks */}
-      <line x1="60" y1="25" x2="60" y2="29" stroke="var(--color-pre-cliff)" strokeWidth="2" strokeLinecap="round" />
-      <line x1="60" y1="71" x2="60" y2="75" stroke="var(--color-pre-cliff)" strokeWidth="2" strokeLinecap="round" />
-      <line x1="35" y1="50" x2="39" y2="50" stroke="var(--color-pre-cliff)" strokeWidth="2" strokeLinecap="round" />
-      <line x1="81" y1="50" x2="85" y2="50" stroke="var(--color-pre-cliff)" strokeWidth="2" strokeLinecap="round" />
-      {/* Mailbox flag */}
-      <rect x="80" y="28" width="16" height="20" rx="2" fill="var(--color-surface)" stroke="var(--color-pre-cliff)" strokeWidth="1.5" />
-      <line x1="88" y1="28" x2="88" y2="48" stroke="var(--color-pre-cliff)" strokeWidth="1.5" />
-      <line x1="80" y1="38" x2="96" y2="38" stroke="var(--color-pre-cliff)" strokeWidth="1.5" />
-      <path d="M96 33 L100 36 L96 39" stroke="var(--color-pre-cliff)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  );
-}
-
-function SearchIllustration() {
-  return (
-    <svg
-      width="120"
-      height="100"
-      viewBox="0 0 120 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="No search results illustration"
-      role="img"
-    >
-      <circle cx="60" cy="50" r="44" fill="var(--color-completed)" fillOpacity="0.08" />
-      {/* Magnifier */}
-      <circle cx="52" cy="44" r="18" fill="var(--color-surface)" stroke="var(--color-completed)" strokeWidth="2.5" />
-      <line x1="65" y1="57" x2="80" y2="72" stroke="var(--color-completed)" strokeWidth="3" strokeLinecap="round" />
-      {/* X inside magnifier */}
-      <line x1="44" y1="36" x2="60" y2="52" stroke="var(--color-completed)" strokeWidth="2" strokeLinecap="round" />
-      <line x1="60" y1="36" x2="44" y2="52" stroke="var(--color-completed)" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+      <circle cx="60" cy="50" r="44" fill={COLORS.primary} fillOpacity="0.08" />
+      <rect x="26" y="38" width="46" height="32" rx="6" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <path d="M34 48H64M34 56H58M34 64H52" stroke={COLORS.secondary} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="88" cy="28" r="13" fill={COLORS.accent} />
+      <path d="M82 28H94M88 22V34" stroke={COLORS.contrast} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M78 82C88 76 93 68 96 58" stroke={COLORS.primary} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="4 4" />
+      <polyline points="90,58 96,58 96,64" stroke={COLORS.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </Illustration>
   );
 }
 
 function SponsorIllustration() {
   return (
-    <svg
-      width="120"
-      height="100"
-      viewBox="0 0 120 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="No sponsored streams illustration"
-      role="img"
+    <Illustration
+      label="A person beside a growing plant, representing rewards for a team"
+      testId="empty-illustration-sponsor"
     >
-      <circle cx="60" cy="50" r="44" fill="var(--color-active)" fillOpacity="0.08" />
-      {/* Person silhouette */}
-      <circle cx="60" cy="34" r="12" fill="var(--color-surface)" stroke="var(--color-active)" strokeWidth="2" />
-      <path d="M36 72c0-13.3 10.7-24 24-24s24 10.7 24 24" stroke="var(--color-active)" strokeWidth="2" fill="none" />
-      {/* Seedling / sprout */}
-      <line x1="60" y1="80" x2="60" y2="64" stroke="var(--color-completed)" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M60 74 Q70 68 72 58" stroke="var(--color-completed)" strokeWidth="2" strokeLinecap="round" fill="none" />
-      <path d="M60 70 Q50 64 48 54" stroke="var(--color-completed)" strokeWidth="2" strokeLinecap="round" fill="none" />
-    </svg>
+      <circle cx="60" cy="50" r="44" fill={COLORS.primary} fillOpacity="0.08" />
+      <circle cx="46" cy="36" r="9" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <path d="M32 64C32 53.2 38.2 44 46 44S60 53.2 60 64" stroke={COLORS.primary} strokeWidth="2" strokeLinecap="round" />
+      <path d="M60 82V60" stroke={COLORS.success} strokeWidth="3" strokeLinecap="round" />
+      <path d="M60 72C69 70 74 63 76 54" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M60 68C51 66 46 60 44 52" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="76" cy="50" r="3" fill={COLORS.warning} />
+      <circle cx="44" cy="48" r="3" fill={COLORS.warning} />
+      <path d="M78 82H98" stroke={COLORS.muted} strokeWidth="2" strokeLinecap="round" />
+    </Illustration>
   );
 }
 
-// ── Sponsor stream list (dashboard) ──────────────────────────────────────────
-
-interface SponsorEmptyProps {
-  onCreateStream: () => void;
+function HistoryIllustration() {
+  return (
+    <Illustration
+      label="A clock beside a document, representing an empty transaction history"
+      testId="empty-illustration-tx-history"
+    >
+      <circle cx="60" cy="50" r="44" fill={COLORS.accent} fillOpacity="0.08" />
+      <rect x="30" y="32" width="42" height="38" rx="4" fill={COLORS.surface} stroke={COLORS.accent} strokeWidth="2" />
+      <path d="M38 44H64M38 52H58M38 60H62" stroke={COLORS.secondary} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="86" cy="34" r="13" fill={COLORS.surface} stroke={COLORS.accent} strokeWidth="2" />
+      <path d="M86 27V34L91 38" stroke={COLORS.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Illustration>
+  );
 }
 
-export function SponsorStreamListEmpty({ onCreateStream }: SponsorEmptyProps) {
+function SearchIllustration() {
+  return (
+    <Illustration
+      label="A magnifying glass over an address card with a cross, representing no search results"
+      testId="empty-illustration-search"
+    >
+      <circle cx="60" cy="50" r="44" fill={COLORS.danger} fillOpacity="0.07" />
+      <rect x="28" y="32" width="50" height="32" rx="5" fill={COLORS.surface} stroke={COLORS.secondary} strokeWidth="2" />
+      <path d="M36 44H66M36 52H56" stroke={COLORS.muted} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="72" cy="46" r="18" fill={COLORS.surface} stroke={COLORS.danger} strokeWidth="2.5" />
+      <line x1="85" y1="59" x2="98" y2="72" stroke={COLORS.danger} strokeWidth="3" strokeLinecap="round" />
+      <line x1="65" y1="39" x2="79" y2="53" stroke={COLORS.danger} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="79" y1="39" x2="65" y2="53" stroke={COLORS.danger} strokeWidth="2.5" strokeLinecap="round" />
+    </Illustration>
+  );
+}
+
+function NotificationIllustration() {
+  return (
+    <Illustration
+      label="A bell with a check mark, representing caught-up notifications"
+      testId="empty-illustration-notifications"
+    >
+      <circle cx="60" cy="50" r="44" fill={COLORS.success} fillOpacity="0.08" />
+      <path d="M42 65C47 60 47 52 47 43C47 32.5 52.8 25 60 25C67.2 25 73 32.5 73 43C73 52 73 60 78 65" fill={COLORS.surface} stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M40 65H80" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M55 71C56.3 74 58.6 76 60 76C61.4 76 63.7 74 65 71" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M50 52L57 59L71 43" stroke={COLORS.warning} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="84" cy="30" r="7" fill={COLORS.warning} />
+      <path d="M84 27V30L86 32" stroke={COLORS.contrast} strokeWidth="1.5" strokeLinecap="round" />
+    </Illustration>
+  );
+}
+
+function CompletionIllustration() {
+  return (
+    <Illustration
+      label="A trophy with stars and tokens, representing a fully claimed stream"
+      testId="empty-illustration-completed"
+    >
+      <circle cx="60" cy="50" r="44" fill={COLORS.success} fillOpacity="0.1" />
+      <path d="M40 30H80V48C80 59 71 66 60 66C49 66 40 59 40 48V30Z" fill={COLORS.surface} stroke={COLORS.success} strokeWidth="2.5" />
+      <path d="M40 36H31C31 44 34 48 42 50M80 36H89C89 44 86 48 78 50" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M52 66H68L72 78H48L52 66Z" fill={COLORS.warning} stroke={COLORS.success} strokeWidth="2" />
+      <path d="M44 80H76" stroke={COLORS.success} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M60 36L63 43L71 44L65 49L67 57L60 53L53 57L55 49L49 44L57 43L60 36Z" fill={COLORS.warning} stroke={COLORS.success} strokeWidth="1.5" />
+      <circle cx="26" cy="28" r="3" fill={COLORS.accent} />
+      <circle cx="94" cy="26" r="3" fill={COLORS.accent} />
+    </Illustration>
+  );
+}
+
+export type ShareAddressResult = "shared" | "copied" | "cancelled" | "unavailable";
+
+interface SharePayload {
+  title?: string;
+  text?: string;
+  url?: string;
+}
+
+type ShareNavigator = Navigator & {
+  share?: (data: SharePayload) => Promise<void>;
+};
+
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
+export async function shareAddress(address: string): Promise<ShareAddressResult> {
+  const value = address.trim();
+  if (!value) return "unavailable";
+
+  if (typeof navigator !== "undefined") {
+    const share = (navigator as ShareNavigator).share;
+    if (typeof share === "function") {
+      try {
+        await share.call(navigator, { title: "My vesting address", text: value });
+        return "shared";
+      } catch (error) {
+        if (isAbortError(error)) return "cancelled";
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return "copied";
+      } catch {
+        return "unavailable";
+      }
+    }
+  }
+
+  return "unavailable";
+}
+
+export interface NewUserEmptyProps {
+  address?: string | null;
+}
+
+export function NewUserEmpty({ address }: NewUserEmptyProps) {
+  const [shareResult, setShareResult] = useState<ShareAddressResult | null>(null);
+
+  const handleShare = useCallback(async () => {
+    const result = await shareAddress(address ?? "");
+    setShareResult(result);
+  }, [address]);
+
+  const statusMessage = shareResult
+    ? {
+        shared: "Address shared.",
+        copied: "Address copied to your clipboard.",
+        cancelled: "Sharing was cancelled.",
+        unavailable: "Copy your wallet address to share it manually.",
+      }[shareResult]
+    : undefined;
+
   return (
     <EmptyState
+      testId="empty-state" stateId="new-user"
       illustration={<StreamsIllustration />}
-      heading="Create your first stream"
-      subtext="You haven't created any vesting streams yet. Start streaming tokens to a contributor and lock in their long-term alignment."
+      heading="You have no vesting streams yet. Ask your sponsor to create one."
+      subtext="Share your address so your sponsor knows where to send your vesting stream."
       cta={
-        <button
-          className="btn btn-primary"
-          onClick={onCreateStream}
-          data-testid="empty-create-stream"
-        >
-          + New Stream
-        </button>
+        <>
+          {address && (
+            <code className={styles.address} aria-label={`Address to share: ${address}`}>
+              {address}
+            </code>
+          )}
+          <button
+            type="button"
+            className={`${styles.action} btn btn-primary btn--primary`}
+            onClick={handleShare}
+            data-testid="share-address"
+          >
+            Share your address
+          </button>
+          {statusMessage && (
+            <span
+              className={styles.status}
+              role="status"
+              aria-live="polite"
+              data-tone={shareResult === "unavailable" ? "error" : "success"}
+            >
+              {statusMessage}
+            </span>
+          )}
+        </>
       }
     />
   );
 }
 
-// ── Transaction history ───────────────────────────────────────────────────────
+export interface SponsorEmptyProps {
+  onCreateStream?: () => void;
+  testId?: string;
+}
+
+export function SponsorStreamListEmpty({
+  onCreateStream,
+  testId = "empty-create-stream",
+}: SponsorEmptyProps) {
+  const cta = onCreateStream ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      onClick={onCreateStream}
+      data-testid={testId}
+    >
+      Create Stream
+    </button>
+  ) : (
+    <a
+      href="/"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      data-testid={testId}
+    >
+      Create Stream
+    </a>
+  );
+
+  return (
+    <EmptyState
+      testId="empty-state" stateId="sponsor"
+      illustration={<SponsorIllustration />}
+      heading="Start rewarding your team with vesting"
+      subtext="Create a stream to set clear expectations and keep contributors aligned."
+      cta={cta}
+    />
+  );
+}
 
 export function TxHistoryEmpty() {
   return (
     <EmptyState
+      testId="empty-state" stateId="tx-history"
       illustration={<HistoryIllustration />}
       heading="No transactions yet"
       subtext="Transactions you submit — claims, stream creation, and cancellations — will appear here once you start interacting with the contract."
@@ -184,7 +354,7 @@ export function TxHistoryEmpty() {
           href="https://stellar.expert/explorer/testnet"
           target="_blank"
           rel="noopener noreferrer"
-          className="btn btn-outline"
+          className={`${styles.action} btn btn-outline btn--secondary`}
           data-testid="empty-explore-stellar"
         >
           Explore Stellar Expert ↗
@@ -194,47 +364,64 @@ export function TxHistoryEmpty() {
   );
 }
 
-// ── Search no-results ─────────────────────────────────────────────────────────
-
-interface SearchEmptyProps {
-  onResetFilter: () => void;
+export interface SearchEmptyProps {
+  onResetFilter?: () => void;
+  address?: string | null;
+  ctaLabel?: string;
 }
 
-export function SearchResultsEmpty({ onResetFilter }: SearchEmptyProps) {
+export function SearchResultsEmpty({
+  onResetFilter,
+  address,
+  ctaLabel = "Try another address",
+}: SearchEmptyProps) {
+  const cta = onResetFilter ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-outline btn--secondary`}
+      onClick={onResetFilter}
+      data-testid="empty-reset-filter"
+    >
+      Reset filter
+    </button>
+  ) : (
+    <a href="/" className={`${styles.action} btn btn-outline btn--secondary`} data-testid="empty-try-another-address">
+      {ctaLabel}
+    </a>
+  );
+
   return (
     <EmptyState
+      testId="empty-state" stateId="search"
       illustration={<SearchIllustration />}
-      heading="No streams match your filter"
-      subtext="Try adjusting your filter or search query — there may be streams under a different status."
-      cta={
-        <button
-          className="btn btn-outline"
-          onClick={onResetFilter}
-          data-testid="empty-reset-filter"
-        >
-          Reset filter
-        </button>
-      }
+      heading="No streams found for this address. Double-check the address or try a different one."
+      subtext={address ? `No vesting streams were found for ${address}.` : undefined}
+      cta={cta}
     />
   );
 }
 
-// ── Recipient schedule ────────────────────────────────────────────────────────
-
-interface RecipientEmptyProps {
+export interface RecipientEmptyProps {
   onContactSponsor?: () => void;
+  address?: string | null;
 }
 
-export function RecipientScheduleEmpty({ onContactSponsor }: RecipientEmptyProps) {
+export function RecipientScheduleEmpty({ onContactSponsor, address }: RecipientEmptyProps) {
   return (
     <EmptyState
+      testId="empty-state" stateId="recipient"
       illustration={<SearchIllustration />}
       heading="No schedule found"
-      subtext="There's no active vesting stream for your wallet address. Ask your sponsor to create one, or double-check you're connected with the right wallet."
+      subtext={
+        address
+          ? `There's no active vesting stream for ${address}. Ask your sponsor to create one, or double-check you're connected with the right wallet.`
+          : "There's no active vesting stream for your wallet address. Ask your sponsor to create one, or double-check you're connected with the right wallet."
+      }
       cta={
         onContactSponsor ? (
           <button
-            className="btn btn-primary"
+            type="button"
+            className={`${styles.action} btn btn-primary btn--primary`}
             onClick={onContactSponsor}
             data-testid="empty-contact-sponsor"
           >
@@ -245,7 +432,7 @@ export function RecipientScheduleEmpty({ onContactSponsor }: RecipientEmptyProps
             href="https://docs.stellar.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="btn btn-outline"
+            className={`${styles.action} btn btn-outline btn--secondary`}
             data-testid="empty-learn-more"
           >
             Learn about vesting ↗
@@ -256,36 +443,87 @@ export function RecipientScheduleEmpty({ onContactSponsor }: RecipientEmptyProps
   );
 }
 
-// ── Sponsor dashboard (streams page) ─────────────────────────────────────────
+export function SponsorDashboardEmpty({ onCreateStream }: SponsorEmptyProps = {}) {
+  return <SponsorStreamListEmpty onCreateStream={onCreateStream} />;
+}
 
-export function SponsorDashboardEmpty() {
+export function NotificationsEmpty() {
   return (
     <EmptyState
-      illustration={<SponsorIllustration />}
-      heading="You haven't created any streams"
-      subtext="As a sponsor you can create vesting streams for contributors. Each stream deposits tokens upfront and drips them linearly after a cliff period."
-      cta={
-        <a href="/" className="btn btn-primary" data-testid="empty-create-stream">
-          Create a stream →
-        </a>
-      }
+      testId="empty-state" stateId="notifications"
+      illustration={<NotificationIllustration />}
+      heading="All caught up! We'll notify you when something happens."
     />
   );
 }
 
-// ── Sponsor stream list (for /sponsor page) ──────────────────────────────────
+export const NotificationEmpty = NotificationsEmpty;
 
-export function SponsorStreamListEmpty() {
+export interface ExpiredFullyClaimedProps {
+  token: string;
+  totalReceived: number;
+  recipient?: string;
+  celebrate?: boolean;
+  onViewStreams?: () => void;
+}
+
+export function ExpiredFullyClaimedState({
+  token,
+  totalReceived,
+  recipient,
+  celebrate = false,
+  onViewStreams,
+}: ExpiredFullyClaimedProps) {
+  const [celebrating, setCelebrating] = useState(celebrate);
+  const formatted = formatAmount(Number.isFinite(totalReceived) ? totalReceived : 0);
+
+  const cta = onViewStreams ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      onClick={onViewStreams}
+      data-testid="empty-view-streams"
+    >
+      View my streams
+    </button>
+  ) : (
+    <a href="/streams" className={`${styles.action} btn btn-primary btn--primary`} data-testid="empty-view-streams">
+      View my streams
+    </a>
+  );
+
   return (
-    <EmptyState
-      illustration={<SponsorIllustration />}
-      heading="You haven't sponsored any streams yet"
-      subtext="Create your first vesting stream to start sponsoring contributors."
-      cta={
-        <a href="/" className="btn btn-primary" data-testid="empty-create-sponsor-stream">
-          Create your first stream →
-        </a>
-      }
-    />
+    <>
+      <ConfettiBurst active={celebrating} onDone={() => setCelebrating(false)} />
+      <EmptyState
+        testId="empty-state" stateId="completed"
+        className={styles.celebration}
+        illustration={<CompletionIllustration />}
+        heading="Stream complete"
+        subtext={
+          <div className={styles.completionSummary}>
+            <span className={styles.completionLabel}>Total received</span>
+            <span
+              className={styles.completionAmount}
+              data-testid="completed-total-received"
+              aria-label={`Total received: ${formatted} ${token}`}
+            >
+              {formatted} {token}
+            </span>
+            <span className={styles.completionLabel}>
+              {recipient ? `Received by ${recipient}. ` : ""}This stream has expired. Every vested token has been claimed.
+            </span>
+          </div>
+        }
+        cta={cta}
+      />
+    </>
   );
 }
+
+export const NewUserEmptyState = NewUserEmpty;
+export const NoStreamsEmpty = NewUserEmpty;
+export const NoNotificationsEmpty = NotificationsEmpty;
+export const NoSearchResultsEmpty = SearchResultsEmpty;
+export const StreamCompleteEmpty = ExpiredFullyClaimedState;
+export type { StreamCompletionEvidence };
