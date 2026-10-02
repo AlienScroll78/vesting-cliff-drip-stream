@@ -13,6 +13,14 @@
 #
 # After deployment and initialization, runs the smoke test suite when
 # both TOKEN and RECIPIENT are provided.
+#
+# ⚠️ NETWORK: deploys to TESTNET by default. The target network is read from
+# SOROBAN_NETWORK (`testnet` | `public` | `standalone`). Testnet and mainnet are
+# separate ledgers with different passphrases, RPC endpoints, and contract IDs —
+# setting SOROBAN_NETWORK=public without configuring the account for mainnet will
+# fail at submission, not at configuration time. Before any mainnet deploy, read
+# docs/deployment-environments.md and work through its pre-flight checklist:
+#   https://github.com/Nikola-Tee/vesting-cliff-drip-stream/blob/main/docs/deployment-environments.md
 # ──────────────────────────────────────────────────────────────
 set -euo pipefail
 

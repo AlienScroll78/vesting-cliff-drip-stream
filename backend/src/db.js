@@ -1,13 +1,14 @@
 /**
  * db.js — PostgreSQL connection pool with structured query logging.
  *
- * Every query is logged at debug level with the following fields so that
+ * Every query is logged at info level with the following fields so that
  * database activity can be correlated to the originating HTTP request:
  *   request_id     — propagated automatically via AsyncLocalStorage
  *   trace_id       — propagated automatically via AsyncLocalStorage
  *   correlation_id — propagated automatically via AsyncLocalStorage
- *   db.query       — normalised SQL text (parameters replaced by $N placeholders)
- *   db.duration_ms — round-trip time in milliseconds
+ *   query_hash     — SHA-256 hash of normalized SQL text (no parameter values)
+ *   rows_affected  — number of rows returned or changed
+ *   duration_ms    — round-trip time in milliseconds
  *
  * Usage (drop-in replacement for the bare Pool):
  *   import { pool, query } from './db.js';
