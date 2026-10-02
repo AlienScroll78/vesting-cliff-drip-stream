@@ -38,7 +38,8 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        # Exclude db-tests: it targets the host, not WASM.
+        run: cargo clippy --all-targets --all-features --exclude db-tests -- -D warnings
 
       - name: Setup Node for JSON log lint
         uses: actions/setup-node@v4
@@ -106,10 +107,45 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build WASM
-        run: cargo build --target wasm32-unknown-unknown --release
+        run: cargo build --target wasm32-unknown-unknown --release --exclude db-tests
 
       - name: Docs
-        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --exclude db-tests
+
+  db-tests:
+    name: db-tests (PostgreSQL integration)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace .cargo/config.toml defaults to wasm32; we must
+          # install the native target so the --target flag below is accepted.
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-db-${{ hashFiles('db-tests/Cargo.toml', 'Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-db-
+
+      # testcontainers-rs uses the Docker socket — Docker is pre-installed on
+      # ubuntu-latest GitHub-hosted runners, no extra setup required.
+      - name: Run DB integration tests
+        # Pass --target explicitly to override the workspace wasm32 default.
+        run: >
+          cargo test
+          -p db-tests
+          --target x86_64-unknown-linux-gnu
+          --no-fail-fast
+        timeout-minutes: 10
 
   # ── typecheck ───────────────────────────────────────────────────────────────
   # Required status check: "typecheck"
