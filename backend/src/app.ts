@@ -4,6 +4,7 @@ import { validateAddress } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { corsMiddleware } from './middleware/cors.js';
 
 const app = express();
 
@@ -12,6 +13,7 @@ app.set('trust proxy', 1);
 // Assign request_id / trace_id / correlation_id and propagate via
 // AsyncLocalStorage so every log call during a request includes all three IDs.
 app.use(requestLoggerMiddleware);
+app.use(corsMiddleware);
 
 app.use(express.json());
 app.use(
