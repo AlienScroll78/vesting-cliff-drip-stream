@@ -23,6 +23,7 @@ export interface VestingStream {
   endLedger?: number;
   totalDeposit?: number;
   totalVested?: number;
+  totalReceived?: number;
 }
 
 export type TxType = "claim" | "create" | "cancel";

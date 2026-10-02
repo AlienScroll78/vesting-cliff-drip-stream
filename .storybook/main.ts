@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
 
 const config: StorybookConfig = {
@@ -15,6 +16,25 @@ const config: StorybookConfig = {
   framework: {
     name: "@storybook/react-vite",
     options: {},
+  },
+  viteFinal: async (config) => {
+    const replacement = fileURLToPath(new URL("../frontend/src", import.meta.url));
+    if (Array.isArray(config.resolve?.alias)) {
+      return {
+        ...config,
+        resolve: {
+          ...config.resolve,
+          alias: [...config.resolve.alias, { find: "@", replacement }],
+        },
+      };
+    }
+    return {
+      ...config,
+      resolve: {
+        ...config.resolve,
+        alias: { ...(config.resolve?.alias ?? {}), "@": replacement },
+      },
+    };
   },
 };
 

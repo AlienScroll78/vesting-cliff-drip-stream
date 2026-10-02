@@ -2,11 +2,15 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { expect, within } from "@storybook/test";
 import React from "react";
 import {
+  AnalyticsSummarySkeleton,
   DashboardSkeleton,
   FormSkeleton,
+  NotificationListSkeleton,
   Skeleton,
+  SponsorStreamListSkeleton,
   StreamCardSkeleton,
   StreamDetailSkeleton,
+  StreamExplorerSkeleton,
   StreamListSkeleton,
   StatsRowSkeleton,
   TransactionHistorySkeleton,
@@ -208,21 +212,180 @@ export const Form: Story = {
 // ─── Reduced motion ───────────────────────────────────────────────────────────
 
 export const ReducedMotion: Story = {
-  name: "Reduced motion (opacity pulse fallback)",
+  name: "Reduced motion (static fallback)",
   parameters: {
     docs: {
       description: {
         story:
-          "When `prefers-reduced-motion: reduce` is set, the shimmer animation is replaced with a slow opacity pulse. This story demonstrates the skeleton structure; the motion behavior depends on system settings.",
+          "When `prefers-reduced-motion: reduce` is set, the shimmer animation is disabled entirely and the placeholder becomes a static block. This story shows the skeleton structure; the motion behaviour follows the system setting.",
       },
     },
   },
   render: () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 400 }}>
       <p style={{ fontFamily: "sans-serif", fontSize: 13, color: "#666", margin: 0 }}>
-        Skeleton structure (motion behavior follows system prefers-reduced-motion):
+        Skeleton structure (motion behaviour follows system prefers-reduced-motion):
       </p>
       <StreamCardSkeleton />
     </div>
   ),
 };
+
+// ─── SponsorStreamList (#823) ─────────────────────────────────────────────────
+
+export const SponsorStreamList: Story = {
+  name: "SponsorStreamList skeleton",
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Sponsor stream list rows. Text widths vary row to row so the placeholder reads as a list of records rather than a uniform grid.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 480, margin: "0 auto" }}>
+      <SponsorStreamListSkeleton rows={5} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const list = canvas.getByRole("list", { name: /loading sponsor streams/i });
+    expect(list).toHaveAttribute("aria-busy", "true");
+    expect(list.querySelectorAll("[data-testid='sponsor-stream-skeleton-row']").length).toBe(5);
+  },
+};
+
+// ─── StreamExplorer (#823) ────────────────────────────────────────────────────
+
+export const StreamExplorer: Story = {
+  name: "StreamExplorer skeleton",
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Explorer table rows. Column widths are locked in while loading so the table doesn't reflow when data arrives.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 600, margin: "0 auto" }}>
+      <StreamExplorerSkeleton rows={6} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const table = canvas.getByRole("generic", { name: /loading stream explorer/i });
+    expect(table).toHaveAttribute("aria-busy", "true");
+    expect(table.querySelectorAll("[data-testid='explorer-skeleton-row']").length).toBe(6);
+  },
+};
+
+// ─── NotificationList (#823) ──────────────────────────────────────────────────
+
+export const NotificationList: Story = {
+  name: "NotificationList skeleton",
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Notification items: leading icon circle, two text lines, and a trailing timestamp placeholder.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 400, margin: "0 auto" }}>
+      <NotificationListSkeleton items={4} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const list = canvas.getByRole("list", { name: /loading notifications/i });
+    expect(list).toHaveAttribute("aria-busy", "true");
+    expect(list.querySelectorAll("[data-testid='notification-skeleton-item']").length).toBe(4);
+  },
+};
+
+// ─── AnalyticsSummary (#823) ──────────────────────────────────────────────────
+
+export const AnalyticsSummary: Story = {
+  name: "AnalyticsSummary skeleton",
+  parameters: {
+    layout: "padded",
+    docs: {
+      description: {
+        story:
+          "Analytics page: a row of stat cards above a fixed-height chart placeholder, so the page doesn't jump when data loads.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <AnalyticsSummarySkeleton cards={4} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const summary = canvas.getByRole("generic", { name: /loading analytics/i });
+    expect(summary).toHaveAttribute("aria-busy", "true");
+    expect(summary.querySelectorAll("[data-testid='analytics-skeleton-card']").length).toBe(4);
+  },
+};
+
+export const AnalyticsSummaryCardsOnly: Story = {
+  name: "AnalyticsSummary skeleton (cards only)",
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`showChart={false}` renders just the stat cards — used where a chart will never appear, so no space is reserved for it.",
+      },
+    },
+  },
+  render: () => <AnalyticsSummarySkeleton cards={3} showChart={false} />,
+  play: async ({ canvasElement }) => {
+    expect(
+      canvasElement.querySelectorAll("[data-testid='analytics-skeleton-card']").length,
+    ).toBe(3);
+  },
+};
+
+// ─── All page skeletons (#823) ────────────────────────────────────────────────
+
+export const AllPages: Story = {
+  name: "All five page skeletons",
+  parameters: {
+    layout: "padded",
+    docs: {
+      description: {
+        story:
+          "Every data-fetching view's loading state side by side: stream dashboard, sponsor stream list, stream explorer, notification list, and analytics summary.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: "grid", gap: 32, maxWidth: 720, margin: "0 auto" }}>
+      <section>
+        <h3 style={{ fontFamily: "sans-serif", fontSize: 14, color: "#444" }}>Stream Dashboard</h3>
+        <DashboardSkeleton />
+      </section>
+      <section>
+        <h3 style={{ fontFamily: "sans-serif", fontSize: 14, color: "#444" }}>Sponsor Stream List</h3>
+        <SponsorStreamListSkeleton rows={3} />
+      </section>
+      <section>
+        <h3 style={{ fontFamily: "sans-serif", fontSize: 14, color: "#444" }}>Stream Explorer</h3>
+        <StreamExplorerSkeleton rows={4} />
+      </section>
+      <section>
+        <h3 style={{ fontFamily: "sans-serif", fontSize: 14, color: "#444" }}>Notification List</h3>
+        <NotificationListSkeleton items={3} />
+      </section>
+      <section>
+        <h3 style={{ fontFamily: "sans-serif", fontSize: 14, color: "#444" }}>Analytics Summary</h3>
+        <AnalyticsSummarySkeleton cards={4} />
+      </section>
+    </div>
+  ),
+};
+
