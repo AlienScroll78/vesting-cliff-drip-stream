@@ -17,6 +17,7 @@ Each ADR documents the context that forced a decision, what was decided, and the
 | [0006](0006-checked-arithmetic-strategy.md) | Checked Arithmetic Strategy and Overflow Boundary Documentation | Accepted |
 | [0008](0008-multi-token-storage.md) | Multi-Token Stream Storage Layout | Proposed |
 | [0007](0007-pause-resume-design.md) | Pause/Resume Design | Proposed |
+| [0009](0009-variable-rate-segment-storage.md) | Variable-Rate Segment Storage Layout | Accepted |
 
 ## Adding a New ADR
 
