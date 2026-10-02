@@ -88,6 +88,21 @@ export const PaginationQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+// ── GET /api/streams — sponsor stream list ─────────────────────────────────────
+
+export const SponsorStreamsQuerySchema = z.object({
+  sponsor: StellarAddressSchema,
+  status: z.enum(["active", "cancelled", "expired", "drained", "all"]).optional().default("all"),
+  sort: z.enum(["created_at", "end_ledger"]).optional().default("created_at"),
+  page: z.string().optional().default("1").pipe(
+    z.coerce.number().int("page must be an integer").min(1, "page must be at least 1"),
+  ),
+  limit: z.string().optional().default("20").pipe(
+    z.coerce.number().int("limit must be an integer").min(1, "limit must be at least 1").max(100, "limit must not exceed 100"),
+  ),
+  cursor: z.string().optional(),
+});
+
 // ── GET /streams/:recipient/events — event-list pagination ────────────────────
 
 export const EventsQuerySchema = PaginationQuerySchema;
