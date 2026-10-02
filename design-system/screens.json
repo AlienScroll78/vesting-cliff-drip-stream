@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "breakpoints": [
+    375,
+    1440
+  ],
+  "source": "frontend/src/app and frontend/src/components route entrypoints",
+  "screens": [
+    {
+      "id": "landing",
+      "name": "Landing",
+      "route": "/",
+      "source": "frontend/src/app/page.tsx",
+      "layout": "landing",
+      "components": [
+        "WalletButton",
+        "StatusBadge"
+      ],
+      "flowIds": [],
+      "notes": "Entry point with stream overview and wallet connection.",
+      "figmaFrameNames": [
+        "Screen/Landing/Desktop-1440",
+        "Screen/Landing/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "stream-dashboard",
+      "name": "Stream Dashboard",
+      "route": "/streams",
+      "source": "frontend/src/app/streams/page.tsx",
+      "layout": "dashboard",
+      "components": [
+        "ScheduleCard",
+        "ClaimButton",
+        "TimelineChart",
+        "WalletButton"
+      ],
+      "flowIds": [
+        "claim-flow",
+        "create-flow"
+      ],
+      "notes": "Sponsor stream list, status filters, progress, and transaction actions.",
+      "figmaFrameNames": [
+        "Screen/Stream Dashboard/Desktop-1440",
+        "Screen/Stream Dashboard/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "create-stream",
+      "name": "Create Stream",
+      "route": "/",
+      "source": "frontend/src/components/StreamCreateForm.tsx",
+      "layout": "form",
+      "components": [
+        "StreamCreateForm",
+        "CreateStreamWizard",
+        "Button",
+        "Input"
+      ],
+      "flowIds": [
+        "create-flow"
+      ],
+      "notes": "Progressive disclosure form and wizard are the canonical create entry points.",
+      "figmaFrameNames": [
+        "Screen/Create Stream/Desktop-1440",
+        "Screen/Create Stream/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "sponsor-dashboard",
+      "name": "Sponsor Dashboard",
+      "route": "/sponsor",
+      "source": "frontend/src/app/sponsor/page.tsx",
+      "layout": "dashboard",
+      "components": [
+        "Card",
+        "ScheduleCard",
+        "Button"
+      ],
+      "flowIds": [
+        "create-flow"
+      ],
+      "notes": "Cost calculator and sponsor-level stream overview.",
+      "figmaFrameNames": [
+        "Screen/Sponsor Dashboard/Desktop-1440",
+        "Screen/Sponsor Dashboard/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "stream-explorer",
+      "name": "Stream Explorer",
+      "route": "/view/[recipient]",
+      "source": "frontend/src/app/view/[recipient]/ViewPageClient.tsx",
+      "layout": "detail",
+      "components": [
+        "ScheduleCard",
+        "TimelineChart",
+        "ClaimButton"
+      ],
+      "flowIds": [
+        "claim-flow"
+      ],
+      "notes": "Public recipient view with schedule and claim state.",
+      "figmaFrameNames": [
+        "Screen/Stream Explorer/Desktop-1440",
+        "Screen/Stream Explorer/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "admin-panel",
+      "name": "Admin Panel",
+      "route": "/admin",
+      "source": "frontend/src/app/admin/page.tsx",
+      "layout": "table",
+      "components": [
+        "Table",
+        "Badge",
+        "Button"
+      ],
+      "flowIds": [],
+      "notes": "Allowlist, fee, and stream administration.",
+      "figmaFrameNames": [
+        "Screen/Admin Panel/Desktop-1440",
+        "Screen/Admin Panel/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "settings",
+      "name": "Settings",
+      "route": "/notifications",
+      "source": "frontend/src/app/notifications/page.tsx",
+      "layout": "settings",
+      "components": [
+        "Input",
+        "Button",
+        "Toast"
+      ],
+      "flowIds": [],
+      "notes": "Notification and wallet settings surface; no dedicated /settings route exists.",
+      "figmaFrameNames": [
+        "Screen/Settings/Desktop-1440",
+        "Screen/Settings/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    },
+    {
+      "id": "not-found",
+      "name": "404",
+      "route": "/404",
+      "source": "frontend/src/components/ErrorPages.tsx",
+      "layout": "error",
+      "components": [
+        "Button"
+      ],
+      "flowIds": [],
+      "notes": "Not-found page is a component without a dedicated route file.",
+      "figmaFrameNames": [
+        "Screen/404/Desktop-1440",
+        "Screen/404/Mobile-375"
+      ],
+      "states": [
+        "loading",
+        "empty",
+        "error",
+        "populated"
+      ]
+    }
+  ]
+}

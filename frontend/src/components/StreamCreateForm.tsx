@@ -193,6 +193,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [contractError, setContractError] = useState<number | null>(null);
+  // Persistent aria-live region announces form submission outcomes to screen readers.
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -252,9 +254,11 @@ export function StreamCreateForm({ onSuccess }: Props) {
 
     setSubmitting(true);
     setContractError(null);
+    setLiveAnnouncement("Submitting vesting stream…");
     try {
       const result = await submitCreateStream(request);
       setTxHash(result.hash);
+      setLiveAnnouncement("Vesting stream created successfully.");
       onSuccess?.(result.hash);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
@@ -277,11 +281,28 @@ export function StreamCreateForm({ onSuccess }: Props) {
       data-testid="stream-create-form"
       style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
     >
+      {/*
+        Persistent aria-live="assertive" region announces form submission outcomes
+        (success, error, submitting) to screen readers without requiring focus change.
+        The region is visually hidden but always present in the DOM.
+      */}
+      <div
+        role="status"
+        aria-live="assertive"
+        aria-atomic="true"
+        className="sr-only"
+        data-testid="form-live-region"
+      >
+        {liveAnnouncement}
+      </div>
+
       <Field
         id="recipient"
         name="recipient"
         label="Recipient address"
         placeholder="G…"
+        required
+        aria-required="true"
         value={values.recipient}
         error={touched.recipient ? errors.recipient : undefined}
         onChange={handleChange}
@@ -292,6 +313,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         name="token"
         label="Token contract (SAC)"
         placeholder="C…"
+        required
+        aria-required="true"
         value={values.token}
         error={touched.token ? errors.token : undefined}
         onChange={handleChange}
@@ -318,6 +341,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         type="number"
         min="0.00005787"
         step="any"
+        required
+        aria-required="true"
         value={values.cliffDays}
         error={touched.cliffDays ? errors.cliffDays : undefined}
         onChange={handleChange}
@@ -332,6 +357,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         type="number"
         min="0.00005787"
         step="any"
+        required
+        aria-required="true"
         value={values.totalDays}
         error={touched.totalDays ? errors.totalDays : undefined}
         onChange={handleChange}
@@ -490,7 +517,7 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
 }
 
-function Field({ id, label, error, hint, ...inputProps }: FieldProps) {
+function Field({ id, label, error, hint, required, ...inputProps }: FieldProps) {
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
   const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") || undefined;
@@ -499,6 +526,8 @@ function Field({ id, label, error, hint, ...inputProps }: FieldProps) {
       <label htmlFor={id} style={{ fontSize: "0.875rem", fontWeight: 600 }}>{label}</label>
       <input
         id={id}
+        required={required}
+        aria-required={required ? "true" : undefined}
         aria-describedby={describedBy}
         aria-invalid={!!error}
         style={{ padding: "0.5rem 0.75rem", border: `1px solid ${error ? "var(--color-cancelled, #dc2626)" : "var(--color-border, #d1d5db)"}`, borderRadius: "var(--radius, 0.5rem)", fontSize: "0.95rem", outline: "none" }}

@@ -1,4 +1,10 @@
+import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+const frontendSrc = path.resolve(dirname, "../frontend/src");
 
 const config: StorybookConfig = {
   stories: [
@@ -15,6 +21,14 @@ const config: StorybookConfig = {
   framework: {
     name: "@storybook/react-vite",
     options: {},
+  },
+  viteFinal: async (viteConfig) => {
+    viteConfig.resolve = viteConfig.resolve ?? {};
+    viteConfig.resolve.alias = {
+      ...(viteConfig.resolve.alias as Record<string, string> | undefined),
+      "@": frontendSrc,
+    };
+    return viteConfig;
   },
 };
 

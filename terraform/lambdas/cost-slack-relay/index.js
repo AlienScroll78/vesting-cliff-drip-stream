@@ -4,19 +4,39 @@
  * Lambda function that receives AWS Cost Anomaly alerts via SNS
  * and posts them to a Slack #ops channel via incoming webhook.
  *
- * No external dependencies — uses only Node.js built-in https module.
+ * The webhook is read from AWS Secrets Manager at invoke time rather than being
+ * injected as a plain environment variable, so it never appears in the Lambda
+ * configuration or in a deployment log.
+ *
+ * The only dependency is the AWS SDK v3 bundled with the Node.js 20 runtime;
+ * the Slack call itself uses the built-in https module.
  */
 
 const https = require("https");
-const url = require("url");
+const {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} = require("@aws-sdk/client-secrets-manager");
 
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+const secrets = new SecretsManagerClient({});
+
+const SLACK_WEBHOOK_SECRET_ARN = process.env.SLACK_WEBHOOK_SECRET_ARN;
 const SLACK_CHANNEL = process.env.SLACK_CHANNEL || "#ops";
+
+/**
+ * Resolve the Slack webhook URL from Secrets Manager.
+ */
+async function resolveWebhookUrl() {
+  const res = await secrets.send(
+    new GetSecretValueCommand({ SecretId: SLACK_WEBHOOK_SECRET_ARN })
+  );
+  return res.SecretString;
+}
 
 /**
  * Post a message to Slack via incoming webhook.
  */
-function postToSlack(text) {
+function postToSlack(webhookUrl, text) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify({
       channel: SLACK_CHANNEL,
@@ -24,7 +44,7 @@ function postToSlack(text) {
       unfurl_links: false,
     });
 
-    const parsed = new URL(SLACK_WEBHOOK_URL);
+    const parsed = new URL(webhookUrl);
     const options = {
       hostname: parsed.hostname,
       path: parsed.pathname,
@@ -65,6 +85,11 @@ function formatMessage(snsMessage) {
     detail = { raw: snsMessage.Message || snsMessage };
   }
 
+  // The monthly cost report builds its own Slack markdown, so pass it through.
+  if (detail.reportType === "monthly_cost") {
+    return detail.text || "Monthly cost report was published with no body.";
+  }
+
   const header = "🚨 *AWS Cost Anomaly Alert*";
   const monitor = detail.MonitorName || detail.monitor_name || "Unknown monitor";
   const impact = detail.AnomalyTotalImpactAbsolute || detail.total_impact || "N/A";
@@ -89,9 +114,17 @@ function formatMessage(snsMessage) {
 exports.handler = async (event) => {
   console.log("Received event:", JSON.stringify(event, null, 2));
 
-  if (!SLACK_WEBHOOK_URL) {
-    console.error("SLACK_WEBHOOK_URL is not configured");
-    return { statusCode: 500, body: "Missing SLACK_WEBHOOK_URL" };
+  if (!SLACK_WEBHOOK_SECRET_ARN) {
+    console.error("SLACK_WEBHOOK_SECRET_ARN is not configured");
+    return { statusCode: 500, body: "Missing SLACK_WEBHOOK_SECRET_ARN" };
+  }
+
+  let slackWebhookUrl;
+  try {
+    slackWebhookUrl = await resolveWebhookUrl();
+  } catch (err) {
+    console.error("Failed to read Slack webhook from Secrets Manager:", err.message);
+    return { statusCode: 500, body: "Unable to read Slack webhook secret" };
   }
 
   const results = [];
@@ -101,7 +134,7 @@ exports.handler = async (event) => {
     const slackText = formatMessage(snsMessage);
 
     try {
-      await postToSlack(slackText);
+      await postToSlack(slackWebhookUrl, slackText);
       console.log("Posted to Slack:", slackText.slice(0, 100));
       results.push({ status: "ok" });
     } catch (err) {

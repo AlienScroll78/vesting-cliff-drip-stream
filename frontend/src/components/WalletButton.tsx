@@ -50,6 +50,11 @@ export function WalletButton() {
     disconnect();
   }
 
+  function handleModalConnect(connectedAddress: string, provider: Parameters<typeof connectWithProvider>[0]) {
+    connectWithProvider(provider, connectedAddress);
+    closeModal();
+  }
+
   // Freighter not installed
   if (freighterInstalled === false) {
     return (

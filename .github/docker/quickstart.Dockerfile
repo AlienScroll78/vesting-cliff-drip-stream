@@ -1,0 +1,1 @@
+FROM stellar/quickstart:latest

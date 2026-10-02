@@ -1,0 +1,368 @@
+{
+  "consumer": {
+    "name": "vesting-frontend"
+  },
+  "interactions": [
+    {
+      "description": "a claim_vested transaction submission request",
+      "providerStates": [
+        {
+          "name": "backend is configured with a valid signing key and contract"
+        }
+      ],
+      "request": {
+        "body": {
+          "operation": "claim_vested",
+          "params": {
+            "recipient": "GABC1EXAMPLERECIPIENTADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "method": "POST",
+        "path": "/api/tx/submit"
+      },
+      "response": {
+        "body": {
+          "hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+          "status": "SUCCESS"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.hash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {},
+          "status": {}
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a paginated request for a sponsor's streams",
+      "providerStates": [
+        {
+          "name": "streams exist for sponsor"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/schedules/sponsor/GSPON1EXAMPLESPONSORADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "query": {
+          "limit": [
+            "20"
+          ],
+          "page": [
+            "1"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "items": [
+            {
+              "event_id": "0000000000000000",
+              "ledger": 51000000,
+              "recipient": "GABC1EXAMPLERECIPIENTADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+              "sponsor": "GSPON1EXAMPLESPONSORADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+              "token": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+            }
+          ],
+          "limit": 20,
+          "next_cursor": null,
+          "page": 1
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.items[*].event_id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].ledger": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.items[*].recipient": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].sponsor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.items[*].token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.limit": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.next_cursor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "null"
+                }
+              ]
+            },
+            "$.page": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          },
+          "header": {},
+          "status": {}
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for a recipient's vesting schedule",
+      "providerStates": [
+        {
+          "name": "a vesting schedule exists for recipient"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/schedules/GABC1EXAMPLERECIPIENTADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      },
+      "response": {
+        "body": {
+          "claimable_amount": "5000",
+          "cliff_ledger": 51200000,
+          "end_ledger": 51800000,
+          "is_cliff_passed": true,
+          "rate": "100",
+          "recipient": "GABC1EXAMPLERECIPIENTADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          "sponsor": "GSPON1EXAMPLESPONSORADDRESSXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          "start_ledger": 51000000,
+          "token": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.claimable_amount": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.cliff_ledger": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.end_ledger": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.is_cliff_passed": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.rate": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.recipient": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.sponsor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.start_ledger": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {},
+          "status": {}
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for an unknown recipient's schedule",
+      "providerStates": [
+        {
+          "name": "no vesting schedule exists for recipient"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/schedules/GUNKNOWNRECIPIENTXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+      },
+      "response": {
+        "body": {
+          "error": "schedule not found"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {},
+          "status": {}
+        },
+        "status": 404
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "13.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.4.22",
+      "models": "1.2.3"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "vesting-backend"
+  }
+}

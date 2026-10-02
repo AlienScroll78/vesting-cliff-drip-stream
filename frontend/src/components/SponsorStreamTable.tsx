@@ -1,9 +1,14 @@
 "use client";
-import { useTranslation } from "react-i18next";
+import { useMemo } from "react";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
 import { StatusBadge } from "./StatusBadge";
-import styles from "./SponsorStreamTable.module.css";
+import {
+  DataTable,
+  DATA_TABLE_PAGE_SIZES,
+  type DataTableColumn,
+  type DataTablePageSize,
+} from "./DataTable";
 
 interface SponsorStreamTableProps {
   streams: VestingStream[];
@@ -14,6 +19,94 @@ interface SponsorStreamTableProps {
   onPageChange: (page: number) => void;
   onCancelStream?: (streamId: string) => void;
   onViewDetails?: (streamId: string) => void;
+}
+
+const DEFAULT_PAGE_SIZE: DataTablePageSize = 25;
+
+function toPageSize(pageSize: number): DataTablePageSize {
+  return DATA_TABLE_PAGE_SIZES.find((size) => size === pageSize) ?? DEFAULT_PAGE_SIZE;
+}
+
+function ledgerToDate(ledger: number | undefined): Date | null {
+  if (!ledger) return null;
+  const secondsFromNow = (ledger - 51_200_000) * 5;
+  return new Date(Date.now() + secondsFromNow * 1000);
+}
+
+function formatLedgerDate(ledger: number | undefined): string {
+  const date = ledgerToDate(ledger);
+  return date ? date.toLocaleDateString() : "—";
+}
+
+function useSponsorColumns(
+  onCancelStream?: (streamId: string) => void,
+  onViewDetails?: (streamId: string) => void,
+): DataTableColumn<VestingStream>[] {
+  return useMemo(
+    () => [
+      {
+        key: "recipient",
+        header: "Recipient",
+        sortType: "string",
+        sortValue: (stream) => stream.recipient,
+        render: (stream) => <code>{stream.recipient}</code>,
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortType: "string",
+        sortValue: (stream) => stream.status,
+        render: (stream) => <StatusBadge status={stream.status} />,
+      },
+      {
+        key: "cliffDate",
+        header: "Cliff Date",
+        sortType: "date",
+        sortValue: (stream) => ledgerToDate(stream.cliffLedger),
+        render: (stream) => formatLedgerDate(stream.cliffLedger),
+      },
+      {
+        key: "endDate",
+        header: "End Date",
+        sortType: "date",
+        sortValue: (stream) => ledgerToDate(stream.endLedger),
+        render: (stream) => formatLedgerDate(stream.endLedger),
+      },
+      {
+        key: "claimable",
+        header: "Claimable",
+        sortType: "number",
+        align: "right",
+        sortValue: (stream) => stream.claimableAmount,
+        render: (stream) => formatAmount(stream.claimableAmount),
+      },
+      {
+        key: "actions",
+        header: "Actions",
+        sortable: false,
+        render: (stream) => (
+          <div onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => onViewDetails?.(stream.id)}
+              aria-label={`View details for recipient ${stream.recipient}`}
+            >
+              View
+            </button>
+            <button
+              type="button"
+              onClick={() => onCancelStream?.(stream.id)}
+              disabled={stream.status === "cancelled" || stream.status === "completed"}
+              aria-label={`Cancel stream for recipient ${stream.recipient}`}
+            >
+              Cancel
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [onCancelStream, onViewDetails],
+  );
 }
 
 /**
@@ -30,112 +123,17 @@ export function SponsorStreamTable({
   onCancelStream,
   onViewDetails,
 }: SponsorStreamTableProps) {
-  const { t } = useTranslation();
-  const totalPages = Math.ceil(total / pageSize);
-
-  const formatLedgerDate = (ledger: number | undefined): string => {
-    if (!ledger) return "—";
-    // Approximate: ~5 second block time on Stellar
-    const secondsFromNow = (ledger - 51_200_000) * 5;
-    const date = new Date(Date.now() + secondsFromNow * 1000);
-    return date.toLocaleDateString();
-  };
+  const columns = useSponsorColumns(onCancelStream, onViewDetails);
 
   return (
-    <div className={styles.container}>
-      {isLoading ? (
-        <div className={styles.skeleton} aria-hidden="true" />
-      ) : (
-        <>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table} role="grid" aria-label="Sponsor vesting streams">
-              <thead>
-                <tr>
-                  <th scope="col">Recipient</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Cliff Date</th>
-                  <th scope="col">End Date</th>
-                  <th scope="col">Claimable</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {streams.map((stream) => (
-                  <tr key={stream.id}>
-                    <td>
-                      <code className={styles.address}>{stream.recipient}</code>
-                    </td>
-                    <td>
-                      <StatusBadge status={stream.status} />
-                    </td>
-                    <td>{formatLedgerDate(stream.cliffLedger)}</td>
-                    <td>{formatLedgerDate(stream.endLedger)}</td>
-                    <td className={styles.amount}>{formatAmount(stream.claimableAmount)}</td>
-                    <td className={styles.actions}>
-                      <button
-                        className={styles.buttonSmall}
-                        onClick={() => onViewDetails?.(stream.id)}
-                        aria-label={`View details for recipient ${stream.recipient}`}
-                      >
-                        View
-                      </button>
-                      <button
-                        className={styles.buttonSmallDanger}
-                        onClick={() => onCancelStream?.(stream.id)}
-                        disabled={stream.status === "cancelled" || stream.status === "completed"}
-                        aria-label={`Cancel stream for recipient ${stream.recipient}`}
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className={styles.pagination} role="navigation" aria-label="Pagination">
-            <button
-              className={styles.pageButton}
-              onClick={() => onPageChange(1)}
-              disabled={page === 1}
-              aria-label="Go to first page"
-            >
-              ⟨⟨
-            </button>
-            <button
-              className={styles.pageButton}
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 1}
-              aria-label="Go to previous page"
-            >
-              ⟨
-            </button>
-
-            <div className={styles.pageInfo}>
-              Page <span aria-live="polite">{page}</span> of {totalPages}
-            </div>
-
-            <button
-              className={styles.pageButton}
-              onClick={() => onPageChange(page + 1)}
-              disabled={page === totalPages}
-              aria-label="Go to next page"
-            >
-              ⟩
-            </button>
-            <button
-              className={styles.pageButton}
-              onClick={() => onPageChange(totalPages)}
-              disabled={page === totalPages}
-              aria-label="Go to last page"
-            >
-              ⟩⟩
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <DataTable<VestingStream>
+      caption="Sponsor vesting streams"
+      columns={columns}
+      data={streams}
+      getRowId={(stream) => stream.id}
+      isLoading={isLoading}
+      onRowClick={onViewDetails ? (stream) => onViewDetails(stream.id) : undefined}
+      pagination={{ page, pageSize: toPageSize(pageSize), total, onPageChange }}
+    />
   );
 }
