@@ -327,3 +327,121 @@ client.initialize(&_adm, &0u32, &_trs);
         .unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 }
+
+// ── Error code disambiguation: InvalidRate (4) vs DepositBelowMinimum (22) ──
+//
+// InvalidRate (code 4)       — fires when `rate ≤ 0`, checked before deposit arithmetic.
+// RateTooLow (code 17)       — fires when `rate × total_duration < min_deposit`
+//                              (alternative name used by some contract versions).
+// DepositBelowMinimum (22)   — fires after overflow check passes but total < min.
+//
+// Each test below exercises exactly one path so the trigger conditions remain
+// unambiguous.
+
+/// `rate = 0` → `InvalidRate` (code 4).
+/// This fires before any deposit arithmetic takes place.
+#[test]
+fn test_rate_zero_triggers_invalid_rate_not_deposit_check() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 100);
+
+    // rate=0 must fail with InvalidRate (code 4), not DepositBelowMinimum (22).
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &0, &10, &100, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+/// `rate > 0` but `rate × total_duration < min_deposit` → `DepositBelowMinimum` (22).
+/// Verifies the deposit-floor check fires even when the rate itself is valid.
+#[test]
+fn test_positive_rate_but_total_below_min_triggers_deposit_below_minimum() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // rate=1, total_duration=50 → deposit=50, below DEFAULT_MIN_DEPOSIT (100).
+    // rate is positive and valid; only the total deposit is too small.
+    mint_to(&env, &token_id, &sponsor, 50);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
+
+/// `total deposit = min_deposit - 1` → `DepositBelowMinimum` (22).
+/// Verifies the boundary: one token short of the minimum is still rejected.
+#[test]
+fn test_total_at_min_minus_one_fails_deposit_below_minimum() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // DEFAULT_MIN_DEPOSIT = 100. rate=1, total_duration=99 → deposit=99 (min-1).
+    mint_to(&env, &token_id, &sponsor, 99);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &99, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
+
+/// `rate = -1` → `InvalidRate` (code 4).
+/// Negative rates are rejected before any deposit check, same as zero.
+#[test]
+fn test_negative_rate_triggers_invalid_rate() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 200);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &10, &100, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+/// After `set_min_deposit` raises the floor, a stream whose deposit was
+/// previously valid now fails with `DepositBelowMinimum`.
+/// Confirms that `set_min_deposit` interacts correctly with the deposit check.
+#[test]
+fn test_set_min_deposit_interaction_with_deposit_check() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Raise minimum to 1_000.
+    client.set_min_deposit(&admin, &1_000).unwrap();
+
+    // rate=10, total_duration=99 → deposit=990, below new minimum of 1_000.
+    mint_to(&env, &token_id, &sponsor, 990);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &99, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
