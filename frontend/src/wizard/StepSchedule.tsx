@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, type ChangeEvent } from 'react'
 import { Tooltip } from '../Tooltip'
-import { ledgersToDuration, scheduleSchema, isDepositOverflow } from './useWizard'
+import { ledgersToDuration, scheduleSchema, isDepositOverflow, LEDGERS_PER_SECOND } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData
@@ -10,6 +11,13 @@ interface Props {
   touched: Set<string>
   onNext: () => void
   onBack: () => void
+}
+
+/** Converts a `yyyy-mm-dd` value from `<input type="date">` into a ledger count. */
+function dateToLedgers(value: string): number | null {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return null;
+  return Math.max(1, Math.round((ms - Date.now()) / 1000 / LEDGERS_PER_SECOND));
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -23,6 +31,16 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function StepSchedule({ data, update, touch, touched, onNext, onBack }: Props) {
   const [blurred, setBlurred] = useState<Set<string>>(new Set())
+  // Native date field value (yyyy-mm-dd). Kept separate from the ledger count so
+  // the picker keeps a valid value even when the user edits ledgers by hand.
+  const [cliffDate, setCliffDate] = useState('')
+
+  const handleCliffDateChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setCliffDate(value)
+    const ledgers = dateToLedgers(value)
+    if (ledgers !== null) update({ cliffDuration: String(ledgers) })
+  }, [update])
 
   const result = scheduleSchema.safeParse({
     rate: data.rate,
@@ -86,41 +104,63 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
   ]
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.heading}>Schedule</h2>
-      <p style={styles.sub}>
+    <div className={styles.step}>
+      <h2 className={styles.stepHeading}>Schedule</h2>
+      <p className={styles.stepSub}>
         Set the vesting rate, cliff period, and total duration. Values update in real time.
       </p>
 
       {fields.map(f => (
-        <label key={f.key} style={styles.fieldLabel}>
+        <label key={f.key} className={styles.field}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {f.label}
             <Tooltip content={f.tooltip} />
           </span>
           <input
             type="number"
+            inputMode="numeric"
             min={1}
             placeholder={f.placeholder}
             value={data[f.key]}
             onChange={e => update({ [f.key]: e.target.value })}
             onBlur={() => handleBlur(f.key)}
             aria-invalid={!!fieldError(f.key)}
+            className={styles.input}
             style={{
-              ...styles.input,
-              borderColor: fieldError(f.key) ? 'var(--color-cancelled)' : 'var(--color-border)',
+              borderColor: fieldError(f.key) ? 'var(--color-cancelled, #b91c1c)' : 'var(--color-border, #e5e7eb)',
             }}
             data-testid={f.testId}
           />
           {fieldError(f.key) && (
-            <span role="alert" style={styles.error} data-testid={`${f.testId}-error`}>
+            <span role="alert" className={styles.error} data-testid={`${f.testId}-error`}>
               {fieldError(f.key)}
             </span>
           )}
         </label>
       ))}
 
-      <p style={styles.deposit}>
+      {/* Native date picker for the cliff — converts to ledgers on change (#822). */}
+      <label className={styles.field}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          Cliff date
+          <Tooltip content="Pick the date your cliff lands on. This is converted to a ledger count (~5 s per ledger)." />
+        </span>
+        <input
+          type="date"
+          className={styles.input}
+          value={cliffDate}
+          onChange={handleCliffDateChange}
+          data-testid="wizard-cliff-date"
+          aria-label="Cliff date"
+        />
+        <span className={styles.hint}>
+          {cliffDate
+            ? `≈ ${ledgersToDuration(dateToLedgers(cliffDate) ?? 0)} from now`
+            : 'Optional — pick a date instead of counting ledgers by hand.'}
+        </span>
+      </label>
+
+      <p className={styles.deposit}>
         Total deposit: <strong data-testid="wizard-deposit">{debouncedDeposit}</strong>{' '}
         {data.tokenSymbol || 'tokens'}
         {data.rate && data.totalDuration && (
@@ -131,29 +171,24 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
       </p>
 
       {overflow && (
-        <div
-          role="alert"
-          data-testid="overflow-warning"
-          style={{
-            padding: '0.75rem',
-            background: '#fef2f2',
-            border: '1px solid var(--color-cancelled)',
-            borderRadius: 'var(--radius)',
-            fontSize: '0.85rem',
-            color: 'var(--color-cancelled)',
-          }}
-        >
-          ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration before continuing.
+        <div role="alert" className={styles.warning} data-testid="overflow-warning">
+          ⚠️ï¸ <strong>Too large:</strong> rate × total duration is more than this contract can
+          track. Reduce the rate or duration before continuing.
         </div>
       )}
 
-      <div style={styles.actions}>
-        <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.secondaryBtn}
+          onClick={onBack}
+          data-testid="wizard-back-btn"
+        >
           ← Back
         </button>
         <button
           type="button"
-          className="btn btn-primary"
+          className={styles.primaryBtn}
           disabled={!canContinue}
           onClick={onNext}
           data-testid="wizard-next-btn"
@@ -165,20 +200,3 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  card: { display: 'flex', flexDirection: 'column', gap: '1rem' },
-  heading: { fontSize: '1.25rem', fontWeight: 700 },
-  sub: { fontSize: '0.9rem', color: '#6b7280' },
-  fieldLabel: { display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.875rem', fontWeight: 600 },
-  input: {
-    padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
-    border: '1px solid var(--color-border)', fontSize: '0.875rem',
-    outline: 'none', width: '100%',
-  },
-  deposit: {
-    fontSize: '0.875rem', padding: '0.5rem 0.75rem',
-    background: '#eff6ff', borderRadius: 'var(--radius)',
-  },
-  error: { fontSize: '0.8rem', color: 'var(--color-cancelled)' },
-  actions: { display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' },
-}

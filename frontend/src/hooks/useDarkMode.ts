@@ -17,9 +17,11 @@ function getInitialDark(): boolean {
 export function useDarkMode(): [boolean, () => void] {
   const [dark, setDark] = useState(getInitialDark);
 
-  // Apply class and persist preference whenever dark state changes
+  // Apply class, data-theme attribute, and persist preference whenever dark state changes
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
+    // Also set data-theme attribute for SSR compatibility per issue #766
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     try {
       localStorage.setItem(STORAGE_KEY, String(dark));
     } catch {

@@ -1,25 +1,24 @@
 "use client";
+/**
+ * Sponsor dashboard — #776
+ *
+ * Shows all vesting streams the connected wallet has sponsored.
+ * Includes the full cancel stream flow: preview modal → address confirmation →
+ * transaction signing → optimistic status update with rollback on failure.
+ */
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/contexts/WalletContext";
 import { VestingStream } from "@/types";
 import { AggregateStats } from "@/components/AggregateStats";
 import { SponsorStreamTable } from "@/components/SponsorStreamTable";
+import { CancelStreamModal } from "@/components/CancelStreamModal";
 import { generateStreamsCsv, downloadCsv } from "@/utils/exportCsv";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import styles from "./sponsor.module.css";
 
 const PAGE_SIZE = 25;
 
-/**
- * Sponsor dashboard showing all vesting streams created by the connected wallet.
- * Features:
- * - Aggregate stats (active, total locked, total claimable)
- * - Paginated table with recipient, status, dates, claimable amount
- * - CSV export
- * - Cancel stream action (sponsor only)
- * - Empty state with CTA
- */
 export default function SponsorPage() {
   const { t } = useTranslation();
   const { address } = useWallet();
@@ -30,11 +29,15 @@ export default function SponsorPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Mock data - replace with API call
+  // Cancel modal state — null means modal is closed
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const cancelTargetStream = streams.find((s) => s.id === cancelTargetId) ?? null;
+
+  // Mock data – replace with real API call
   const MOCK_SPONSOR_STREAMS: VestingStream[] = [
     {
       id: "1",
-      recipient: "GABC1…XYZ",
+      recipient: "GABC1EXAMPLERECIPIENTADDRESSXYZ",
       sponsor: address || "GSPON…",
       token: "USDC",
       rate: 10,
@@ -47,7 +50,7 @@ export default function SponsorPage() {
     },
     {
       id: "2",
-      recipient: "GDEF2…XYZ",
+      recipient: "GDEF2EXAMPLERECIPIENTADDRESSXYZ",
       sponsor: address || "GSPON…",
       token: "USDC",
       rate: 5,
@@ -60,7 +63,7 @@ export default function SponsorPage() {
     },
     {
       id: "3",
-      recipient: "GHIJ3…XYZ",
+      recipient: "GHIJ3EXAMPLERECIPIENTADDRESSXYZ",
       sponsor: address || "GSPON…",
       token: "XLM",
       rate: 20,
@@ -83,16 +86,9 @@ export default function SponsorPage() {
       setError(null);
 
       try {
-        // TODO: Replace with real API call
-        // const response = await fetch(
-        //   `/api/schedules/sponsor/${address}?page=${page}&pageSize=${PAGE_SIZE}`
-        // );
-        // const data = await response.json();
-
-        // Mock: filter by sponsor
-        const filtered = MOCK_SPONSOR_STREAMS.filter(
-          (s) => s.sponsor === address
-        );
+        // TODO: Replace mock with real API call:
+        // GET /api/schedules/sponsor/:address?page=X&pageSize=Y
+        const filtered = MOCK_SPONSOR_STREAMS;
         const start = (page - 1) * PAGE_SIZE;
         setTotal(filtered.length);
         setStreams(filtered.slice(start, start + PAGE_SIZE));
@@ -105,6 +101,7 @@ export default function SponsorPage() {
     }
 
     fetchStreams();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, page]);
 
   const handleExportCsv = useCallback(() => {
@@ -113,16 +110,25 @@ export default function SponsorPage() {
     downloadCsv(csv, filename);
   }, [streams]);
 
+  // Open the cancel confirmation modal
   const handleCancelStream = useCallback((streamId: string) => {
-    // TODO: Implement cancel stream action
-    console.log("Cancel stream:", streamId);
-    alert(`Implement cancel stream for ${streamId}`);
+    setCancelTargetId(streamId);
   }, []);
 
-  const handleViewDetails = useCallback((streamId: string) => {
-    // TODO: Navigate to stream details
-    console.log("View details:", streamId);
-    alert(`Navigate to stream details for ${streamId}`);
+  // Optimistic status update after successful cancellation
+  const handleCancelSuccess = useCallback((streamId: string) => {
+    setStreams((prev) =>
+      prev.map((s) => s.id === streamId ? { ...s, status: "cancelled" } : s)
+    );
+    setCancelTargetId(null);
+  }, []);
+
+  const handleCancelClose = useCallback(() => {
+    setCancelTargetId(null);
+  }, []);
+
+  const handleViewDetails = useCallback((_streamId: string) => {
+    // TODO: Navigate to stream details page
   }, []);
 
   if (!address) {
@@ -138,7 +144,7 @@ export default function SponsorPage() {
   if (streams.length === 0 && !loading) {
     return (
       <div className={styles.container}>
-        <h1 className={styles.title}>My Sponsored Streams</h1>
+        <h1 className={styles.title}>{t("sponsor.title", "My Sponsored Streams")}</h1>
         <SponsorStreamListEmpty />
       </div>
     );
@@ -147,7 +153,7 @@ export default function SponsorPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1 className={styles.title}>My Sponsored Streams</h1>
+        <h1 className={styles.title}>{t("sponsor.title", "My Sponsored Streams")}</h1>
         {streams.length > 0 && (
           <button
             className={styles.exportButton}
@@ -177,6 +183,15 @@ export default function SponsorPage() {
         onCancelStream={handleCancelStream}
         onViewDetails={handleViewDetails}
       />
+
+      {/* Cancel stream confirmation modal — rendered portal-style at page root */}
+      {cancelTargetStream && (
+        <CancelStreamModal
+          stream={cancelTargetStream}
+          onSuccess={handleCancelSuccess}
+          onClose={handleCancelClose}
+        />
+      )}
     </div>
   );
 }

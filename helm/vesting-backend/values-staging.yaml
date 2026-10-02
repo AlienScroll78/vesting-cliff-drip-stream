@@ -64,6 +64,12 @@ config:
   logLevel: "debug"
   contractId: ""
 
+logging:
+  fluentBit:
+    enabled: true
+    awsRegion: us-east-1
+    logGroupPrefix: /vesting/staging
+
 monitoring:
   serviceMonitor:
     enabled: false
