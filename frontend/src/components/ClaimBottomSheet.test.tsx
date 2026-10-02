@@ -140,6 +140,18 @@ describe("ClaimBottomSheet", () => {
     expect(screen.getByTestId("cliff-countdown")).toHaveTextContent(/cliff not reached/i);
   });
 
+  it("replaces the pre-cliff CTA with the countdown claim action at the cliff", () => {
+    const reachedStream: VestingStream = {
+      ...activeStream,
+      status: "pre-cliff",
+      claimableAmount: 100,
+      cliffLedger: 51_200_000,
+    };
+    render(<ClaimBottomSheet {...defaultProps} stream={reachedStream} />);
+    expect(screen.getByTestId("cliff-claim-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("claim-button")).not.toBeInTheDocument();
+  });
+
   it("disables claim button for pre-cliff stream", () => {
     const preCliffStream: VestingStream = {
       ...activeStream,
