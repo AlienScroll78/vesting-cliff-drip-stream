@@ -1,0 +1,133 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# reusable-rust-build.yml – Reusable workflow for Rust / WASM build steps
+#
+# Usage example (caller workflow):
+#
+#   jobs:
+#     build:
+#       uses: ./.github/workflows/reusable-rust-build.yml
+#       with:
+#         features: testutils
+#         upload_artifact: true
+#
+# Inputs:
+#   features        (string, optional)  – Cargo feature flags passed to
+#                                         `--features`. Leave empty for default.
+#   upload_artifact (boolean, optional) – When true, the compiled WASM is
+#                                         uploaded as a workflow artifact named
+#                                         "wasm-<run_id>". Default: false.
+#
+# Outputs:
+#   artifact_name – Name of the uploaded artifact (empty when upload is false).
+#   wasm_size_kb  – Size of the compiled WASM in kilobytes (string, 2 dp).
+# ──────────────────────────────────────────────────────────────────────────────
+name: Reusable – Rust Build
+
+on:
+  workflow_call:
+    inputs:
+      features:
+        description: >
+          Comma-separated Cargo features to enable (e.g. "testutils").
+          Leave empty to build with default features.
+        type: string
+        required: false
+        default: ""
+
+      upload_artifact:
+        description: >
+          Upload the compiled WASM as a workflow artifact named
+          "wasm-<run_id>" when true.
+        type: boolean
+        required: false
+        default: false
+
+    outputs:
+      artifact_name:
+        description: "Name of the uploaded WASM artifact (empty when upload_artifact is false)."
+        value: ${{ jobs.rust-build.outputs.artifact_name }}
+
+      wasm_size_kb:
+        description: "Size of the compiled WASM binary in KB (2 decimal places)."
+        value: ${{ jobs.rust-build.outputs.wasm_size_kb }}
+
+env:
+  CARGO_TERM_COLOR: always
+  WASM_PATH: target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm
+
+jobs:
+  rust-build:
+    name: Rust build (WASM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    outputs:
+      artifact_name: ${{ steps.upload.outputs.artifact_name }}
+      wasm_size_kb:  ${{ steps.size.outputs.wasm_size_kb }}
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Rust toolchain ────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          # Include fmt + clippy so callers can optionally run them without a
+          # separate toolchain install step.
+          components: rustfmt, clippy
+
+      # ── 3. Cargo cache ───────────────────────────────────────────────────────
+      - name: Restore / save cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          # Key varies by OS, Cargo.lock, and the requested features so that
+          # different feature sets never share a poisoned cache.
+          key: >-
+            ${{ runner.os }}-cargo-wasm-${{ inputs.features }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-${{ inputs.features }}-
+            ${{ runner.os }}-cargo-wasm-
+
+      # ── 4. Build WASM ────────────────────────────────────────────────────────
+      - name: Build WASM
+        run: |
+          FEATURE_FLAGS=""
+          if [[ -n "${{ inputs.features }}" ]]; then
+            FEATURE_FLAGS="--features ${{ inputs.features }}"
+          fi
+          cargo build --target wasm32-unknown-unknown --release $FEATURE_FLAGS
+
+      # ── 5. Measure WASM size ─────────────────────────────────────────────────
+      - name: Measure WASM size
+        id: size
+        run: |
+          SIZE_BYTES=$(stat -c%s "${{ env.WASM_PATH }}")
+          SIZE_KB=$(echo "scale=2; $SIZE_BYTES / 1024" | bc)
+          echo "wasm_size_kb=${SIZE_KB}" >> "$GITHUB_OUTPUT"
+          echo "WASM size: ${SIZE_KB} KB (${SIZE_BYTES} bytes)"
+
+      # ── 6. Upload artifact (conditional) ────────────────────────────────────
+      - name: Upload WASM artifact
+        id: upload
+        if: inputs.upload_artifact == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ github.run_id }}
+          path: ${{ env.WASM_PATH }}
+          retention-days: 7
+
+      - name: Set artifact name output
+        id: artifact-name
+        run: |
+          if [[ "${{ inputs.upload_artifact }}" == "true" ]]; then
+            echo "artifact_name=wasm-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "artifact_name=" >> "$GITHUB_OUTPUT"
+          fi

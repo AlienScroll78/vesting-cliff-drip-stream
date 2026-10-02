@@ -1,0 +1,11 @@
+{
+  "topics": ["vc_create", "<recipient>"],
+  "data": {
+    "sponsor": "<sponsor>",
+    "token": "<token>",
+    "rate_per_ledger": 10,
+    "start_ledger": 100,
+    "cliff_ledger": 150,
+    "end_ledger": 300
+  }
+}

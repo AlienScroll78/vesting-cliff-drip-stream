@@ -1,0 +1,12 @@
+{
+  "name": "Vesting Cliff Drip Stream",
+  "short_name": "VestDrip",
+  "icons": [
+    { "src": "/favicon-16.svg",  "sizes": "16x16",   "type": "image/svg+xml" },
+    { "src": "/favicon-32.svg",  "sizes": "32x32",   "type": "image/svg+xml" },
+    { "src": "/favicon-180.svg", "sizes": "180x180", "type": "image/svg+xml" }
+  ],
+  "theme_color": "#5B21B6",
+  "background_color": "#0F0A1E",
+  "display": "standalone"
+}

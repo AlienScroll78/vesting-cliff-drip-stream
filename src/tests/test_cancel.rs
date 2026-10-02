@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
+use soroban_sdk::{Address, Env};
 
 use crate::{
     error::VestingError,

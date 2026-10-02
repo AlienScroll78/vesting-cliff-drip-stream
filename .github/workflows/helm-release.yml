@@ -1,0 +1,71 @@
+name: Publish Helm Chart
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "helm/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  validate:
+    name: Lint & dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Lint chart
+        run: helm lint helm/vesting-backend
+
+      - name: Dry-run template render (default values)
+        run: |
+          helm template vesting-backend helm/vesting-backend \
+            --set externalSecret.enabled=false \
+            --dry-run \
+            > /dev/null
+
+      - name: Dry-run template render (externalSecret enabled)
+        run: |
+          helm template vesting-backend helm/vesting-backend \
+            --dry-run \
+            > /dev/null
+
+  release:
+    name: Package & publish
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.4"
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        with:
+          charts_dir: helm
+          # chart-releaser pushes index.yaml to the gh-pages branch
+          # Ensure that branch exists: see helm/vesting-backend/README.md
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

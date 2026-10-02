@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vesting-backend
+  labels:
+    app: vesting-backend
+  annotations:
+    # Image digest is automatically pinned here after each release by
+    # scripts/pin-image-digest.sh (invoked from container-registry.yml).
+    # DO NOT edit the image-digest annotation manually.
+    app.kubernetes.io/image-digest: "sha256:replace-with-digest-after-first-release"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: vesting-backend
+  template:
+    metadata:
+      labels:
+        app: vesting-backend
+    spec:
+      # Run as non-root for security hardening
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: vesting-backend
+          # ── Image is digest-pinned to prevent tag mutability attacks ──────
+          # Format: ghcr.io/<org>/<repo>@sha256:<digest>
+          # Updated automatically by the container-registry workflow on release.
+          image: ghcr.io/your-org/vesting-cliff-drip-stream@sha256:replace-with-digest-after-first-release
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vesting-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vesting-secrets
+                  key: redis-url
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

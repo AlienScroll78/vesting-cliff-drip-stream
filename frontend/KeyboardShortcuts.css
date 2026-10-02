@@ -1,0 +1,118 @@
+/* KeyboardShortcuts modal styles */
+
+.ks-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ks-dialog {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  width: min(520px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  outline: none;
+}
+
+.ks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.ks-header h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+}
+
+.ks-close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+.ks-close:hover { background: #f3f4f6; color: #111827; }
+.ks-close:focus-visible { outline: 2px solid #7c3aed; outline-offset: 2px; }
+
+.ks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.ks-table thead th {
+  text-align: left;
+  color: #6b7280;
+  font-weight: 600;
+  padding: 0 0 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ks-table tbody tr + tr td { border-top: 1px solid #f3f4f6; }
+
+.ks-table td { padding: 0.6rem 0; }
+
+.ks-keys { width: 44%; white-space: nowrap; }
+
+/* Chord separator */
+.ks-chord-sep {
+  display: inline-block;
+  color: #9ca3af;
+  margin: 0 0.2rem;
+  font-size: 0.75rem;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  font-family: ui-monospace, monospace;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  color: #374151;
+  box-shadow: 0 1px 0 #d1d5db;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ks-dialog {
+    background: #1f2937;
+    color: #f9fafb;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  }
+  .ks-header h2 { color: #f9fafb; }
+  .ks-close { color: #9ca3af; }
+  .ks-close:hover { background: #374151; color: #f9fafb; }
+  .ks-table thead th { color: #9ca3af; border-bottom-color: #374151; }
+  .ks-table tbody tr + tr td { border-top-color: #374151; }
+  kbd {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+    box-shadow: 0 1px 0 #4b5563;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .ks-dialog {
+    padding: 1rem;
+    width: 95vw;
+  }
+  .ks-table { font-size: 0.8rem; }
+  .ks-keys { width: 48%; }
+}

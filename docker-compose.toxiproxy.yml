@@ -1,0 +1,12 @@
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    ports:
+      - "8474:8474"   # Toxiproxy HTTP API
+      - "8666:8666"   # Horizon proxy listener
+    command: ["-host=0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8474/proxies"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

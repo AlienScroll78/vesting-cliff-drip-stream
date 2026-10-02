@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+  # Transitive Soroban SDK dependency; no maintained replacement is available
+  # until the SDK upgrades its dependency graph.
+  "RUSTSEC-2024-0388",
+  # Transitive macro dependency; no maintained replacement is available
+  # until the SDK upgrades its dependency graph.
+  "RUSTSEC-2024-0436",
+]
