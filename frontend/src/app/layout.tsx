@@ -10,8 +10,10 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { WalletButton } from "@/components/WalletButton";
 
-// Inline script run before paint to prevent flash of unstyled content
-const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
+// Inline script run before paint to prevent flash of unstyled content.
+// Sets both .dark class and data-theme attribute (#766) so both selector
+// strategies are active before React hydration.
+const noFoucScript = `(function(){try{var h=document.documentElement;var d=localStorage.getItem('vesting-dark-mode');var isDark=d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(isDark){h.classList.add('dark');h.setAttribute('data-theme','dark');}else{h.setAttribute('data-theme','light');}}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
