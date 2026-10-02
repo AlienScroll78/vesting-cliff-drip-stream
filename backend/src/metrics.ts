@@ -119,3 +119,18 @@ export const websocketConnectionsActive = new Gauge({
   labelNames: [] as const,
   registers: [registry],
 });
+
+// ---------------------------------------------------------------------------
+// Backfill metrics (Issue #749)
+// ---------------------------------------------------------------------------
+
+/**
+ * Total number of events written to stream_events by the backfill service.
+ * Incremented once per event successfully upserted (duplicates do not count).
+ */
+export const backfillEventsProcessedTotal = new Counter({
+  name: 'backfill_events_processed_total',
+  help: 'Total number of stream events upserted by the backfill service',
+  labelNames: [] as const,
+  registers: [registry],
+});

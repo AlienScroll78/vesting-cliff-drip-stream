@@ -84,10 +84,53 @@
     .dark-toggle:hover { border-color: var(--accent); }
     .dark-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+    /* ── Focus visibility (WCAG 2.4.7) ── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    /* ── Skip link ── */
+    .skip-nav {
+      position: absolute;
+      top: -100%;
+      left: 0.5rem;
+      z-index: 1000;
+      padding: 0.6rem 1rem;
+      background: var(--surface);
+      color: var(--accent);
+      border: 2px solid var(--accent);
+      border-radius: 0 0 8px 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+    .skip-nav:focus { top: 0; }
+
     main {
       max-width: 600px;
       margin: 2.5rem auto;
       padding: 0 1rem;
+    }
+
+    /* ── Form error region ── */
+    .form-error {
+      display: none;
+      margin-bottom: 1.25rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid #b91c1c;
+      border-radius: 8px;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .form-error.visible { display: block; }
+    .dark .form-error {
+      border-color: #f87171;
+      background: #450a0a;
+      color: #fecaca;
     }
 
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
@@ -117,7 +160,6 @@
       color: var(--text);
       padding: 0.6rem 0.8rem;
       font-size: 0.95rem;
-      outline: none;
       transition: border-color 0.15s;
     }
     input:focus { border-color: var(--accent); }
@@ -155,7 +197,12 @@
       color: var(--text-muted);
       font-size: 0.9rem;
     }
-    .cta-section a { color: var(--accent); text-decoration: none; }
+    .cta-section a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 0.15em;
+    }
+    .cta-section a:hover { text-decoration-thickness: 2px; }
 
     /* ── Schedule preview table ── */
     #schedule-preview { display: none; margin-top: 2rem; }
@@ -164,6 +211,12 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 0.9rem;
+    }
+    caption {
+      text-align: left;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      padding-bottom: 0.5rem;
     }
     th, td {
       text-align: left;
@@ -177,7 +230,9 @@
 </head>
 <body>
 
-<nav>
+<a class="skip-nav" href="#main">Skip to main content</a>
+
+<nav aria-label="Primary">
   <span class="logo">⚡ VestingStream</span>
   <div class="nav-actions">
     <button class="dark-toggle" id="dark-toggle" aria-label="Toggle dark mode" aria-pressed="false" title="Toggle dark mode">🌙</button>
@@ -185,26 +240,34 @@
   </div>
 </nav>
 
-<main>
+<main id="main" tabindex="-1">
   <h1>Create Vesting Stream</h1>
   <p class="subtitle">Set up a cliff + linear drip vesting schedule on Stellar.</p>
 
   <div class="card">
     <form id="vesting-form" novalidate>
 
+      <div class="form-error" id="form-error" role="alert" aria-live="assertive"></div>
+
       <div class="field">
         <label for="sponsor">Sponsor address</label>
-        <input type="text" id="sponsor" placeholder="G…" autocomplete="off" required />
+        <input type="text" id="sponsor" placeholder="G…" autocomplete="off" required
+               aria-describedby="sponsor-hint" />
+        <div class="ledger-hint" id="sponsor-hint">Your Stellar public key.</div>
       </div>
 
       <div class="field">
         <label for="recipient">Recipient address</label>
-        <input type="text" id="recipient" placeholder="G…" autocomplete="off" required />
+        <input type="text" id="recipient" placeholder="G…" autocomplete="off" required
+               aria-describedby="recipient-hint" />
+        <div class="ledger-hint" id="recipient-hint">The account that will be able to claim.</div>
       </div>
 
       <div class="field">
         <label for="token">Token contract (SAC)</label>
-        <input type="text" id="token" placeholder="C…" autocomplete="off" required />
+        <input type="text" id="token" placeholder="C…" autocomplete="off" required
+               aria-describedby="token-hint" />
+        <div class="ledger-hint" id="token-hint">Stellar Asset Contract address of the token to stream.</div>
       </div>
 
       <div class="field">
@@ -232,17 +295,18 @@
 
   <!-- Schedule preview — shown after submission for confirmation / print -->
   <div id="schedule-preview" class="card">
-    <h2>Schedule Summary</h2>
-    <table id="schedule-table">
+    <h2 id="schedule-preview-title">Schedule Summary</h2>
+    <table id="schedule-table" aria-labelledby="schedule-preview-title">
+      <caption>Values used to create this vesting stream.</caption>
       <thead>
-        <tr><th>Field</th><th>Value</th></tr>
+        <tr><th scope="col">Field</th><th scope="col">Value</th></tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
 
   <div class="cta-section">
-    <p>Already have a stream? <a href="#">View your schedule →</a></p>
+    <p>Already have a stream? <a href="/view">View your schedule →</a></p>
   </div>
 </main>
 
@@ -326,18 +390,31 @@
   endInput.addEventListener('input',   () => updateHint(endInput,   endHint,   'End'));
 
   // ── Form submission ────────────────────────────────────────────────────────
+  const formError = document.getElementById('form-error');
+  function showFormError(message) {
+    formError.textContent = message;
+    formError.classList.add('visible');
+  }
+  function clearFormError() {
+    formError.textContent = '';
+    formError.classList.remove('visible');
+  }
+
   document.getElementById('vesting-form').addEventListener('submit', e => {
     e.preventDefault();
+    clearFormError();
 
     const cliffDelta = dateToLedgerDelta(cliffInput.value);
     const endDelta   = dateToLedgerDelta(endInput.value);
 
     if (!cliffDelta || !endDelta) {
-      alert('Both cliff and end dates must be in the future.');
+      showFormError('Both cliff and end dates must be in the future.');
+      (cliffDelta ? endInput : cliffInput).focus();
       return;
     }
     if (endDelta <= cliffDelta) {
-      alert('End date must be after the cliff date.');
+      showFormError('End date must be after the cliff date.');
+      endInput.focus();
       return;
     }
 
