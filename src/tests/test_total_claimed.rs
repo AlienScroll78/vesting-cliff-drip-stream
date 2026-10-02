@@ -81,7 +81,7 @@ fn test_total_claimed_after_single_claim() {
 
     // Advance 60 ledgers past start (ledger 160, past cliff 150).
     advance_ledger(&env, 60);
-    let claimed = client.claim_vested(&recipient, &None).unwrap();
+    let claimed = client.claim_vested(&recipient).unwrap();
     assert_eq!(claimed, 600); // 60 ledgers × 10
 
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -118,7 +118,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     // ── Claim 1: at cliff (ledger 150) — 50 ledgers accrued ──────────────────
     advance_ledger(&env, 50);
-    let c1 = client.claim_vested(&recipient, &None).unwrap();
+    let c1 = client.claim_vested(&recipient).unwrap();
     assert_eq!(c1, 500);
 
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -127,7 +127,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     // ── Claim 2: 30 more ledgers (ledger 180) ────────────────────────────────
     advance_ledger(&env, 30);
-    let c2 = client.claim_vested(&recipient, &None).unwrap();
+    let c2 = client.claim_vested(&recipient).unwrap();
     assert_eq!(c2, 300);
 
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -136,7 +136,7 @@ fn test_total_claimed_accumulates_across_multiple_claims() {
 
     // ── Claim 3: 70 more ledgers (ledger 250) ────────────────────────────────
     advance_ledger(&env, 70);
-    let c3 = client.claim_vested(&recipient, &None).unwrap();
+    let c3 = client.claim_vested(&recipient).unwrap();
     assert_eq!(c3, 700);
 
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -162,13 +162,13 @@ fn test_total_claimed_equals_deposit_after_full_claim() {
 
     // Claim once past the cliff.
     advance_ledger(&env, 60); // ledger 160
-    let c1 = client.claim_vested(&recipient, &None).unwrap();
+    let c1 = client.claim_vested(&recipient).unwrap();
     assert_eq!(c1, 600);
 
     // Claim again past end_ledger (stream finishes, schedule removed).
     advance_ledger(&env, 50); // ledger 210, past end_ledger 200
     // At this point get_schedule still exists until the final claim commits.
-    let c2 = client.claim_vested(&recipient, &None).unwrap();
+    let c2 = client.claim_vested(&recipient).unwrap();
     assert_eq!(c2, 400); // remaining 40 ledgers × 10
 
     // Stream is finished — schedule is removed.
@@ -213,7 +213,7 @@ fn test_total_claimed_consistent_in_get_stats() {
 
     // After a claim: stats.total_claimed must match schedule.total_claimed.
     advance_ledger(&env, 30); // past cliff (120+20=120 → ledger 130)
-    let claimed = client.claim_vested(&recipient, &None).unwrap();
+    let claimed = client.claim_vested(&recipient).unwrap();
 
     let stats = client.get_stats(&recipient).unwrap();
     let schedule = client.get_schedule(&recipient).unwrap();
@@ -258,7 +258,7 @@ fn test_total_claimed_no_overflow_high_rate() {
 
     // Advance to cliff.
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, rate * 10);
 
     let schedule = client.get_schedule(&recipient).unwrap();

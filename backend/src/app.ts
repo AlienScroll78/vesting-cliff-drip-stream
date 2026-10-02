@@ -1,9 +1,13 @@
 import express, { type Request, type Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { validateAddress } from './validation.js';
+import { RecipientParamsSchema } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
+import { validate } from './middleware/validate.js';
+import { sponsorStreamsRouter } from './routes/streams.js';
+import { adminRouter } from './admin/index.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { buildClaimTxRouter } from './routes/buildClaimTx.js';
 
 const app = express();
 
@@ -32,8 +36,14 @@ app.get(
   createScheduleController(),
 );
 
+// Analytics summary — aggregate protocol-wide statistics (Issue #745)
+app.get('/api/analytics/summary', analyticsSummaryHandler);
+
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
+
+// Claim transaction builder — POST /api/streams/:recipient/build-claim-tx
+app.use('/api', buildClaimTxRouter);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
