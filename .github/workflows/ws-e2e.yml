@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ws-e2e.yml — issue #788: WebSocket E2E test CI job
+#
+# Runs the WebSocket end-to-end test suite on every pull request and on
+# pushes to main.
+#
+# The tests use an in-process HTTP + WebSocket server so no external services
+# (Redis, Horizon, Stellar node) are required.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: WebSocket E2E Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ws-e2e:
+    name: WebSocket E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run WebSocket E2E tests
+        run: npx vitest run src/ws.e2e.test.ts --reporter=verbose
