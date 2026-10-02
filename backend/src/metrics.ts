@@ -1,13 +1,15 @@
 /**
- * Issue #570: Prometheus metrics for backend observability.
+ * Issue #756: Prometheus metrics for backend observability.
  *
- * Creates a dedicated Registry and exports all six instrumentation metrics:
- *   - http_requests_total            (Counter)
- *   - http_request_duration_seconds  (Histogram)
- *   - indexer_events_processed_total (Counter)
- *   - indexer_poll_lag_seconds       (Gauge)
- *   - db_query_duration_seconds      (Histogram)
- *   - websocket_connections_active   (Gauge)
+ * Creates a dedicated Registry and exports all eight instrumentation metrics:
+ *   - http_requests_total            (Counter)   by method, path, status
+ *   - http_request_duration_seconds  (Histogram) by path
+ *   - indexer_events_processed_total (Counter)   by event_type
+ *   - indexer_lag_seconds            (Gauge)     seconds behind chain tip
+ *   - db_query_duration_seconds      (Histogram) by query name
+ *   - rpc_calls_total                (Counter)   by method, status
+ *   - active_streams_count           (Gauge)     total active streams
+ *   - websocket_connections_active   (Gauge)     active WS connections
  *
  * A dedicated Registry (not the global default) is used so that tests can
  * instantiate fresh registries without cross-contamination.
@@ -49,11 +51,11 @@ export const httpRequestDurationSeconds = new Histogram({
 // Indexer metrics
 // ---------------------------------------------------------------------------
 
-/** Total number of Horizon events processed by the indexer. */
+/** Total number of Horizon events processed by the indexer, labelled by event type. */
 export const indexerEventsProcessedTotal = new Counter({
   name: 'indexer_events_processed_total',
   help: 'Total number of Horizon events processed by the indexer',
-  labelNames: [] as const,
+  labelNames: ['event_type'] as const,
   registers: [registry],
 });
 
@@ -83,6 +85,30 @@ export const dbQueryDurationSeconds = new Histogram({
 });
 
 // ---------------------------------------------------------------------------
+// RPC metrics
+// ---------------------------------------------------------------------------
+
+/** Total number of Soroban RPC calls, labelled by method and status. */
+export const rpcCallsTotal = new Counter({
+  name: 'rpc_calls_total',
+  help: 'Total number of Soroban RPC calls',
+  labelNames: ['method', 'status'] as const,
+  registers: [registry],
+});
+
+// ---------------------------------------------------------------------------
+// Stream metrics
+// ---------------------------------------------------------------------------
+
+/** Current count of active vesting streams in the database. */
+export const activeStreamsCount = new Gauge({
+  name: 'active_streams_count',
+  help: 'Total number of active vesting streams',
+  labelNames: [] as const,
+  registers: [registry],
+});
+
+// ---------------------------------------------------------------------------
 // WebSocket metrics
 // ---------------------------------------------------------------------------
 
@@ -90,6 +116,21 @@ export const dbQueryDurationSeconds = new Histogram({
 export const websocketConnectionsActive = new Gauge({
   name: 'websocket_connections_active',
   help: 'Number of currently active WebSocket connections',
+  labelNames: [] as const,
+  registers: [registry],
+});
+
+// ---------------------------------------------------------------------------
+// Backfill metrics (Issue #749)
+// ---------------------------------------------------------------------------
+
+/**
+ * Total number of events written to stream_events by the backfill service.
+ * Incremented once per event successfully upserted (duplicates do not count).
+ */
+export const backfillEventsProcessedTotal = new Counter({
+  name: 'backfill_events_processed_total',
+  help: 'Total number of stream events upserted by the backfill service',
   labelNames: [] as const,
   registers: [registry],
 });

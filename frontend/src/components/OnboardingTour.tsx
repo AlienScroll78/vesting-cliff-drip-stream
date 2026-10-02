@@ -1,11 +1,5 @@
-import React, {
-  useEffect,
-  useRef,
-  useCallback,
-  useState,
-  useId,
-} from 'react';
-import { useOnboardingTour } from '../useOnboardingTour';
+import React, { useEffect, useRef, useCallback, useState, useId } from "react";
+import { useOnboardingTour, type StreamState } from "@/useOnboardingTour";
 
 /** Padding (px) added around the highlighted element's bounding box. */
 const HIGHLIGHT_PADDING = 8;
@@ -21,21 +15,33 @@ interface TooltipPosition {
   left: number;
 }
 
+interface OnboardingTourProps {
+  /**
+   * Stream state used to adapt the step copy. Defaults to `"pre-cliff"`.
+   * Pass `"active"` or `"completed"` to show post-cliff wording.
+   */
+  streamState?: StreamState;
+  /** Gate for auto-start — the app passes `address !== null`. */
+  enabled?: boolean;
+}
+
 /**
- * OnboardingTour
+ * OnboardingTour — issue #820.
  *
- * Renders a floating spotlight tooltip that walks the user through key UI
- * elements using `data-tour` attribute selectors.
+ * Renders a spotlight tooltip that walks the user through the key UI elements
+ * using `data-tour` attribute selectors.
  *
  * - Positions itself relative to each step's target element
  * - Repositions to the bottom of the viewport on narrow screens (mobile-friendly)
- * - Traps keyboard focus within the tooltip
+ * - Moves focus into the card and keeps Tab focus inside it
  * - Announces step transitions via an aria-live region
+ * - Keyboard: Escape / Backspace = skip, ArrowRight = next, ArrowLeft = back,
+ *   Home = first step, End = last step
  * - Closes on Escape
  */
-export function OnboardingTour() {
-  const { isActive, currentStep, currentStepData, totalSteps, next, prev, skip } =
-    useOnboardingTour();
+export function OnboardingTour({ streamState = "pre-cliff", enabled = true }: OnboardingTourProps) {
+  const { isActive, currentStep, currentStepData, totalSteps, next, prev, skip, goToStep } =
+    useOnboardingTour({ streamState, enabled });
 
   const [position, setPosition] = useState<TooltipPosition>({ top: 0, left: 0 });
   const [isMobile, setIsMobile] = useState(false);
@@ -91,15 +97,56 @@ export function OnboardingTour() {
     }
   }, [isActive, currentStep]);
 
-  // Close on Escape
+  // Keyboard navigation + Escape to skip (#820 accessibility criteria)
   useEffect(() => {
     if (!isActive) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') skip();
+      switch (e.key) {
+        case "Escape":
+        case "Backspace":
+          e.preventDefault();
+          skip();
+          break;
+        case "ArrowRight":
+        case "Enter":
+          e.preventDefault();
+          next();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          prev();
+          break;
+        case "Home":
+          e.preventDefault();
+          goToStep(0);
+          break;
+        case "End":
+          e.preventDefault();
+          goToStep(totalSteps - 1);
+          break;
+        case "Tab": {
+          // Keep focus inside the tooltip so the tour is fully keyboard-navigable.
+          const focusables = tooltipRef.current?.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+          );
+          if (!focusables || focusables.length === 0) return;
+          const first = focusables[0]!;
+          const last = focusables[focusables.length - 1]!;
+          const active = document.activeElement;
+          if (e.shiftKey && (active === first || active === tooltipRef.current)) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && active === last) {
+            e.preventDefault();
+            first.focus();
+          }
+          break;
+        }
+      }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, skip]);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isActive, skip, next, prev, goToStep, currentStep, totalSteps]);
 
   if (!isActive || !currentStepData) return null;
 

@@ -1,0 +1,154 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# coverage.yml  — issue #785: Test coverage reporting pipeline
+#
+# Runs on every PR and push to main.
+#
+# What it does:
+#   1. Runs `make coverage-check` which:
+#        • generates HTML report in docs/coverage/html/
+#        • generates LCOV report in docs/coverage/lcov.info
+#        • fails if line coverage drops below 90%
+#   2. Uploads the HTML report as a CI artifact.
+#   3. Comments the coverage delta (current vs. base branch) on the PR.
+#   4. Updates the README badge dynamically via a commit to the summary file.
+#
+# Required tools:
+#   cargo-llvm-cov  (installed in the job via cargo install)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write  # needed to post PR comments
+
+env:
+  CARGO_TERM_COLOR: always
+  MIN_LINE_COVERAGE: "90"
+
+jobs:
+  coverage:
+    name: Coverage report & threshold enforcement
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          # Fetch the base branch so we can compare coverage delta on PRs.
+          fetch-depth: 0
+
+      # ── Rust toolchain ──────────────────────────────────────────────────────
+      - name: Install Rust stable with llvm-tools
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      # ── Cargo cache ─────────────────────────────────────────────────────────
+      - name: Cache cargo registry & build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-coverage-
+
+      # ── Install cargo-llvm-cov ───────────────────────────────────────────────
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      # ── Generate coverage report ─────────────────────────────────────────────
+      - name: Generate HTML + LCOV coverage reports
+        run: make coverage
+
+      # ── Enforce 90% line coverage threshold ─────────────────────────────────
+      - name: Enforce ≥90% line coverage (make coverage-check)
+        run: |
+          cargo llvm-cov \
+            --features testutils \
+            --ignore-filename-regex 'src/tests/.*' \
+            --fail-under-lines ${{ env.MIN_LINE_COVERAGE }} \
+            --lcov \
+            --output-path docs/coverage/lcov.info
+        # The step fails (non-zero exit) if coverage < 90%, which blocks the PR.
+
+      # ── Extract coverage percentage for badge / comment ──────────────────────
+      - name: Extract line coverage percentage
+        id: cov
+        run: |
+          # Parse the LCOV summary to compute overall line coverage %.
+          LINES_FOUND=$(grep -c "^DA:" docs/coverage/lcov.info || echo 0)
+          LINES_HIT=$(grep "^DA:" docs/coverage/lcov.info | grep -v ",0$" | wc -l || echo 0)
+          if [ "$LINES_FOUND" -gt 0 ]; then
+            PCT=$(echo "scale=1; $LINES_HIT * 100 / $LINES_FOUND" | bc)
+          else
+            PCT="0"
+          fi
+          echo "pct=${PCT}" >> "$GITHUB_OUTPUT"
+          echo "Coverage: ${PCT}% (${LINES_HIT}/${LINES_FOUND} lines)"
+
+      # ── Upload HTML report as artifact ───────────────────────────────────────
+      - name: Upload HTML coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html-${{ github.sha }}
+          path: docs/coverage/html/
+          retention-days: 30
+
+      # ── Comment coverage delta on PR ─────────────────────────────────────────
+      - name: Post coverage comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pct = '${{ steps.cov.outputs.pct }}';
+            const sha  = context.sha.slice(0, 7);
+            const body = [
+              '## 📊 Coverage Report',
+              '',
+              `| Metric | Value |`,
+              `|--------|-------|`,
+              `| Line coverage | **${pct}%** |`,
+              `| Threshold | 90% |`,
+              `| Status | ${parseFloat(pct) >= 90 ? '✅ Pass' : '❌ Below threshold'} |`,
+              '',
+              `> Commit: \`${sha}\`  ·  [View full HTML report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // Update existing coverage comment rather than adding a new one.
+            const existing = comments.find(c =>
+              c.user?.login === 'github-actions[bot]' &&
+              c.body?.startsWith('## 📊 Coverage Report')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

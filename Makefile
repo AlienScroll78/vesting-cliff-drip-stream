@@ -2,9 +2,10 @@
 # Vesting Cliff Drip Stream – Build & Test Makefile
 # ──────────────────────────────────────────────────────────────
 
-CONTRACT_NAME = vesting_cliff_drip_stream
-WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
-OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
+CONTRACT_NAME    = vesting_cliff_drip_stream
+WASM_OUTPUT      = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
+OPTIMIZED        = target/$(CONTRACT_NAME).optimized.wasm
+MAX_WASM_SIZE_KB ?= 50
 
 .PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
 
@@ -29,6 +30,21 @@ coverage:
 coverage-ci:
 	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
 
+## Enforce a minimum 90% line coverage threshold (issue #785).
+## Generates HTML report in docs/coverage/html/ and LCOV in docs/coverage/lcov.info,
+## then fails the build if line coverage drops below 90%.
+## Excludes test helper files from coverage calculation.
+## Install: cargo install cargo-llvm-cov
+coverage-check:
+	cargo llvm-cov \
+		--features testutils \
+		--html \
+		--output-dir docs/coverage/html \
+		--lcov \
+		--output-path docs/coverage/lcov.info \
+		--ignore-filename-regex 'src/tests/.*' \
+		--fail-under-lines 90
+
 ## Validate the on-chain contract spec (schema) against the expected API.
 ## Requires the WASM to be built first; spec-test depends on `build`.
 spec-test: build
@@ -39,6 +55,20 @@ optimize: build
 	stellar contract optimize --wasm $(WASM_OUTPUT) --wasm-out $(OPTIMIZED)
 	@echo "Optimized: $(OPTIMIZED)"
 	@ls -lh $(OPTIMIZED)
+
+## Check that the optimized WASM does not exceed MAX_WASM_SIZE_KB (default: 50 KB).
+## Builds and optimizes first if the optimized WASM is not already present.
+## Exit 1 if over threshold; exit 0 if within budget.
+## Override threshold:  make check-wasm-size MAX_WASM_SIZE_KB=60
+check-wasm-size: optimize
+	@SIZE_BYTES=$$(wc -c < "$(OPTIMIZED)"); \
+	SIZE_KB=$$(( SIZE_BYTES / 1024 )); \
+	echo "Optimized WASM size: $${SIZE_KB} KB ($${SIZE_BYTES} bytes) — limit: $(MAX_WASM_SIZE_KB) KB"; \
+	if [ "$$SIZE_KB" -gt "$(MAX_WASM_SIZE_KB)" ]; then \
+		echo "ERROR: WASM size $${SIZE_KB} KB exceeds limit of $(MAX_WASM_SIZE_KB) KB" >&2; \
+		exit 1; \
+	fi; \
+	echo "OK: $${SIZE_KB} KB <= $(MAX_WASM_SIZE_KB) KB"
 
 ## Format source code
 fmt:
@@ -120,6 +150,38 @@ test-integration: build
 	node tests/integration/indexer_pipeline.test.js; status=$$?; \
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
+
+## Run full stream lifecycle integration tests against a local Stellar node (issue #779).
+## Starts a stellar/quickstart:testing node, deploys the contract, funds accounts,
+## runs all 5 lifecycle scenarios, then tears down.
+## Requires: Docker, Stellar CLI, Python 3.11+, Rust wasm32 target.
+integration-test: build
+	@echo "==> Starting local Stellar quickstart node..."
+	docker compose -f docker-compose.integration.yml up -d
+	@echo "==> Waiting for node to be ready..."
+	@for i in $$(seq 1 60); do \
+		curl -sf http://localhost:8000 > /dev/null 2>&1 && echo "  Node ready." && break; \
+		echo "  Attempt $$i/60..."; sleep 5; \
+	done
+	@echo "==> Configuring Stellar CLI network..."
+	stellar network add local \
+		--rpc-url http://localhost:8000/soroban/rpc \
+		--network-passphrase "Standalone Network ; February 2017" \
+		2>/dev/null || true
+	@echo "==> Funding test accounts..."
+	source scripts/fund_accounts.sh
+	@echo "==> Deploying contract..."
+	$(eval VESTING_CONTRACT := $(shell bash scripts/deploy_contract.sh))
+	@echo "  Contract: $(VESTING_CONTRACT)"
+	@echo "==> Running lifecycle integration tests..."
+	VESTING_CONTRACT=$(VESTING_CONTRACT) \
+	SOROBAN_RPC_URL=http://localhost:8000/soroban/rpc \
+	HORIZON_URL=http://localhost:8000 \
+	STELLAR_NETWORK=local \
+	python3 tests/integration/test_lifecycle.py; \
+	STATUS=$$?; \
+	docker compose -f docker-compose.integration.yml down; \
+	exit $$STATUS
 
 ## Run k6 backend load tests (requires a running backend on localhost:3001)
 ## See tests/load/backend_scenarios.js for scenario description.

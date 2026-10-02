@@ -6,7 +6,8 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 
 | Runbook | When to use |
 |---------|-------------|
-| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary |
+| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary (planned release) |
+| [Emergency Contract Upgrade](./emergency-contract-upgrade.md) | Accelerated upgrade path during an active security incident or critical regression |
 
 ## Infrastructure
 
@@ -14,12 +15,14 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 |---------|-------------|
 | [Drift Reconciliation](./drift-reconciliation.md) | A daily drift-detection run has reported that live infrastructure diverges from Terraform configuration |
 | [Emergency Override](./emergency-override.md) | You must make a manual infrastructure change immediately to mitigate an active incident |
+| [Secrets Management](./secrets-management.md) | Rotate a secret manually, investigate a rotation failure, or audit who read a secret |
 
 ## Database
 
 | Runbook | When to use |
 |---------|-------------|
 | [RDS Restore](./rds-restore.md) | Restore the production database from a snapshot |
+| [Backup Restore Verification](./backup-restore-verification.md) | The weekly restore check failed, or you want to test a restore on demand without touching production |
 | [Disaster Recovery](./disaster-recovery.md) | Full system recovery — database, indexer re-sync, contract re-deploy |
 | [Backfill Stream Events](./backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or a decoder bug fix |
 
@@ -28,6 +31,7 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [CloudWatch Logs](./cloudwatch-logs.md) | Query application logs, set up alarms, export log data |
+| [Alert Response](./alert-response.md) | A Grafana/CloudWatch alert has fired (indexer lag, error rate, DB pool, RPC, WASM deploy) |
 | [Cost Monitoring](./cost-monitoring.md) | AWS cost anomaly alerts, budget notifications, and Slack relay |
 
 ---
