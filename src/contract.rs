@@ -1493,3 +1493,7 @@ fn compute_variable_claimable(
 // Issue #719: pause_stream and resume_stream are implemented above.
 // See: pause_stream(), resume_stream(), VestingError::StreamAlreadyPaused,
 // VestingError::StreamNotPaused, VestingError::StreamPaused
+
+// Issue #720: set_allowlist, set_allowlist_enabled, is_allowed are implemented
+// above. RecipientNotAllowed (14) returned when allowlist is enabled and
+// recipient is not listed.

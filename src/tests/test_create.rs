@@ -192,6 +192,42 @@ fn test_create_with_none_metadata_stored_as_none() {
     assert_eq!(schedule.metadata, None);
 }
 
+// ── InvalidRecipient regression test (#729) ───────────────────────────────────
+
+/// Calling `create_vesting_stream` with identical sponsor and recipient addresses
+/// must be rejected immediately with `InvalidRecipient` (error code 11).
+///
+/// Regression test for issue #729: ensures the same-address guard is present
+/// and returns the correct error code before any token transfer occurs.
+#[test]
+fn test_create_stream_same_sponsor_and_recipient_returns_invalid_recipient() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let sponsor = Address::generate(&env);
+    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+
+    // Sponsor and recipient are the same address.
+    let err = client
+        .try_create_vesting_stream(
+            &sponsor,
+            &sponsor, // same as sponsor — must be rejected
+            &token_id,
+            &10,
+            &50,
+            &200,
+            &None,
+        )
+        .unwrap_err();
+
+    assert_eq!(err, Ok(VestingError::InvalidRecipient));
+}
+
+/// Confirms `InvalidRecipient` carries error code 11.
+#[test]
+fn test_invalid_recipient_error_code_is_11() {
+    assert_eq!(VestingError::InvalidRecipient as u32, 11);
+}
+
 /// A metadata string of 257 bytes is rejected with MetadataTooLong.
 #[test]
 fn test_create_metadata_257_bytes_rejected() {
