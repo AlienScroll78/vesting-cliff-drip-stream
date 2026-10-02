@@ -29,3 +29,7 @@ Each `get_schedule`, `set_schedule`, and `remove_schedule` call touches exactly 
 - Read/write cost is O(1) per recipient regardless of total stream count.
 - TTL expiry is isolated: one dormant stream expiring does not affect others.
 - There is no built-in enumeration of all active streams; an off-chain indexer must track the `StreamCreated` event to reconstruct the full list.
+
+## See Also
+
+- [docs/storage-layout.md](../storage-layout.md) — Complete reference for every `DataKey` variant, storage tier, TTL strategy, and the function-to-key matrix.

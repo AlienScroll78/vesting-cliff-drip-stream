@@ -46,6 +46,9 @@ fn s_new_02_get_min_deposit_returns_default_when_unset() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     assert_eq!(client.get_min_deposit(), DEFAULT_MIN_DEPOSIT);
 }
@@ -57,7 +60,13 @@ fn s_new_03_set_min_deposit_round_trip() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let admin = Address::generate(&env);
     client.set_min_deposit(&admin, &250).unwrap();
 
@@ -71,7 +80,13 @@ fn s_new_04_set_min_deposit_stores_exact_value() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let admin = Address::generate(&env);
 
     client.set_min_deposit(&admin, &1_000_000).unwrap();
@@ -89,7 +104,13 @@ fn s_new_05_set_min_deposit_zero_returns_invalid_rate() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let admin = Address::generate(&env);
     let err = client.set_min_deposit(&admin, &0).unwrap_err();
     assert_eq!(err, VestingError::InvalidRate.into());
@@ -102,7 +123,13 @@ fn s_new_06_set_min_deposit_negative_returns_invalid_rate() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let admin = Address::generate(&env);
     let err = client.set_min_deposit(&admin, &-100).unwrap_err();
     assert_eq!(err, VestingError::InvalidRate.into());
@@ -117,6 +144,9 @@ fn s_new_07_has_schedule_false_when_no_schedule() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     let nobody = Address::generate(&env);
     assert!(client.get_schedule(&nobody).is_none());
@@ -129,7 +159,13 @@ fn s_new_08_has_schedule_true_after_create() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -155,6 +191,9 @@ fn s_new_09_get_schedule_none_for_nonexistent() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     let ghost = Address::generate(&env);
     assert!(client.get_schedule(&ghost).is_none());
@@ -167,7 +206,13 @@ fn s_new_10_set_schedule_persists_all_fields() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -192,7 +237,13 @@ fn s_new_11_remove_schedule_clears_storage() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -215,7 +266,13 @@ fn s_new_12_remove_schedule_on_stream_completion() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -243,7 +300,13 @@ fn s_new_13_schedules_are_isolated_per_recipient() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let r1 = Address::generate(&env);
     let r2 = Address::generate(&env);
@@ -280,7 +343,13 @@ fn s_new_14_get_schedule_reads_latest_write_after_claim() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -315,7 +384,13 @@ fn s_new_15_different_recipients_have_different_schedule_fields() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let r1 = Address::generate(&env);
     let r2 = Address::generate(&env);

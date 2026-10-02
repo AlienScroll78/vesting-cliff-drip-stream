@@ -15,6 +15,12 @@ fn test_clawback_before_cliff_returns_all_tokens() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -44,6 +50,12 @@ fn test_clawback_after_partial_claim_returns_remaining() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -76,6 +88,12 @@ fn test_clawback_nonexistent_stream_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -90,6 +108,12 @@ fn test_clawback_removes_schedule() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -114,6 +138,12 @@ fn test_clawback_at_end_returns_zero_remaining() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -140,6 +170,12 @@ fn test_clawback_wrong_sponsor_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let wrong_sponsor = Address::generate(&env);
@@ -148,7 +184,7 @@ fn test_clawback_wrong_sponsor_fails() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // A different address attempting to clawback should fail with Unauthorized.
@@ -164,6 +200,12 @@ fn test_clawback_reason_too_long_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -171,7 +213,7 @@ fn test_clawback_reason_too_long_fails() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Build a reason string of 257 bytes (1 over the 256-byte limit).
@@ -187,6 +229,12 @@ fn test_clawback_reason_exactly_256_bytes_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -194,7 +242,7 @@ fn test_clawback_reason_exactly_256_bytes_succeeds() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Exactly 256 bytes should succeed.
@@ -212,6 +260,12 @@ fn test_clawback_wrong_sponsor_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let wrong_sponsor = Address::generate(&env);
@@ -220,7 +274,7 @@ fn test_clawback_wrong_sponsor_fails() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // A different address attempting to clawback should fail with Unauthorized.
@@ -236,6 +290,12 @@ fn test_clawback_reason_too_long_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -243,7 +303,7 @@ fn test_clawback_reason_too_long_fails() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Build a reason string of 257 bytes (1 over the 256-byte limit).
@@ -259,6 +319,12 @@ fn test_clawback_reason_exactly_256_bytes_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -266,7 +332,7 @@ fn test_clawback_reason_exactly_256_bytes_succeeds() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Exactly 256 bytes should succeed.

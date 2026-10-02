@@ -9,13 +9,12 @@ use soroban_sdk::contracterror;
 /// All error codes returned by the VestingDrips contract.
 ///
 /// Codes are pinned to explicit `u32` values so clients can switch on them
-/// reliably across contract upgrades (see ADR-0004). Code 0 is reserved for
-/// success by the Soroban runtime and must never be used here.
+/// reliably across contract upgrades. Code 0 is reserved for success by the
+/// Soroban runtime and must never be used here.
 #[allow(missing_docs)]
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
-#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ScheduleNotFound = 1,
@@ -41,27 +40,26 @@ pub enum VestingError {
     /// **Code 8** — The stream's `end_ledger` has not yet been reached.
     StreamNotExpired = 8,
 
-    /// **Code 9** — A token transfer call failed.
-    TransferFailed = 9,
+    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    DrainDelayNotExpired = 9,
 
-    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
-    DrainDelayNotExpired = 10,
+    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    InvalidRecipient = 10,
 
-    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
-    InvalidRecipient = 11,
+    /// **Code 11** — A token transfer call failed.
+    TransferFailed = 11,
 
-    /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
-    InvalidToken = 12,
+    /// **Code 27** — The token address is not a valid SAC (Stellar Asset Contract).
+    InvalidToken = 27,
+
+    /// **Code 12** — `cliff_duration` must be greater than zero.
+    InvalidCliffDuration = 12,
 
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
 
-    /// **Code 21** — The token does not have the SAC clawback flag enabled.
-    ///
-    /// `clawback_stream` is only available on tokens where the Stellar Asset
-    /// Contract issuer has set `AUTH_CLAWBACK_ENABLED_FLAG`. Use `cancel_stream`
-    /// to recover tokens from non-clawback-enabled token streams.
-    TokenDoesNotSupportClawback = 21,
+    /// **Code 21** — Caller is not the contract admin or original sponsor.
+    Unauthorized = 21,
 
     /// **Code 22** — The clawback `reason` string exceeds 256 bytes.
     ///

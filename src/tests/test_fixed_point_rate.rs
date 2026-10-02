@@ -48,7 +48,7 @@ fn test_claim_with_scaled_rate() {
     // 10 tokens/ledger, cliff=50, duration=200 → deposit=2000
     let rate = 10 * RATE_DECIMALS;
     let (token_id, _) = setup_token(&env, &sponsor, 2_000);
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200, &None);
 
     // At cliff (50 ledgers): 50 * 10 = 500
     advance_ledger(&env, 50);
@@ -68,7 +68,7 @@ fn test_sub_token_rate_claim() {
     let rate = RATE_DECIMALS / 2; // 5_000_000
     let deposit = 200 * rate / RATE_DECIMALS; // 100
     let (token_id, _) = setup_token(&env, &sponsor, deposit);
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &200, &None);
 
     // At cliff (10 ledgers): 10 * 0.5 = 5 tokens
     advance_ledger(&env, 10);
@@ -91,7 +91,7 @@ fn test_schedule_stores_scaled_rate() {
 
     let rate = 7 * RATE_DECIMALS; // 7 tokens/ledger
     let (token_id, _) = setup_token(&env, &sponsor, 700);
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &100);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &10, &100, &None);
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.rate_per_ledger, 7 * RATE_DECIMALS);
