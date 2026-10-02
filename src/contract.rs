@@ -1489,3 +1489,7 @@ fn compute_variable_claimable(
 
     claimable
 }
+
+// Issue #719: pause_stream and resume_stream are implemented above.
+// See: pause_stream(), resume_stream(), VestingError::StreamAlreadyPaused,
+// VestingError::StreamNotPaused, VestingError::StreamPaused
