@@ -15,14 +15,20 @@ import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
+import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #820 — first-time-user onboarding tour
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { ReplayTourButton } from "@/components/ReplayTourButton";
+import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { formatAmount, abbreviateAmount } from "@/utils/formatAmount";
+import { useClaimVested } from "@/hooks/useClaimVested";
 
 // Ledger numbers assume stream started ~10 days ago, cliff at 30 days, ends at 365 days
 const BASE_LEDGER = 51_200_000;
@@ -89,14 +95,88 @@ function useSponsorDashboard() {
   return { showCreate, setShowCreate };
 }
 
+// ── Per-stream claim row ────────────────────────────────────────────────────
+
+interface StreamClaimCellProps {
+  stream: VestingStream;
+  currentLedger: number;
+  onOpenBottomSheet: (s: VestingStream) => void;
+}
+
+/**
+ * Renders the inline ClaimButton for a single stream card.
+ * Has its own useClaimVested instance so state is isolated per stream.
+ */
+function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamClaimCellProps) {
+  const { setPending, setConfirmed, setFailed } = useTx();
+
+  // Optimistic local claimable amount
+  const [optimisticAmount, setOptimisticAmount] = useState(stream.claimableAmount);
+
+  const claimFn = useCallback(async (_recipient: string): Promise<number> => {
+    analytics.claimSubmitted(stream.token, optimisticAmount);
+    // TODO: replace with real Soroban SDK call:
+    // return await sorobanClient.claimVested(recipient);
+    await new Promise((r) => setTimeout(r, 1_200));
+    return optimisticAmount; // stub returns current claimable amount
+  }, [stream.token, optimisticAmount]);
+
+  const { state, claim } = useClaimVested({
+    claimFn,
+    recipient: stream.recipient,
+    onSuccess: (amount) => {
+      // Optimistic update: zero out the claimable amount
+      setOptimisticAmount(0);
+      setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
+      analytics.claimSubmitted(stream.token, amount);
+    },
+  });
+
+  // Mirror signing/pending transitions to the global TxDrawer
+  const handleClick = useCallback(async () => {
+    setPending();
+    try {
+      await claim();
+    } catch {
+      setFailed(state.errorMessage ?? "Claim failed");
+    }
+  }, [claim, setPending, setFailed, state.errorMessage]);
+
+  const cliffReached = stream.status !== "pre-cliff";
+  const ledgersUntilCliff =
+    !cliffReached && stream.cliffLedger
+      ? Math.max(0, stream.cliffLedger - currentLedger)
+      : undefined;
+
+  // Only show the claim button for claimable statuses
+  if (stream.status === "completed" || stream.status === "cancelled") {
+    return null;
+  }
+
+  return (
+    <ClaimButton
+      phase={state.phase}
+      cliffReached={cliffReached}
+      ledgersUntilCliff={ledgersUntilCliff}
+      claimableAmount={optimisticAmount}
+      tokenSymbol={stream.token}
+      amountClaimed={state.amountClaimed}
+      errorMessage={state.errorMessage}
+      onClick={handleClick}
+      data-testid={`claim-btn-${stream.id}`}
+      style={{ padding: "0.35rem 1rem" }}
+    />
+  );
+}
+
 function StreamList() {
   const { t } = useTranslation();
-  const { setPending, setConfirmed, setFailed } = useTx();
-  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
+  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { setPending, setConfirmed, setFailed } = useTx();
 
   // #389 — trigger refs for focus restoration when modals close
   const claimTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -121,7 +201,7 @@ function StreamList() {
       setConfirmed("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
     } catch (err) {
       setFailed(err instanceof Error ? err.message : "Unknown error");
-      if (target) setClaimTarget(target); // reopen on failure
+      if (target) setClaimTarget(target);
     }
   }
 
@@ -186,7 +266,7 @@ function StreamList() {
                 <div style={{ fontWeight: 700 }}>
                   <AnimatedNumber value={s.claimableAmount} format={abbreviateAmount} /> {s.token}
                 </div>
-                <div style={{ display: "flex", gap: "0.4rem" }}>
+                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   {s.startLedger && s.cliffLedger && s.endLedger && (
                     <button
                       type="button"
@@ -216,6 +296,7 @@ function StreamList() {
                         setClaimTarget(s);
                       }}
                       data-testid={`claim-btn-${s.id}`}
+                      data-tour="claim"
                     >
                       {t("claim")}
                     </button>
@@ -225,6 +306,7 @@ function StreamList() {
             </div>
 
             <SegmentedProgressBar
+              data-tour="claimable"
               total={s.totalDeposit ?? 3000}
               dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? (s.totalDeposit ?? 3000) : 0}
               cliffCatchUp={s.status === "active" ? 500 : 0}
@@ -251,6 +333,7 @@ function StreamList() {
         ))}
       </StreamCardList>
 
+      {/* Bottom sheet for mobile / full-detail claim flow */}
       {claimTarget && (
         <ClaimBottomSheet
           stream={claimTarget}
@@ -310,6 +393,7 @@ export default function Home() {
               style={{ whiteSpace: "nowrap" }}
               onClick={() => setShowCreate((v) => !v)}
               aria-expanded={showCreate}
+              aria-controls="create-stream-section"
               data-testid="toggle-create-form"
             >
               {showCreate ? "✕ Cancel" : "+ New Stream"}
@@ -326,17 +410,8 @@ export default function Home() {
         )}
 
         {showCreate && (
-          <section
-            style={{
-              marginTop: "1rem",
-              padding: "1.25rem",
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "var(--radius)",
-            }}
-          >
-            <h2 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>Create Vesting Stream</h2>
-            <StreamCreateForm onSuccess={() => setShowCreate(false)} />
+          <section id="create-stream-section" aria-label="Create new vesting stream">
+            <CreateStreamWizard onClose={() => setShowCreate(false)} />
           </section>
         )}
 

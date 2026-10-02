@@ -44,6 +44,12 @@ spec:
           env:
             - name: SERVICE_NAME
               value: {{ include "vesting-backend.fullname" . }}-event-worker
+            {{- if .Values.logging.fluentBit.enabled }}
+            - name: LOG_FILE_PATH
+              value: /var/log/vesting/application.jsonl
+            - name: LOG_LEVEL_FILE
+              value: /etc/vesting/logging/log-level
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "vesting-backend.fullname" . }}
@@ -56,7 +62,63 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.logging.fluentBit.enabled }}
+            - name: application-logs
+              mountPath: /var/log/vesting
+            {{- end }}
+            {{- if .Values.logging.fluentBit.enabled }}
+            - name: fluent-bit-config
+              mountPath: /etc/vesting/logging
+              readOnly: true
+            {{- end }}
+        {{- if .Values.logging.fluentBit.enabled }}
+        - name: fluent-bit
+          image: {{ .Values.logging.fluentBit.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: AWS_REGION
+              value: {{ .Values.logging.fluentBit.awsRegion | quote }}
+            - name: CLOUDWATCH_LOG_GROUP
+              value: {{ printf "%s/event-worker" .Values.logging.fluentBit.logGroupPrefix | quote }}
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          args:
+            - --config=/fluent-bit/etc/fluent-bit.conf
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: application-logs
+              mountPath: /var/log/vesting
+              readOnly: true
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc/fluent-bit.conf
+              subPath: fluent-bit.conf
+              readOnly: true
+            - name: fluent-bit-tmp
+              mountPath: /tmp
+        {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if .Values.logging.fluentBit.enabled }}
+        - name: application-logs
+          emptyDir: {}
+        - name: fluent-bit-config
+          configMap:
+            name: {{ include "vesting-backend.fullname" . }}-fluent-bit
+        - name: fluent-bit-tmp
+          emptyDir: {}
+        {{- end }}
 {{- end }}

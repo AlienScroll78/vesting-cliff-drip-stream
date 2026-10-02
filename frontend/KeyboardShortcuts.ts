@@ -1,17 +1,26 @@
 /**
- * KeyboardShortcuts — modal triggered by the `?` key.
+ * KeyboardShortcuts — keyboard-driven dashboard shortcuts with discoverable overlay.
  *
  * Shortcuts:
- *   ?       → open this modal
- *   n       → new stream
- *   c       → claim
- *   g s     → go to schedule
- *   g h     → go to history
+ *   ?           → open this modal (legacy)
+ *   Shift+?     → toggle shortcuts help overlay
+ *   n           → new stream
+ *   C           → open create stream form
+ *   R           → refresh dashboard data
+ *   c           → claim vested tokens
+ *   g s         → go to schedule
+ *   g h         → go to history
+ *   Escape      → close any open modal
+ *   Arrow Up    → navigate stream cards (previous)
+ *   Arrow Down  → navigate stream cards (next)
+ *   Enter       → open selected stream detail
  *
  * Rules:
  *   - Disabled when focus is inside any <input>, <textarea>, or [contenteditable]
  *   - Traps focus inside the modal while open
  *   - Closes on Escape or clicking the backdrop
+ *
+ * @closes #270
  */
 
 export interface ShortcutDef {
@@ -20,11 +29,17 @@ export interface ShortcutDef {
 }
 
 const SHORTCUTS: ShortcutDef[] = [
-  { keys: ["?"],      label: "Show keyboard shortcuts" },
-  { keys: ["n"],      label: "New stream" },
-  { keys: ["c"],      label: "Claim vested tokens" },
-  { keys: ["g", "s"], label: "Go to schedule" },
-  { keys: ["g", "h"], label: "Go to history" },
+  { keys: ["Shift", "?"],  label: "Toggle shortcuts overlay" },
+  { keys: ["C"],           label: "Open create stream form" },
+  { keys: ["R"],           label: "Refresh dashboard data" },
+  { keys: ["n"],           label: "New stream" },
+  { keys: ["c"],           label: "Claim vested tokens" },
+  { keys: ["g", "s"],      label: "Go to schedule" },
+  { keys: ["g", "h"],      label: "Go to history" },
+  { keys: ["↑"],           label: "Navigate to previous stream card" },
+  { keys: ["↓"],           label: "Navigate to next stream card" },
+  { keys: ["Enter"],       label: "Open selected stream detail" },
+  { keys: ["Escape"],      label: "Close any open modal" },
 ];
 
 // ── Modal DOM ─────────────────────────────────────────────────────────────────
@@ -68,7 +83,7 @@ function buildModal(): HTMLElement {
       const kbd = document.createElement("kbd");
       kbd.textContent = k;
       keysCell.appendChild(kbd);
-      if (i < keys.length - 1) keysCell.append(" then ");
+      if (i < keys.length - 1) keysCell.append(" + ");
     });
     const labelCell = document.createElement("td");
     labelCell.textContent = label;
@@ -93,9 +108,15 @@ function isInputFocused(): boolean {
 
 export function initKeyboardShortcuts(options: {
   onNewStream?: () => void;
+  onCreateStream?: () => void;
+  onRefresh?: () => void;
   onClaim?: () => void;
   onGoSchedule?: () => void;
   onGoHistory?: () => void;
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
+  onOpenDetail?: () => void;
+  onCloseModal?: () => void;
 } = {}): () => void {
   const modal = buildModal();
   let open = false;
@@ -118,6 +139,10 @@ export function initKeyboardShortcuts(options: {
     open = false;
     modal.setAttribute("aria-hidden", "true");
     document.body.removeChild(modal);
+  }
+
+  function toggle() {
+    if (open) hide(); else show();
   }
 
   // Close on backdrop click (not dialog click)
@@ -147,8 +172,23 @@ export function initKeyboardShortcuts(options: {
 
   // Global key listener
   function onKey(e: KeyboardEvent) {
-    if (open && e.key === "Escape") { hide(); return; }
+    // Escape always closes any open modal
+    if (e.key === "Escape") {
+      if (open) { hide(); return; }
+      options.onCloseModal?.();
+      return;
+    }
+
     if (isInputFocused()) return;
+
+    // Shift+? → toggle overlay
+    if (e.key === "?" && e.shiftKey) {
+      toggle();
+      return;
+    }
+
+    // Legacy ?  → open overlay
+    if (e.key === "?") { show(); return; }
 
     // Handle pending "g" chord
     if (pendingG) {
@@ -159,15 +199,25 @@ export function initKeyboardShortcuts(options: {
       return;
     }
 
+    if (open) return; // Don't fire other shortcuts while overlay is open
+
     switch (e.key) {
-      case "?": show(); break;
-      case "n": if (!open) options.onNewStream?.(); break;
-      case "c": if (!open) options.onClaim?.(); break;
+      case "n": options.onNewStream?.(); break;
+      case "C": options.onCreateStream?.(); break;
+      case "R": options.onRefresh?.(); break;
+      case "c": options.onClaim?.(); break;
+      case "ArrowUp":
+        e.preventDefault();
+        options.onNavigatePrev?.();
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        options.onNavigateNext?.();
+        break;
+      case "Enter": options.onOpenDetail?.(); break;
       case "g":
-        if (!open) {
-          pendingG = true;
-          pendingGTimer = window.setTimeout(() => { pendingG = false; }, 1000);
-        }
+        pendingG = true;
+        pendingGTimer = window.setTimeout(() => { pendingG = false; }, 1000);
         break;
     }
   }

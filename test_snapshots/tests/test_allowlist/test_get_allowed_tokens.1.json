@@ -249,27 +249,17 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Allowlist"
+                              "symbol": "AllowedTokens"
                             }
                           ]
                         },
                         "val": {
-                          "map": [
+                          "vec": [
                             {
-                              "key": {
-                                "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
-                              },
-                              "val": {
-                                "bool": true
-                              }
+                              "address": "CDLDVFKHEZ2RVB3NG4UQA4VPD3TSHV6XMHXMHP2BSGCJ2IIWVTOHGDSG"
                             },
                             {
-                              "key": {
-                                "address": "CDLDVFKHEZ2RVB3NG4UQA4VPD3TSHV6XMHXMHP2BSGCJ2IIWVTOHGDSG"
-                              },
-                              "val": {
-                                "bool": true
-                              }
+                              "address": "CACMVW2KK4H5FZDFF2AUCAKQTEJMZZWJUIZF23XMRVYQBSXYLHZ6BKWN"
                             }
                           ]
                         }
@@ -281,7 +271,7 @@
             },
             "ext": "v0"
           },
-          518500
+          1099
         ]
       ],
       [
@@ -592,7 +582,7 @@
             },
             "ext": "v0"
           },
-          518500
+          1099
         ]
       ]
     ]

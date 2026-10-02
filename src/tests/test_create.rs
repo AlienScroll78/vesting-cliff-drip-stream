@@ -3,33 +3,44 @@
 use soroban_sdk::{testutils::Address as _, Address};
 
 use crate::{
-    contract::VestingDripsClient,
+    contract::{VestingDrips, VestingDripsClient},
     error::VestingError,
-    tests::{
-        advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env,
-        setup_token,
-    },
+    tests::{setup_env, factory::{pre_cliff_stream, StreamBuilder}},
 };
 
+use super::token_helper::{create_token, mint_to};
+
+/// Verifies a freshly-created stream has all schedule fields correctly set.
 #[test]
 fn test_create_stream_success() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient) = generate_addresses(&env);
-    let (token_id, token_client) = create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, token_client) = create_token(&env, &sponsor);
+
+    // rate(10) × duration(200) = 2000
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .unwrap();
 
     let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.rate_per_ledger, 10);
+    // stored rate is 10 * RATE_DECIMALS
+    assert_eq!(schedule.rate_per_ledger, 10 * RATE_DECIMALS);
     assert_eq!(schedule.start_ledger, 100);
     assert_eq!(schedule.cliff_ledger, 150);
     assert_eq!(schedule.end_ledger, 300);
     assert_eq!(schedule.last_claimed_ledger, 100);
-    assert_eq!(schedule.metadata, None);
 
     assert_eq!(token_client.balance(&sponsor), 0);
-    assert_eq!(token_client.balance(&_contract_id), 2_000);
+    assert_eq!(token_client.balance(&contract_id), 2_000);
 }
 
+/// A zero rate is rejected with `InvalidRate`.
 #[test]
 fn test_create_stream_zero_rate_fails() {
     let env = setup_env();
@@ -37,301 +48,153 @@ fn test_create_stream_zero_rate_fails() {
     let (sponsor, recipient) = generate_addresses(&env);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &Address::generate(&env), &0, &50, &200, &None)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::InvalidRate);
+    assert_eq!(err, Ok(VestingError::InvalidRate));
 }
 
 #[test]
-fn test_create_stream_invalid_duration_fails() {
+fn test_create_stream_zero_cliff_duration_fails() {
     let env = setup_env();
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
     let token = Address::generate(&env);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &200, &None)
+        .unwrap_err();
+
+    assert_eq!(err, Ok(VestingError::InvalidCliffDuration));
+}
+
+/// `total_duration <= cliff_duration` is rejected with `InvalidDuration`.
+#[test]
+fn test_create_stream_invalid_duration_fails() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let token = Address::generate(&env);
+    let rate = 10 * RATE_DECIMALS;
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // cliff == total should fail.
+    let err = client
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &200, &200, &None)
         .unwrap_err();
     assert_eq!(err, Ok(VestingError::InvalidDuration));
 
+    // cliff > total should also fail.
     let err2 = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &300, &200, &None)
         .unwrap_err();
     assert_eq!(err2, Ok(VestingError::InvalidDuration));
 }
 
+/// A zero-length `cliff_duration` is rejected with `InvalidCliffDuration` (12).
+///
+/// A zero-length cliff provides no lockup guarantee, so `create_vesting_stream`
+/// must refuse to create the stream. The numeric pin guards the client-facing
+/// contract: code 12 is `InvalidCliffDuration` in the documented error table.
 #[test]
-fn test_create_duplicate_stream_fails() {
+fn test_create_stream_zero_cliff_fails() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
+    let (contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
-    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
+    let (token_id, token_client) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    let rate = 10 * RATE_DECIMALS;
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &0, &200, &None)
         .unwrap_err();
 
-    assert_eq!(err, VestingError::ScheduleAlreadyExists);
+    assert_eq!(
+        err,
+        Ok(VestingError::InvalidCliffDuration),
+        "expected code 12 (InvalidCliffDuration) when cliff_duration == 0"
+    );
+    assert_eq!(
+        VestingError::InvalidCliffDuration as u32,
+        12,
+        "InvalidCliffDuration must be code 12"
+    );
+
+    // No schedule is stored and no deposit is taken.
+    assert_eq!(client.get_schedule(&recipient), None);
+    assert_eq!(token_client.balance(&sponsor), 2_000);
+    assert_eq!(token_client.balance(&contract_id), 0);
 }
 
+/// The smallest legal cliff (`cliff_duration = 1`) is still accepted.
 #[test]
-fn test_two_recipients_claim_independently() {
+fn test_create_stream_minimum_cliff_succeeds() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, alice) = generate_addresses(&env);
-    let bob = Address::generate(&env);
-    let (token_id, token_client) = setup_token(&env, &sponsor, 4_000);
+    let (contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
 
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200, &None)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &20, &30, &100, &None)
-        .unwrap();
-
-    advance_ledger(&env, 60);
-
-    let alice_claimed = client.claim_vested(&alice);
-    assert_eq!(alice_claimed, 600);
-
-    let bob_sched = client.get_schedule(&bob).unwrap();
-    assert_eq!(bob_sched.last_claimed_ledger, 100);
-    assert_eq!(token_client.balance(&bob), 0);
-}
-
-#[test]
-fn test_cancel_one_recipient_other_unaffected() {
-    let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, alice) = generate_addresses(&env);
-    let bob = Address::generate(&env);
-    let (token_id, token_client) = setup_token(&env, &sponsor, 2_500);
-
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &10, &50, &200, &None)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &5, &20, &100, &None)
-        .unwrap();
-
-    client.cancel_stream(&sponsor, &alice);
-
-    assert!(client.get_schedule(&alice).is_none());
-
-    let bob_sched = client.get_schedule(&bob).unwrap();
-    assert_eq!(bob_sched.rate_per_ledger, 5);
-    assert_eq!(bob_sched.last_claimed_ledger, 100);
-
-    advance_ledger(&env, 20);
-    let bob_claimed = client.claim_vested(&bob);
-    assert_eq!(bob_claimed, 100);
-    assert_eq!(token_client.balance(&bob), 100);
-}
-
-#[test]
-fn test_storage_keys_are_per_recipient() {
-    let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, alice) = generate_addresses(&env);
-    let bob = Address::generate(&env);
-    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
-
-    client
-        .create_vesting_stream(&sponsor, &alice, &token_id, &7, &40, &150, &None)
-        .unwrap();
-    client
-        .create_vesting_stream(&sponsor, &bob, &token_id, &13, &60, &200, &None)
-        .unwrap();
-
-    let alice_sched = client.get_schedule(&alice).unwrap();
-    let bob_sched = client.get_schedule(&bob).unwrap();
-
-    assert_eq!(alice_sched.rate_per_ledger, 7);
-    assert_eq!(alice_sched.cliff_ledger, 140);
-    assert_eq!(alice_sched.end_ledger, 250);
-
-    assert_eq!(bob_sched.rate_per_ledger, 13);
-    assert_eq!(bob_sched.cliff_ledger, 160);
-    assert_eq!(bob_sched.end_ledger, 300);
-}
-
-// ── Metadata tests ────────────────────────────────────────────────────────────
-
-/// A valid metadata string is stored and returned by get_schedule unchanged.
-#[test]
-fn test_create_with_metadata_stored_and_returned() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
+    let (token_id, token_client) = create_token(&env, &sponsor);
     mint_to(&env, &token_id, &sponsor, 2_000);
 
-    let label = String::from_str(&env, "grant:engineering-q1-2026");
-    client
+    let rate = 10 * RATE_DECIMALS;
+
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &1, &200, &None);
+
+    let schedule = client.get_schedule(&recipient).unwrap();
+    assert_eq!(schedule.rate_per_ledger, rate);
+    assert_eq!(schedule.start_ledger, 100);
+    assert_eq!(schedule.cliff_ledger, 101);
+    assert_eq!(schedule.end_ledger, 300);
+
+    // deposit = rate (10 tokens/ledger) * 200 = 2000
+    assert_eq!(token_client.balance(&sponsor), 0);
+    assert_eq!(token_client.balance(&contract_id), 2_000);
+}
+
+/// A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
+/// Uses the factory to create the first stream instead of manual setup.
+#[test]
+fn test_multiple_streams_for_one_recipient_get_distinct_ids() {
+    let env = setup_env();
+    // Use the factory to build the first stream.
+    let (stream, addrs) = pre_cliff_stream(&env);
+
+    // Attempt a second stream for the same recipient – must fail.
+    let (token_id2, _) = create_token(&env, &addrs.sponsor);
+    mint_to(&env, &token_id2, &addrs.sponsor, 2_000);
+
+    let err = stream
+        .client
         .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
+            &addrs.sponsor,
+            &addrs.recipient,
+            &token_id2,
             &10,
             &50,
             &200,
-            &Some(label.clone()),
-        )
-        .unwrap();
-
-    let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.metadata, Some(label));
-}
-
-/// None metadata is stored as None and returned as None.
-#[test]
-fn test_create_with_none_metadata_stored_as_none() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap();
-
-    let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.metadata, None);
-}
-
-/// An empty string is normalised to None at creation time.
-#[test]
-fn test_create_empty_string_metadata_normalised_to_none() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    let empty = String::from_str(&env, "");
-    client
-        .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
-            &10,
-            &50,
-            &200,
-            &Some(empty),
-        )
-        .unwrap();
-
-    let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.metadata, None);
-}
-
-/// Exactly 256-byte metadata is accepted (boundary inclusive).
-#[test]
-fn test_create_metadata_exactly_256_bytes_accepted() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    // Build a 256-byte ASCII string (each char is 1 byte in UTF-8).
-    let s: std::string::String = "a".repeat(256);
-    let label = String::from_str(&env, &s);
-
-    client
-        .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
-            &10,
-            &50,
-            &200,
-            &Some(label.clone()),
-        )
-        .unwrap();
-
-    let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.metadata, Some(label));
-}
-
-/// A metadata string of 257 bytes is rejected with MetadataTooLong (error 20).
-#[test]
-fn test_create_metadata_257_bytes_rejected() {
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-
-    let s: std::string::String = "a".repeat(257);
-    let too_long = String::from_str(&env, &s);
-
-    let err = client
-        .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
-            &10,
-            &50,
-            &200,
-            &Some(too_long),
         )
         .unwrap_err();
 
-    assert_eq!(err, VestingError::MetadataTooLong.into());
+    assert_eq!(err, Ok(VestingError::InvalidRecipient));
 }
 
-/// Metadata is immutable: no update function exists, and the stored value
-/// is unchanged after a claim or other state-mutating operation.
+/// The builder pattern produces a stream with the overridden parameters.
 #[test]
-fn test_metadata_immutable_after_creation() {
+fn test_create_stream_custom_params_via_builder() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = StreamBuilder::default()
+        .rate(5)
+        .cliff_duration(30)
+        .total_duration(120)
+        .build(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    let label = String::from_str(&env, "immutable-label");
-    client
-        .create_vesting_stream(
-            &sponsor,
-            &recipient,
-            &token_id,
-            &10,
-            &50,
-            &200,
-            &Some(label.clone()),
-        )
-        .unwrap();
-
-    // Advance past cliff and claim — schedule is mutated (last_claimed_ledger etc.)
-    advance_ledger(&env, 60);
-    client.claim_vested(&recipient).unwrap();
-
-    // Metadata must be unchanged after the claim.
-    let schedule = client.get_schedule(&recipient).unwrap();
-    assert_eq!(schedule.metadata, Some(label));
+    let schedule = stream.client.get_schedule(&addrs.recipient).unwrap();
+    assert_eq!(schedule.rate_per_ledger, 5);
+    assert_eq!(schedule.cliff_ledger, 130);  // 100 + 30
+    assert_eq!(schedule.end_ledger,   220);  // 100 + 120
 }

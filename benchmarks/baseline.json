@@ -44,6 +44,34 @@
     "get_min_deposit": {
       "cpu_instructions": 600000,
       "memory_bytes": 150000
+    },
+    "set_min_deposit": {
+      "cpu_instructions": 700000,
+      "memory_bytes": 170000
+    },
+    "get_stats": {
+      "cpu_instructions": 950000,
+      "memory_bytes": 240000
+    },
+    "get_status": {
+      "cpu_instructions": 820000,
+      "memory_bytes": 210000
+    },
+    "pause_stream": {
+      "cpu_instructions": 1800000,
+      "memory_bytes": 450000
+    },
+    "resume_stream": {
+      "cpu_instructions": 2000000,
+      "memory_bytes": 500000
+    },
+    "transfer_recipient": {
+      "cpu_instructions": 2200000,
+      "memory_bytes": 520000
+    },
+    "drain_expired_stream": {
+      "cpu_instructions": 3000000,
+      "memory_bytes": 700000
     }
   },
   "http_response_times": {

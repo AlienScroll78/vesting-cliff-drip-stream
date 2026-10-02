@@ -10,6 +10,9 @@
 
 import { Pool } from "pg";
 import { networkConfig } from "../config/network.js";
+import { publishEvent, type StreamEventType } from "./ws.js";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { invalidateRecipient } = require("./sorobanViews.js");
 
 const FINALITY_DEPTH = 3;
 const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_MS ?? "6000", 10);
@@ -81,27 +84,30 @@ export class EventIndexer {
   }
 
   async tick(): Promise<void> {
-    try {
-      const cursor = await this.getCursor();
-      const { events, lastCursor, latestLedger } = await this.fetchEvents(cursor);
+    await withIndexerSpan("tick", async () => {
+      try {
+        const cursor = await this.getCursor();
+        const { events, lastCursor, latestLedger } = await this.fetchEvents(cursor);
 
-      if (events.length > 0) {
-        // Only index events that are at least FINALITY_DEPTH behind the chain tip.
-        const finalised = events.filter(
-          (e: any) => latestLedger - (e.ledger ?? 0) >= FINALITY_DEPTH
-        );
-        if (finalised.length > 0) {
-          await this.upsertEvents(finalised);
-          console.log(`[indexer] upserted ${finalised.length} events`);
+        if (events.length > 0) {
+          // Only index events that are at least FINALITY_DEPTH behind the chain tip.
+          const finalised = events.filter(
+            (e: any) => latestLedger - (e.ledger ?? 0) >= FINALITY_DEPTH
+          );
+          if (finalised.length > 0) {
+            await this.upsertEvents(finalised);
+            console.log(`[indexer] upserted ${finalised.length} events`);
+          }
         }
-      }
 
-      if (lastCursor) await this.saveCursor(lastCursor);
-    } catch (err) {
-      console.error("[indexer] tick error:", err);
-    } finally {
-      if (this.running) this.scheduleNext();
-    }
+        if (lastCursor) await this.saveCursor(lastCursor);
+      } catch (err) {
+        console.error("[indexer] tick error:", err);
+        throw err;
+      } finally {
+        if (this.running) this.scheduleNext();
+      }
+    });
   }
 
   private async fetchEvents(cursor: string): Promise<{
@@ -109,34 +115,39 @@ export class EventIndexer {
     lastCursor: string | null;
     latestLedger: number;
   }> {
-    const url = new URL(`${this.horizonUrl}/contracts/${this.contractId}/events`);
-    url.searchParams.set("limit", String(PAGE_LIMIT));
-    url.searchParams.set("order", "asc");
-    if (cursor) url.searchParams.set("cursor", cursor);
+    return withHorizonSpan("getContractEvents", async () => {
+      const url = new URL(`${this.horizonUrl}/contracts/${this.contractId}/events`);
+      url.searchParams.set("limit", String(PAGE_LIMIT));
+      url.searchParams.set("order", "asc");
+      if (cursor) url.searchParams.set("cursor", cursor);
 
-    const [eventsResp, ledgerResp] = await Promise.all([
-      fetch(url.toString()),
-      fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
-    ]);
+      const [eventsResp, ledgerResp] = await Promise.all([
+        fetch(url.toString()),
+        fetch(`${this.horizonUrl}/ledgers?order=desc&limit=1`),
+      ]);
 
-    if (!eventsResp.ok) throw new Error(`Horizon responded ${eventsResp.status}`);
+      if (!eventsResp.ok) throw new Error(`Horizon responded ${eventsResp.status}`);
 
-    const data: any = await eventsResp.json();
-    const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
-    const latestLedger: number =
-      ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
+      const data: any = await eventsResp.json();
+      const ledgerData: any = ledgerResp.ok ? await ledgerResp.json() : {};
+      const latestLedger: number =
+        ledgerData?._embedded?.records?.[0]?.sequence ?? 0;
 
-    const records: any[] = data._embedded?.records ?? [];
-    const lastCursor =
-      records.length > 0
-        ? (records[records.length - 1].paging_token as string)
-        : null;
+      const records: any[] = data._embedded?.records ?? [];
+      const lastCursor =
+        records.length > 0
+          ? (records[records.length - 1].paging_token as string)
+          : null;
 
-    return { events: records, lastCursor, latestLedger };
+      return { events: records, lastCursor, latestLedger };
+    });
   }
 
   private async upsertEvents(events: any[]): Promise<void> {
     const client = await this.pool.connect();
+    // Collect successfully inserted events for WS notification (published after commit).
+    const inserted: Array<{ eventType: string; parsed: Record<string, any> }> = [];
+
     try {
       await client.query("BEGIN");
 
@@ -145,11 +156,20 @@ export class EventIndexer {
         const eventType = decodeTopicString(topics[0]) ?? "unknown";
         const parsed = parseEventValue(eventType, topics, e.value);
 
+        // Deduplication: extract transaction_hash and event_index from the
+        // Horizon event record for the secondary uniqueness check in addition
+        // to the primary event_id conflict guard.
+        const transactionHash: string | null = e.transaction_hash ?? null;
+        const eventIndex: number | null =
+          e.event_index != null ? Number(e.event_index) : null;
+        const pagingToken: string | null = e.paging_token ?? null;
+
         await client.query(
           `INSERT INTO indexed_events
              (event_id, event_type, ledger, sponsor, recipient, token,
-              rate, cliff_ledger, end_ledger, refund_amount, raw_value)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+              rate, cliff_ledger, end_ledger, refund_amount, raw_value,
+              paging_token, transaction_hash, event_index)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            ON CONFLICT (event_id) DO NOTHING`,
           [
             e.id,
@@ -163,8 +183,16 @@ export class EventIndexer {
             parsed.end_ledger ?? null,
             parsed.refund_amount ?? null,
             JSON.stringify(e),
+            pagingToken,
+            transactionHash,
+            eventIndex,
           ]
         );
+
+        // Only notify for rows that were actually inserted (not duplicates).
+        if (result.rowCount && result.rowCount > 0) {
+          inserted.push({ eventType, parsed });
+        }
       }
 
       await client.query("COMMIT");
@@ -173,6 +201,39 @@ export class EventIndexer {
       throw err;
     } finally {
       client.release();
+    }
+
+    // Push WS notifications after the transaction has committed so clients
+    // never see an event that was rolled back.
+    const KNOWN_TYPES = new Set<StreamEventType>([
+      "stream_created",
+      "tokens_claimed",
+      "stream_cancelled",
+      "stream_clawed_back",
+      "stream_drained",
+    ]);
+
+    for (const { eventType, parsed } of inserted) {
+      const recipient: string = parsed.recipient ?? "";
+      if (!recipient) continue;
+
+      // Normalise the decoded topic string to one of the known event types.
+      const knownType = Array.from(KNOWN_TYPES).find((t) =>
+        eventType.toLowerCase().includes(t)
+      ) as StreamEventType | undefined;
+
+      if (!knownType) continue;
+
+      const payload: Record<string, unknown> = { ...parsed };
+      delete payload.recipient; // recipient is already a top-level field in the WS envelope
+
+      publishEvent(knownType, recipient, payload);
+
+      // Invalidate the Soroban view cache for this recipient so the next
+      // read reflects the updated on-chain state.
+      invalidateRecipient(recipient).catch((err: unknown) => {
+        console.warn("[indexer] cache invalidation failed for", recipient, err);
+      });
     }
   }
 

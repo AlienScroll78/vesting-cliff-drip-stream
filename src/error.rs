@@ -8,85 +8,143 @@ use soroban_sdk::contracterror;
 
 /// All error codes returned by the VestingDrips contract.
 ///
-/// Codes are pinned to explicit `u32` values so clients can switch on them
-/// reliably across contract upgrades (see ADR-0004). Code 0 is reserved for
-/// success by the Soroban runtime and must never be used here.
+/// # Stability tiers
+///
+/// **Stable (codes 1–26)** – These codes match the publicly documented API
+/// in the README error table (see ADR-0004). Clients should switch on these
+/// codes reliably across contract upgrades.
+///
+/// **Implementation (codes 27–36)** – Internal codes used by contract features
+/// not yet in the stable public API. May be reorganised in future versions.
+///
+/// Code 0 is reserved for success by the Soroban runtime and must never be
+/// used here.
+#[allow(missing_docs)]
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
-#[allow(missing_docs)]
 pub enum VestingError {
+    // ── Stable public codes (1–26) ────────────────────────────────────────────
+
     /// **Code 1** — No active vesting schedule exists for the given recipient.
-    ///
-    /// Returned by `claim_vested`, `cancel_stream`, and any view that requires
-    /// a schedule to be present.
     ScheduleNotFound = 1,
 
     /// **Code 2** — The current ledger sequence is still below `cliff_ledger`.
-    ///
-    /// Tokens cannot be claimed until the cliff is reached. Check
-    /// `is_cliff_passed` before calling `claim_vested`.
     CliffNotReached = 2,
 
     /// **Code 3** — `total_duration` must be strictly greater than `cliff_duration`.
-    ///
-    /// A stream where the cliff equals or exceeds the total length would
-    /// never produce any post-cliff drip.
     InvalidDuration = 3,
 
-    /// **Code 4** — `rate_per_ledger` must be a positive, non-zero value.
-    ///
-    /// Zero or negative rates are rejected at stream-creation time.
+    /// **Code 4** — `rate_per_ledger` must be a positive, non-zero value;
+    /// also returned when `fee_bps` exceeds 500.
     InvalidRate = 4,
 
-    /// **Code 5** — The computed total deposit (`rate × total_duration`) would
-    /// overflow an `i128`.
-    ///
-    /// The safe upper bound for `rate` is `i128::MAX / total_duration`.
+    /// **Code 5** — The computed total deposit would overflow an `i128`.
     DepositOverflow = 5,
 
     /// **Code 6** — A vesting schedule already exists for this recipient.
-    ///
-    /// Cancel the existing stream before creating a new one for the same
-    /// recipient address.
     ScheduleAlreadyExists = 6,
 
     /// **Code 7** — The claimable amount is zero at the current ledger.
-    ///
-    /// This can occur when the stream has already been fully claimed up to
-    /// `end_ledger`, or when the ledger has not advanced since the last claim.
     NothingToClaim = 7,
 
     /// **Code 8** — The stream's `end_ledger` has not yet been reached.
-    ///
-    /// `emergency_drain` requires the stream to have fully expired before the
-    /// drain delay begins. Call this only after `end_ledger` has passed.
     StreamNotExpired = 8,
 
-    /// **Code 9** — A token transfer call failed.
-    ///
-    /// The underlying SAC `transfer` invocation was rejected by the token
-    /// contract (e.g. frozen account, insufficient balance, or other token-
-    /// level restriction). No state has been mutated when this error is returned.
-    TransferFailed = 9,
+    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    DrainDelayNotExpired = 9,
 
-    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
-    ///
-    /// The sponsor must wait `end_ledger + DRAIN_DELAY_LEDGERS` ledgers before
-    /// calling `emergency_drain`. This prevents abuse on recently-ended streams.
-    DrainDelayNotExpired = 10,
+    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    InvalidRecipient = 10,
 
-    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
+    /// **Code 11** — A token transfer call failed.
+    TransferFailed = 11,
+
+    /// **Code 12** — `cliff_duration` is zero or exceeds the maximum cliff
+    /// ratio; a zero-length cliff provides no lockup guarantee.
     ///
-    /// A sponsor creating a stream to themselves is almost certainly a mistake
-    /// and would produce confusing behaviour in `cancel_stream` (the same
-    /// address would be both the refund target and the earned-tokens target).
-    InvalidRecipient = 11,
+    /// Also used when `cliff_duration / total_duration` exceeds the configured
+    /// `max_cliff_ratio` threshold.
+    InvalidCliffDuration = 12,
+
+    /// **Code 13** — `initialize` has already been called.
+    AlreadyInitialized = 13,
+
+    /// **Code 14** — The recipient is not on the configured allowlist.
+    RecipientNotAllowed = 14,
+
+    /// **Code 15** — A claim was attempted on a paused stream.
+    StreamPaused = 15,
+
+    /// **Code 16** — The batch size exceeds the maximum of 20.
+    BatchTooLarge = 16,
+
+    /// **Code 17** — `rate × total_duration` is below the configured minimum.
+    RateTooLow = 17,
+
+    /// **Code 18** — `initialize` has not yet been called.
+    NotInitialized = 18,
+
+    /// **Code 19** — Variable-rate segments are invalid (empty, out-of-order,
+    /// or contain a non-positive rate).
+    InvalidSegments = 19,
 
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
-    ///
-    /// Metadata is measured in UTF-8 bytes, not characters. Trim or omit the
-    /// value before retrying. Do not store sensitive data in metadata as it
-    /// is persisted on-chain and publicly visible.
     MetadataTooLong = 20,
+
+    /// **Code 21** — The caller is not the contract admin or the original sponsor.
+    Unauthorized = 21,
+
+    /// **Code 22** — Total deposit is below the configured minimum.
+    DepositBelowMinimum = 22,
+
+    /// **Code 23** — The stream is already paused.
+    StreamAlreadyPaused = 23,
+
+    /// **Code 24** — `resume_stream` was called on a stream that is not paused.
+    StreamNotPaused = 24,
+
+    /// **Code 25** — The version counter has reached `u32::MAX`.
+    VersionOverflow = 25,
+
+    /// **Code 26** — The token does not have the SAC clawback flag enabled.
+    ///
+    /// `clawback_stream` is only available on tokens where the Stellar Asset
+    /// Contract issuer has set `AUTH_CLAWBACK_ENABLED_FLAG`. Use `cancel_stream`
+    /// to recover tokens from non-clawback-enabled token streams.
+    ClawbackNotSupported = 26,
+
+    // ── Implementation-only codes (27+) ───────────────────────────────────────
+
+    /// **Code 27** — The token address is not a valid SAC (Stellar Asset
+    /// Contract). Detected by probing `try_balance` before storing the schedule.
+    InvalidToken = 27,
+
+    /// **Code 28** — The clawback `reason` string exceeds 256 bytes.
+    ///
+    /// Reason strings are stored on-chain in the emitted event. Trim the reason
+    /// to at most 256 UTF-8 bytes before retrying.
+    ReasonTooLong = 28,
+
+    /// **Code 29** — Milestone list is invalid: empty, exceeds the limit,
+    /// has non-ascending ledgers, or milestone BPS values do not sum to 10 000.
+    InvalidMilestones = 29,
+
+    /// **Code 30** — A reentrancy attempt was detected; the contract is
+    /// currently executing an outbound transfer.
+    Reentrancy = 30,
+
+    /// **Code 31** — The cliff ratio exceeds the maximum allowed percentage.
+    ///
+    /// Returned when `cliff_duration / total_duration > max_cliff_ratio`.
+    InvalidCliffRatio = 31,
+
+    /// **Code 32** — The caller is not the original sponsor of the stream.
+    NotSponsor = 32,
+
+    /// **Code 33** — The batch size exceeds the per-call maximum.
+    ///
+    /// Distinct from `BatchTooLarge` (code 16): `BatchSizeExceeded` is used by
+    /// internal batch helpers; `BatchTooLarge` is the public-facing error.
+    BatchSizeExceeded = 33,
 }

@@ -15,6 +15,12 @@ fn test_clawback_before_cliff_returns_all_tokens() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -24,13 +30,13 @@ fn test_clawback_before_cliff_returns_all_tokens() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Clawback before cliff — should recover all 2000 tokens.
     advance_ledger(&env, 20);
     let reason = String::from_str(&env, "employee termination for cause");
-    client.clawback_stream(&sponsor, &recipient, &reason).unwrap();
+    client.clawback_stream(&sponsor, &recipient, &0, &reason).unwrap();
 
     // All tokens returned to sponsor.
     assert_eq!(token_client.balance(&sponsor), 2_000);
@@ -44,6 +50,12 @@ fn test_clawback_after_partial_claim_returns_remaining() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -52,19 +64,19 @@ fn test_clawback_after_partial_claim_returns_remaining() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Recipient claims at cliff (ledger 150): earns 50 × 10 = 500.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None);
 
     // Advance 50 more ledgers then clawback.
     // last_claimed_ledger = 150, end_ledger = 300
     // remaining = (300 - 150) × 10 = 1500
     advance_ledger(&env, 50);
     let reason = String::from_str(&env, "regulatory freeze");
-    client.clawback_stream(&sponsor, &recipient, &reason).unwrap();
+    client.clawback_stream(&sponsor, &recipient, &0, &reason).unwrap();
 
     assert_eq!(token_client.balance(&sponsor), 1_500);
     assert_eq!(token_client.balance(&recipient), 500); // already claimed
@@ -76,12 +88,18 @@ fn test_clawback_nonexistent_stream_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
 
     let reason = String::from_str(&env, "no stream here");
-    let err = client.clawback_stream(&sponsor, &recipient, &reason).unwrap_err();
+    let err = client.clawback_stream(&sponsor, &recipient, &0, &reason).unwrap_err();
     assert_eq!(err, VestingError::ScheduleNotFound.into());
 }
 
@@ -90,6 +108,12 @@ fn test_clawback_removes_schedule() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -97,13 +121,13 @@ fn test_clawback_removes_schedule() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
 
     let reason = String::from_str(&env, "compliance audit triggered clawback");
-    client.clawback_stream(&sponsor, &recipient, &reason).unwrap();
+    client.clawback_stream(&sponsor, &recipient, &0, &reason).unwrap();
 
     // Schedule must be removed after clawback.
     assert!(client.get_schedule(&recipient).is_none());
@@ -114,6 +138,12 @@ fn test_clawback_at_end_returns_zero_remaining() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -121,14 +151,194 @@ fn test_clawback_at_end_returns_zero_remaining() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Claim everything first.
     advance_ledger(&env, 200);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None);
     // Schedule is removed after full claim — ScheduleNotFound expected.
     let reason = String::from_str(&env, "post-claim clawback attempt");
-    let err = client.clawback_stream(&sponsor, &recipient, &reason).unwrap_err();
+    let err = client.clawback_stream(&sponsor, &recipient, &0, &reason).unwrap_err();
     assert_eq!(err, VestingError::ScheduleNotFound.into());
+}
+
+// ── Issue #584: Additional hardening tests ─────────────────────────────────────
+
+#[test]
+fn test_clawback_wrong_sponsor_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let wrong_sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // A different address attempting to clawback should fail with Unauthorized.
+    let reason = String::from_str(&env, "impersonation attempt");
+    let err = client
+        .clawback_stream(&wrong_sponsor, &recipient, &0, &reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::Unauthorized.into());
+}
+
+#[test]
+fn test_clawback_reason_too_long_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Build a reason string of 257 bytes (1 over the 256-byte limit).
+    let long_reason = String::from_str(&env, &"x".repeat(257));
+    let err = client
+        .clawback_stream(&sponsor, &recipient, &0, &long_reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::ReasonTooLong.into());
+}
+
+#[test]
+fn test_clawback_reason_exactly_256_bytes_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Exactly 256 bytes should succeed.
+    let max_reason = String::from_str(&env, &"a".repeat(256));
+    client
+        .clawback_stream(&sponsor, &recipient, &0, &max_reason)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_none());
+}
+
+// ── Issue #584: Additional hardening tests ─────────────────────────────────────
+
+#[test]
+fn test_clawback_wrong_sponsor_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let wrong_sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // A different address attempting to clawback should fail with Unauthorized.
+    let reason = String::from_str(&env, "impersonation attempt");
+    let err = client
+        .clawback_stream(&wrong_sponsor, &recipient, &0, &reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::Unauthorized.into());
+}
+
+#[test]
+fn test_clawback_reason_too_long_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Build a reason string of 257 bytes (1 over the 256-byte limit).
+    let long_reason = String::from_str(&env, &"x".repeat(257));
+    let err = client
+        .clawback_stream(&sponsor, &recipient, &0, &long_reason)
+        .unwrap_err();
+    assert_eq!(err, VestingError::ReasonTooLong.into());
+}
+
+#[test]
+fn test_clawback_reason_exactly_256_bytes_succeeds() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _admin = Address::generate(&env);
+    let _treasury = Address::generate(&env);
+    client.initialize(&_admin, &0u32, &_treasury);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Exactly 256 bytes should succeed.
+    let max_reason = String::from_str(&env, &"a".repeat(256));
+    client
+        .clawback_stream(&sponsor, &recipient, &0, &max_reason)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_none());
 }

@@ -265,6 +265,25 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "accumulated_pause_ledgers"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "claimed_amount"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 0
+                        }
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "cliff_ledger"
                       },
                       "val": {
@@ -289,6 +308,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "paused_at_ledger"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "rate_per_ledger"
                       },
                       "val": {
@@ -296,6 +321,14 @@
                           "hi": 0,
                           "lo": 10
                         }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "sponsor"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                       }
                     },
                     {
@@ -339,7 +372,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ],
       [
@@ -369,12 +402,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Allowlist"
+                              "symbol": "AllowedTokens"
                             }
                           ]
                         },
                         "val": {
-                          "map": []
+                          "vec": []
                         }
                       }
                     ]
@@ -384,7 +417,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ],
       [
@@ -795,7 +828,7 @@
             },
             "ext": "v0"
           },
-          518500
+          3110499
         ]
       ]
     ]

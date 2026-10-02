@@ -35,8 +35,7 @@ fn create_var_stream(
     }
     let (token_id, _) = setup_token(env, sponsor, deposit);
     client
-        .create_variable_rate_stream(sponsor, recipient, &token_id, &cliff_duration, &segments)
-        .unwrap();
+        .create_variable_rate_stream(sponsor, recipient, &token_id, &cliff_duration, &segments);
     token_id
 }
 
@@ -256,14 +255,14 @@ fn test_claim_variable_then_claimable_correct() {
 
     // Advance to cliff (110) and claim
     advance_ledger(&env, 10);
-    let first = client.claim_variable_vested(&recipient).unwrap();
+    let first = client.claim_variable_vested(&recipient);
     // 10 ledgers × 5 = 50
     assert_eq!(first, 50);
     assert_eq!(token_client.balance(&recipient), 50);
 
     // Advance to end_ledger (140) and claim remainder
     advance_ledger(&env, 30);
-    let second = client.claim_variable_vested(&recipient).unwrap();
+    let second = client.claim_variable_vested(&recipient);
     // 300 − 50 = 250
     assert_eq!(second, 250);
     assert_eq!(token_client.balance(&recipient), 300);
@@ -287,7 +286,7 @@ fn test_variable_stream_dust_collection_at_end() {
 
     // Advance to end_ledger (130) and claim in one shot
     advance_ledger(&env, 30);
-    let claimed = client.claim_variable_vested(&recipient).unwrap();
+    let claimed = client.claim_variable_vested(&recipient);
     assert_eq!(claimed, 150);
     assert_eq!(token_client.balance(&recipient), 150);
     assert!(client.get_variable_schedule(&recipient).is_none());
@@ -336,8 +335,7 @@ fn test_max_10_segments_accepted() {
 
     let (token_id, _) = setup_token(&env, &sponsor, total_deposit);
     client
-        .create_variable_rate_stream(&sponsor, &recipient, &token_id, &5, &segments)
-        .unwrap();
+        .create_variable_rate_stream(&sponsor, &recipient, &token_id, &5, &segments);
 
     let sched = client.get_variable_schedule(&recipient).unwrap();
     assert_eq!(sched.segments.len(), 10);

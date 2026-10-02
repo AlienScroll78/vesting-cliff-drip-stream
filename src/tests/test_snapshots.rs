@@ -59,12 +59,15 @@ fn make_stream() -> TestStream<'static> {
     // Safety: the env outlives the client in these short-lived tests.
     let env: &'static soroban_sdk::Env = Box::leak(Box::new(env));
     let client = VestingDripsClient::new(env, &contract_id);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(env);
     let recipient = Address::generate(env);
     let (token, _) = create_token(env, &sponsor);
     mint_to(env, &token, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     TestStream { env: unsafe { std::ptr::read(env) }, client, sponsor, recipient, token }
 }
@@ -129,13 +132,19 @@ fn snapshot_event_stream_created() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
 
     assert_event_snapshot(&env, "event_stream_created.snap", "vc_create");
@@ -146,13 +155,19 @@ fn snapshot_event_tokens_claimed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     advance_ledger(&env, 50); // reach cliff
     client.claim_vested(&recipient).unwrap();
@@ -165,13 +180,19 @@ fn snapshot_event_stream_completed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
     advance_ledger(&env, 500); // past end_ledger
     client.claim_vested(&recipient).unwrap(); // full claim triggers vc_done
@@ -184,15 +205,22 @@ fn snapshot_event_stream_cancelled() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
     mint_to(&env, &token, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient, &0).unwrap();
 
     assert_event_snapshot(&env, "event_stream_cancelled.snap", "vc_cancel");
 }
+

@@ -161,6 +161,12 @@ fn test_event_snapshot_stream_created() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -168,7 +174,7 @@ fn test_event_snapshot_stream_created() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // env starts at ledger 100 (see setup_env), so:
@@ -228,6 +234,12 @@ fn test_event_snapshot_tokens_claimed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -235,12 +247,12 @@ fn test_event_snapshot_tokens_claimed() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance past cliff but not to end: ledger 100 → 200.
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None);
 
     // After claim_vested (stream not finished), events emitted since the env
     // started are: [vc_create, vc_claim]. We check all events are as expected.
@@ -295,6 +307,12 @@ fn test_event_snapshot_stream_completed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -302,13 +320,13 @@ fn test_event_snapshot_stream_completed() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Jump well past end_ledger (300) so a single claim drains the whole stream.
     advance_ledger(&env, 500); // ledger → 600
 
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None);
 
     // Both vc_done (stream complete) and vc_claim are emitted by claim_vested.
     // Order: claim is emitted before done inside the function body.
@@ -372,6 +390,12 @@ fn test_event_snapshot_stream_cancelled() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -379,13 +403,13 @@ fn test_event_snapshot_stream_cancelled() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Cancel before cliff at ledger 120 → full refund.
     // rate(10) × (end(300) − last_claimed(100)) = 10 × 200 = 2000 refunded
     advance_ledger(&env, 20); // ledger → 120 (cliff is 150)
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let refund: i128 = 2_000;
 
@@ -428,4 +452,310 @@ fn test_event_snapshot_stream_cancelled() {
             .expect("Snapshot file missing. Run with UPDATE_SNAPSHOTS=1 to generate.");
         assert_eq!(on_disk, expected, "StreamCancelled snapshot JSON schema changed!");
     }
+}
+
+// ── StreamClawedBack event ────────────────────────────────────────────────────
+// Closes #617
+
+fn stream_clawed_back_snapshot() -> serde_json::Value {
+    serde_json::json!({
+        "event": "StreamClawedBack",
+        "topics": {
+            "0": { "type": "Symbol", "value": "vc_claw" },
+            "1": { "type": "Address", "description": "recipient address" }
+        },
+        "data": {
+            "0": { "type": "Address", "description": "sponsor address" },
+            "1": { "type": "Address", "description": "token address" },
+            "2": { "type": "i128",    "description": "amount clawed back to sponsor" },
+            "3": { "type": "String",  "description": "compliance reason (max 256 chars)" }
+        },
+        "changelog": []
+    })
+}
+
+#[test]
+fn test_event_snapshot_stream_clawed_back() {
+    use soroban_sdk::String as SorobanString;
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Clawback before cliff: remaining = rate(10) * (end(300) - start(100)) = 2000
+    advance_ledger(&env, 20); // ledger → 120 (before cliff at 150)
+    let reason = SorobanString::from_str(&env, "regulatory compliance");
+    client
+        .clawback_stream(&sponsor, &recipient, &0, &reason)
+        .unwrap();
+
+    let clawed_amount: i128 = 2_000;
+
+    assert_eq!(
+        env.events().all(),
+        soroban_sdk::vec![
+            &env,
+            // create_vesting_stream
+            (
+                contract_id.clone(),
+                (symbol_short!("vc_create"), recipient.clone()).into_val(&env),
+                (
+                    sponsor.clone(),
+                    token_id.clone(),
+                    10_i128,
+                    100_u32,
+                    150_u32,
+                    300_u32,
+                ).into_val(&env),
+            ),
+            // clawback_stream → emit_stream_clawed_back
+            (
+                contract_id.clone(),
+                (symbol_short!("vc_claw"), recipient.clone()).into_val(&env),
+                (
+                    sponsor.clone(),
+                    token_id.clone(),
+                    clawed_amount,
+                    reason.clone(),
+                ).into_val(&env),
+            )
+        ],
+        "StreamClawedBack event schema changed! \
+         Update snapshot with UPDATE_SNAPSHOTS=1 and add a CHANGELOG entry."
+    );
+
+    let expected = stream_clawed_back_snapshot();
+    let file = "event_stream_clawed_back.json";
+
+    if updating() {
+        write_snapshot(file, &expected);
+    } else {
+        let on_disk = read_snapshot(file)
+            .expect("Snapshot file missing. Run with UPDATE_SNAPSHOTS=1 to generate.");
+        assert_eq!(on_disk, expected, "StreamClawedBack snapshot JSON schema changed!");
+    }
+}
+
+// ── StreamDrained event ───────────────────────────────────────────────────────
+// Closes #618
+
+fn stream_drained_snapshot() -> serde_json::Value {
+    serde_json::json!({
+        "event": "StreamDrained",
+        "topics": {
+            "0": { "type": "Symbol", "value": "vc_drain" },
+            "1": { "type": "Address", "description": "recipient address" }
+        },
+        "data": {
+            "0": { "type": "Address", "description": "caller address (permissionless)" },
+            "1": { "type": "Address", "description": "sponsor address (receives tokens)" },
+            "2": { "type": "Address", "description": "token address" },
+            "3": { "type": "i128",    "description": "amount drained to sponsor" }
+        },
+        "changelog": []
+    })
+}
+
+#[test]
+fn test_event_snapshot_stream_drained() {
+    use soroban_sdk::testutils::LedgerInfo;
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 2_000);
+
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
+        .unwrap();
+
+    // Advance past end_ledger (300) + drain delay (3_153_600)
+    // start=100, so need ledger > 100+200+3_153_600 = 3_153_900
+    env.ledger().set(LedgerInfo {
+        timestamp: 0,
+        protocol_version: 22,
+        sequence_number: 3_153_901,
+        network_id: Default::default(),
+        base_reserve: 10,
+        min_temp_entry_ttl: 100,
+        min_persistent_entry_ttl: 1000,
+        max_entry_ttl: u32::MAX,
+    });
+
+    let caller = Address::generate(&env);
+    let drained_amount: i128 = 2_000;
+
+    client.drain_expired_stream(&caller, &recipient).unwrap();
+
+    assert_eq!(
+        env.events().all(),
+        soroban_sdk::vec![
+            &env,
+            // create_vesting_stream
+            (
+                contract_id.clone(),
+                (symbol_short!("vc_create"), recipient.clone()).into_val(&env),
+                (
+                    sponsor.clone(),
+                    token_id.clone(),
+                    10_i128,
+                    100_u32,
+                    150_u32,
+                    300_u32,
+                ).into_val(&env),
+            ),
+            // drain_expired_stream → emit_stream_drained
+            (
+                contract_id.clone(),
+                (symbol_short!("vc_drain"), recipient.clone()).into_val(&env),
+                (
+                    caller.clone(),
+                    sponsor.clone(),
+                    token_id.clone(),
+                    drained_amount,
+                ).into_val(&env),
+            )
+        ],
+        "StreamDrained event schema changed! \
+         Update snapshot with UPDATE_SNAPSHOTS=1 and add a CHANGELOG entry."
+    );
+
+    let expected = stream_drained_snapshot();
+    let file = "event_stream_drained.json";
+
+    if updating() {
+        write_snapshot(file, &expected);
+    } else {
+        let on_disk = read_snapshot(file)
+            .expect("Snapshot file missing. Run with UPDATE_SNAPSHOTS=1 to generate.");
+        assert_eq!(on_disk, expected, "StreamDrained snapshot JSON schema changed!");
+    }
+}
+
+// ── AllowlistUpdated event ────────────────────────────────────────────────────
+// Closes #619, #620
+
+fn allowlist_updated_snapshot() -> serde_json::Value {
+    serde_json::json!({
+        "event": "AllowlistUpdated",
+        "topics": {
+            "0": { "type": "Symbol", "value": "AllowlistUpdated" },
+            "1": { "type": "Address", "description": "admin address" }
+        },
+        "data": {
+            "0": { "type": "Address", "description": "token address" },
+            "1": { "type": "bool",    "description": "true = added, false = removed" }
+        },
+        "changelog": []
+    })
+}
+
+#[test]
+fn test_event_snapshot_allowlist_token_added() {
+    use soroban_sdk::Symbol;
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // add_allowed_token requires admin auth (mocked)
+    client.add_allowed_token(&admin, &token).unwrap();
+
+    assert_eq!(
+        env.events().all(),
+        soroban_sdk::vec![
+            &env,
+            (
+                contract_id.clone(),
+                (Symbol::new(&env, "AllowlistUpdated"), admin.clone()).into_val(&env),
+                (token.clone(), true).into_val(&env),
+            )
+        ],
+        "AllowlistUpdated (add) event schema changed!"
+    );
+
+    let expected = allowlist_updated_snapshot();
+    let file = "event_allowlist_updated.json";
+
+    if updating() {
+        write_snapshot(file, &expected);
+    } else {
+        let on_disk = read_snapshot(file)
+            .expect("Snapshot file missing. Run with UPDATE_SNAPSHOTS=1 to generate.");
+        assert_eq!(on_disk, expected, "AllowlistUpdated snapshot JSON schema changed!");
+    }
+}
+
+#[test]
+fn test_event_snapshot_allowlist_token_removed() {
+    use soroban_sdk::Symbol;
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Add then remove
+    client.add_allowed_token(&admin, &token).unwrap();
+    env.events().all(); // consume add event
+
+    // Clear events by registering fresh env is not possible; instead verify
+    // that the remove event is the second event in the sequence.
+    client.remove_allowed_token(&admin, &token).unwrap();
+
+    let all_events = env.events().all();
+    // Second event is the remove
+    let remove_event = all_events.get(1).expect("remove event must exist");
+
+    assert_eq!(
+        remove_event,
+        (
+            contract_id.clone(),
+            (Symbol::new(&env, "AllowlistUpdated"), admin.clone()).into_val(&env),
+            (token.clone(), false).into_val(&env),
+        ),
+        "AllowlistUpdated (remove) event schema changed!"
+    );
 }

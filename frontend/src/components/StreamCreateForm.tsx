@@ -2,6 +2,7 @@
 import { useState, type ChangeEvent, type FocusEvent } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { getErrorInfo } from "@/errorMessages";
+import { isDepositOverflow } from "@/wizard/useWizard";
 
 // ~5 seconds per ledger on Stellar
 const LEDGERS_PER_DAY = Math.round((24 * 60 * 60) / 5);
@@ -108,6 +109,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [contractError, setContractError] = useState<number | null>(null);
+  // Persistent aria-live region announces form submission outcomes to screen readers.
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
 
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
@@ -136,8 +139,10 @@ export function StreamCreateForm({ onSuccess }: Props) {
     e.preventDefault();
     setTouched({ recipient: true, token: true, rate: true, cliffDays: true, totalDays: true });
     if (hasErrors || !sponsor) return;
+    if (isDepositOverflow(rate, totalLedgers)) return;
     setSubmitting(true);
     setContractError(null);
+    setLiveAnnouncement("Submitting vesting stream…");
     try {
       const result = await submitCreateStream({
         sponsor,
@@ -148,12 +153,15 @@ export function StreamCreateForm({ onSuccess }: Props) {
         totalLedgers,
       });
       setTxHash(result.hash);
+      setLiveAnnouncement("Vesting stream created successfully.");
       onSuccess?.(result.hash);
     } catch (err) {
       // Parse VestingError code from contract error message
       const msg = err instanceof Error ? err.message : "";
       const match = /code[:\s]+(\d+)/i.exec(msg) ?? /error[:\s]+(\d+)/i.exec(msg);
-      setContractError(match ? Number(match[1]) : 0);
+      const code = match ? Number(match[1]) : 0;
+      setContractError(code);
+      setLiveAnnouncement(`Stream creation failed. ${msg || "An unexpected error occurred."}`);
     } finally {
       setSubmitting(false);
     }
@@ -167,11 +175,28 @@ export function StreamCreateForm({ onSuccess }: Props) {
       data-testid="stream-create-form"
       style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
     >
+      {/*
+        Persistent aria-live="assertive" region announces form submission outcomes
+        (success, error, submitting) to screen readers without requiring focus change.
+        The region is visually hidden but always present in the DOM.
+      */}
+      <div
+        role="status"
+        aria-live="assertive"
+        aria-atomic="true"
+        className="sr-only"
+        data-testid="form-live-region"
+      >
+        {liveAnnouncement}
+      </div>
+
       <Field
         id="recipient"
         name="recipient"
         label="Recipient address"
         placeholder="G…"
+        required
+        aria-required="true"
         value={values.recipient}
         error={touched.recipient ? errors.recipient : undefined}
         onChange={handleChange}
@@ -183,6 +208,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         name="token"
         label="Token contract (SAC)"
         placeholder="C…"
+        required
+        aria-required="true"
         value={values.token}
         error={touched.token ? errors.token : undefined}
         onChange={handleChange}
@@ -197,6 +224,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         type="number"
         min="1"
         step="1"
+        required
+        aria-required="true"
         value={values.rate}
         error={touched.rate ? errors.rate : undefined}
         onChange={handleChange}
@@ -211,6 +240,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         type="number"
         min="0.001"
         step="any"
+        required
+        aria-required="true"
         value={values.cliffDays}
         error={touched.cliffDays ? errors.cliffDays : undefined}
         onChange={handleChange}
@@ -226,6 +257,8 @@ export function StreamCreateForm({ onSuccess }: Props) {
         type="number"
         min="0.001"
         step="any"
+        required
+        aria-required="true"
         value={values.totalDays}
         error={touched.totalDays ? errors.totalDays : undefined}
         onChange={handleChange}
@@ -233,8 +266,29 @@ export function StreamCreateForm({ onSuccess }: Props) {
         hint={totalDays > 0 ? `≈ ${totalLedgers.toLocaleString()} ledgers` : undefined}
       />
 
+      {/* Overflow warning — takes precedence over deposit preview */}
+      {rate > 0 && totalLedgers > 0 && isDepositOverflow(rate, totalLedgers) && (
+        <div
+          role="alert"
+          data-testid="overflow-warning"
+          style={{
+            padding: "0.75rem 1rem",
+            background: "#fef2f2",
+            border: "1px solid var(--color-cancelled)",
+            borderRadius: "var(--radius)",
+            fontSize: "0.875rem",
+            color: "var(--color-cancelled)",
+          }}
+        >
+          <strong>⚠️ Deposit overflow!</strong>
+          <p style={{ margin: "0.25rem 0 0" }}>
+            rate × total_duration exceeds i128::MAX. Reduce the rate or duration to proceed.
+          </p>
+        </div>
+      )}
+
       {/* Deposit preview */}
-      {estimatedDeposit !== null && !hasErrors && (
+      {estimatedDeposit !== null && !hasErrors && !isDepositOverflow(rate, totalLedgers) && (
         <div
           role="status"
           aria-live="polite"
@@ -338,7 +392,7 @@ interface FieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   hint?: string;
 }
 
-function Field({ id, label, error, hint, ...inputProps }: FieldProps) {
+function Field({ id, label, error, hint, required, ...inputProps }: FieldProps) {
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
   const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") || undefined;
@@ -346,9 +400,17 @@ function Field({ id, label, error, hint, ...inputProps }: FieldProps) {
     <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
       <label htmlFor={id} style={{ fontSize: "0.875rem", fontWeight: 600 }}>
         {label}
+        {/* Visual required indicator — hidden from AT since aria-required conveys this */}
+        {required && (
+          <span aria-hidden="true" style={{ color: "var(--color-cancelled)", marginLeft: "0.2rem" }}>
+            *
+          </span>
+        )}
       </label>
       <input
         id={id}
+        required={required}
+        aria-required={required ? "true" : undefined}
         aria-describedby={describedBy}
         aria-invalid={!!error}
         style={{
