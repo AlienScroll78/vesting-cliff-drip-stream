@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
@@ -15,6 +15,22 @@ import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
 
+// #539 — register service worker for offline support
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .then((registration) => {
+          console.info('[SW] registered, scope:', registration.scope)
+        })
+        .catch((err) => {
+          console.warn('[SW] registration failed:', err)
+        })
+    })
+  }
+}
+
 function App() {
   const [count, setCount] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
@@ -29,6 +45,8 @@ function App() {
   return (
     // #121 — page fade-in on mount
     <PageTransition>
+      {/* #820 — first-time-user onboarding tour */}
+      <OnboardingTour />
       <section id="center">
         <div className="hero">
           <img src={heroImg} className="base" width="170" height="179" alt="" />

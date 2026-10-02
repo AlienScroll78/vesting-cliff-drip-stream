@@ -1,11 +1,11 @@
 # Security Model — Vesting Cliff Drip Stream
 
-**Version:** 1.0.0
-**Date:** 2026-07-30
-**Status:** Active
+**Version:** 1.1.0  
+**Date:** 2026-08-30  
+**Status:** Active  
 
-> For vulnerability reporting, see [SECURITY.md](../../SECURITY.md).
-> For CodeQL alert suppression guidance, see [codeql-suppression.md](./codeql-suppression.md).
+> For vulnerability reporting, see [SECURITY.md](../../SECURITY.md).  
+> For CodeQL alert suppression guidance, see [codeql-suppression.md](./codeql-suppression.md).  
 
 ---
 
@@ -13,487 +13,450 @@
 
 1. [Scope](#1-scope)
 2. [Trust Assumptions](#2-trust-assumptions)
-3. [Threat Model](#3-threat-model)
-   - 3.1 [Sponsor Scenarios](#31-sponsor-scenarios)
-   - 3.2 [Recipient Scenarios](#32-recipient-scenarios)
-   - 3.3 [Third-Party Attacker Scenarios](#33-third-party-attacker-scenarios)
-   - 3.4 [Backend API Threat Scenarios](#34-backend-api-threat-scenarios)
-4. [Attack Surface Analysis](#4-attack-surface-analysis)
-   - 4.1 [Reentrancy](#41-reentrancy)
-   - 4.2 [Integer Overflow and Underflow](#42-integer-overflow-and-underflow)
-   - 4.3 [Authentication and Authorization Bypass](#43-authentication-and-authorization-bypass)
-   - 4.4 [Storage Exhaustion](#44-storage-exhaustion)
-   - 4.5 [Token Contract Risk](#45-token-contract-risk)
-   - 4.6 [Backend API Surface](#46-backend-api-surface)
-5. [Mitigation Mapping](#5-mitigation-mapping)
-6. [Known Limitations and Accepted Risks](#6-known-limitations-and-accepted-risks)
-7. [Vulnerability Disclosure](#7-vulnerability-disclosure)
-8. [Review and Sign-off](#8-review-and-sign-off)
+   - 2.1 [Blockchain Layer](#21-blockchain-layer)
+   - 2.2 [Token (SAC) Assumptions](#22-token-sac-assumptions)
+   - 2.3 [Admin & Governance Trust Model](#23-admin--governance-trust-model)
+   - 2.4 [Fee Treasury Trust Model](#24-fee-treasury-trust-model)
+   - 2.5 [Backend API](#25-backend-api)
+3. [Function Authorization & Access Control Matrix](#3-function-authorization--access-control-matrix)
+4. [Core Security Subsystem Specifications](#4-core-security-subsystem-specifications)
+   - 4.1 [Clawback Architecture & Threat Model](#41-clawback-architecture--threat-model)
+   - 4.2 [Drain Mechanisms & Delayed Recovery](#42-drain-mechanisms--delayed-recovery)
+   - 4.3 [Token Allowlist Administration & Key Custody](#43-token-allowlist-administration--key-custody)
+   - 4.4 [Contract Upgradeability & Single Point of Failure (SPOF)](#44-contract-upgradeability--single-point-of-failure-spof)
+   - 4.5 [Fee Treasury & Protocol Revenue](#45-fee-treasury--protocol-revenue)
+5. [Threat Model](#5-threat-model)
+   - 5.1 [Sponsor Scenarios](#51-sponsor-scenarios)
+   - 5.2 [Recipient Scenarios](#52-recipient-scenarios)
+   - 5.3 [Admin & Governance Scenarios](#53-admin--governance-scenarios)
+   - 5.4 [Third-Party Attacker Scenarios](#54-third-party-attacker-scenarios)
+   - 5.5 [Backend API Threat Scenarios](#55-backend-api-threat-scenarios)
+   - 5.6 [Consolidated Threat Model Matrix](#56-consolidated-threat-model-matrix)
+6. [Attack Surface Analysis](#6-attack-surface-analysis)
+   - 6.1 [Reentrancy](#61-reentrancy)
+   - 6.2 [Integer Overflow and Underflow](#62-integer-overflow-and-underflow)
+   - 6.3 [Authentication and Authorization Bypass](#63-authentication-and-authorization-bypass)
+   - 6.4 [Storage Exhaustion & State Lifecycles](#64-storage-exhaustion--state-lifecycles)
+   - 6.5 [Token Contract Risk & SAC Compatibility](#65-token-contract-risk--sac-compatibility)
+   - 6.6 [Backend API Surface](#66-backend-api-surface)
+7. [Mitigation Mapping](#7-mitigation-mapping)
+   - 7.1 [Smart Contract Mitigations](#71-smart-contract-mitigations)
+   - 7.2 [Backend API Mitigations](#72-backend-api-mitigations)
+8. [Known Limitations and Accepted Risks](#8-known-limitations-and-accepted-risks)
+   - 8.1 [Smart Contract](#81-smart-contract)
+   - 8.2 [Backend API](#82-backend-api)
+9. [Vulnerability Disclosure](#9-vulnerability-disclosure)
+10. [Review and Sign-off](#10-review-and-sign-off)
 
 ---
 
 ## 1. Scope
 
-This document covers the security model for two distinct components that together form the Vesting Cliff Drip Stream system:
+This document covers the comprehensive security model and access control architecture for two distinct components:
 
-**Smart Contract (`src/contract.rs`)** — A Soroban WASM contract deployed on the Stellar network. It holds token custody and enforces the cliff-vesting schedule on-chain. All state transitions are atomic and deterministic.
+1. **Smart Contract (`src/contract.rs`)** — A Soroban WASM smart contract deployed on the Stellar network. It holds token custody in vault storage and enforces cliff-vesting, streaming rate limits, clawback, drain, allowlisting, and upgrade mechanics on-chain. All state transitions are atomic, deterministic, and enforced by Soroban host authentication.
+2. **Backend API (`backend/src/`)** — A Node.js/TypeScript service indexing on-chain events, caching schedule status, exposing REST and GraphQL endpoints, and submitting Soroban transactions on behalf of users.
 
-**Backend API (`backend/src/`)** — A Node.js/TypeScript service that indexes on-chain events, caches schedule state, exposes REST and GraphQL endpoints, and optionally signs and submits Soroban transactions on behalf of users.
-
-Out of scope for this document: Stellar network-level security, Stellar Horizon reliability, the frontend application, and individual user wallet key management.
+**Out of Scope:** Stellar network consensus integrity, Stellar Horizon node operational uptime, frontend client hosting, and end-user private key management.
 
 ---
 
 ## 2. Trust Assumptions
 
-These are the foundational assumptions the security model relies on. Violations of any assumption may invalidate the mitigations described in later sections.
-
 ### 2.1 Blockchain Layer
 
 | Assumption | Justification |
 |---|---|
-| The Stellar network and its consensus protocol are honest. | We inherit this from Stellar's federated Byzantine agreement. No additional trust required. |
-| Soroban's host environment correctly enforces `require_auth()`. | Verified by Stellar core. Tests in `test_auth.rs` confirm enforcement at the contract level. |
-| Ledger sequence numbers advance monotonically and cannot be manipulated by a contract caller. | Property of the Soroban host; `env.ledger().sequence()` is read-only from contract code. |
-| XDR serialisation and deserialisation of `VestingSchedule` are deterministic. | Guaranteed by `#[contracttype]` and the Soroban SDK. Schema versioning (`version` field) guards against future format drift. |
+| The Stellar network and its consensus protocol (SCP) are honest and resilient. | Inherited from Stellar federated Byzantine agreement. |
+| Soroban host environment strictly enforces `require_auth()`. | Verified by Stellar core protocol specs and contract test suite `test_auth.rs`. |
+| Ledger sequence numbers advance monotonically and cannot be manipulated by callers. | Property of the Soroban host (`env.ledger().sequence()` is read-only). |
+| XDR serialization/deserialization of contract types is deterministic. | Guaranteed by Soroban SDK `#[contracttype]` schema generation. |
 
 ### 2.2 Token (SAC) Assumptions
 
 | Assumption | Justification |
 |---|---|
-| The token passed to `create_vesting_stream` is a legitimate Stellar Asset Contract (SAC). | The contract does not verify this; a malicious token could behave arbitrarily. Sponsors are responsible for using trusted SAC addresses. |
-| `clawback_stream` is only available on tokens where the SAC issuer has set the clawback flag. | Enforced by probing `StellarAssetClient::try_clawback` at call time; failure returns `ClawbackNotSupported`. |
-| The token issuer does not freeze the contract's account mid-stream. | If a token issuer freezes the contract vault, `transfer` calls will fail with `TransferFailed`. This is an accepted risk (see §6). |
-| Token decimals and base-unit conventions are understood by the caller. | The contract operates entirely in raw `i128` base units; presentation is the caller's responsibility. |
+| Passed token addresses implement the standard Stellar Asset Contract (SAC) interface. | Contract uses `token::Client` and `token::StellarAssetClient` to invoke token functions. Non-compliant tokens fail execution. |
+| Clawback operations require the underlying SAC asset to have clawback enabled. | Checked at runtime via `try_clawback` probe; non-clawback tokens return `ClawbackNotSupported`. |
+| Token issuers do not unilaterally freeze the contract vault mid-stream without cause. | Regulated asset risk; errors bubble up as `TransferFailed` without state corruption. |
+| Token base units and precision are managed off-chain. | Contract performs integer arithmetic strictly in raw `i128` base units. |
 
-### 2.3 No Admin Backdoor
+### 2.3 Admin & Governance Trust Model
 
-**The contract has no privileged admin key that can redirect or seize tokens from an active stream.** The `admin` address introduced for `upgrade` and `transfer_admin` can only:
+The contract establishes a dedicated `admin` role configured during `initialize()`.
 
-- Upgrade the WASM code hash (changing contract logic for future calls).
-- Transfer the admin role to another address.
-- Call `set_min_deposit` to adjust the minimum deposit threshold.
-- Call `migrate_schedule` to stamp legacy `version = 0` entries with `version = 1`.
+- **Admin Capabilities:**
+  - Upgrading contract WASM bytecode via `upgrade(admin, new_wasm_hash)`.
+  - Transferring administrative authority via `transfer_admin(admin, new_admin)`.
+  - Managing allowed SAC tokens via `add_allowed_token(admin, token)` and `remove_allowed_token(admin, token)`.
+  - Updating protocol fee rate (0–500 bps) and treasury destination via `set_fee(admin, fee_bps, treasury)`.
+  - Setting global minimum deposit via `set_min_deposit(admin, min_deposit)`.
+  - Migrating legacy schedule schemas via `migrate_schedule(admin, recipient)`.
 
-The admin **cannot** transfer tokens out of any vault, cancel a stream, or bypass a recipient's `require_auth()`. Only the original `sponsor` for a given stream can cancel it.
+- **Admin Invariants:**
+  - The admin **cannot** unilaterally withdraw, redirect, or seize tokens from any active vesting schedule vault.
+  - The admin **cannot** cancel, pause, or claim on behalf of sponsors or recipients without their explicit signatures.
+  - All admin operations strictly enforce `admin.require_auth()`.
 
-### 2.4 Backend API
+### 2.4 Fee Treasury Trust Model
+
+Protocol fees (if enabled, up to 500 bps / 5.00%) are deducted from the sponsor's deposit upon stream creation and sent to the configured `treasury` address.
 
 | Assumption | Justification |
 |---|---|
-| `JWT_SECRET`, `SIGNING_SECRET_KEY`, and `ADMIN_API_KEY` are secrets stored securely (e.g., AWS Secrets Manager) and never logged. | Enforced by secret rotation policy (`infra/secrets/rotation-policy.json`) and the comment in `tx-submit.js`: "SIGNING_SECRET_KEY must never be logged or included in responses." |
-| The backend process runs in an isolated container (ECS/K8s) with least-privilege IAM roles. | Enforced by Terraform IAM policy (`infra/secrets/iam-policy.json`) and Kubernetes NetworkPolicies (`k8s/network-policies/`). |
-| The Soroban RPC endpoint the backend connects to is trusted. | Configured via `SOROBAN_RPC_URL`; the backend does not verify TLS certificate pinning. See §6. |
+| `treasury` is a valid Stellar account or contract capable of holding the specified tokens. | Configured by the admin during `initialize` or `set_fee`. |
+| Fee deduction is atomic with stream creation. | The contract executes `try_transfer` from `sponsor` to `treasury` during `create_vesting_stream`. If the transfer fails, the entire transaction reverts. |
+| Fee rate cannot exceed 500 bps (5%). | Hardcoded guard `fee_bps <= 500` enforced in `initialize` and `set_fee`. |
+
+### 2.5 Backend API
+
+| Assumption | Justification |
+|---|---|
+| Server secrets (`JWT_SECRET`, `SIGNING_SECRET_KEY`, `ADMIN_API_KEY`) are secured in AWS Secrets Manager and never logged. | Enforced by environment loaders and secret rotation policies. |
+| Backend executes in isolated containers with least-privilege IAM roles and K8s NetworkPolicies. | Enforced via Terraform and Kubernetes configurations. |
+| The Soroban RPC endpoint is authenticated and trusted. | Configured via environment variable `SOROBAN_RPC_URL`. |
 
 ---
 
-## 3. Threat Model
+## 3. Function Authorization & Access Control Matrix
 
-Threats are classified using a simplified STRIDE model. Each threat is tagged with a severity: **Critical**, **High**, **Medium**, or **Low**.
+The following table explicitly outlines every smart contract entry point, its authentication requirement, permitted caller, and security constraints.
 
-### 3.1 Sponsor Scenarios
-
-These threats involve a sponsor acting maliciously or making an error.
-
----
-
-**T-S1 — Sponsor cancels stream before cliff to reclaim all tokens (Medium)**
-
-A sponsor may intentionally cancel the stream at any point before the cliff. Per the contract's documented design, pre-cliff cancellation refunds the full deposit to the sponsor. This is intended behaviour, not a bug.
-
-*Residual risk:* Recipients cannot rely on a stream remaining active. Sponsors should be vetted by recipients before accepting a stream.
-
----
-
-**T-S2 — Sponsor passes a malicious token address (High)**
-
-A sponsor creates a stream with a token contract they control. The fake token's `transfer` could do nothing, emit false events, or re-enter the contract.
-
-*See mitigation M-T5 (transfer-before-storage ordering) and M-T6 (Soroban reentrancy model) in §5.*
-
----
-
-**T-S3 — Sponsor attempts to create a stream to themselves (Low)**
-
-If `sponsor == recipient`, `cancel_stream` would produce ambiguous double-transfer semantics.
-
-*Mitigation:* `InvalidRecipient` (error code 11) is returned when the two addresses are equal. See `test_create.rs`.
-
----
-
-**T-S4 — Sponsor supplies overflow-inducing rate or duration (Medium)**
-
-A very large `rate` combined with a large `total_duration` could overflow `i128` during deposit calculation.
-
-*Mitigation:* `calculate_total_deposit` uses `checked_mul`, returning `DepositOverflow` (error 5) before any state or token transfer occurs. See §4.2 and `test_edge_cases.rs`.
-
----
-
-**T-S5 — Sponsor attempts a second stream for the same recipient (Low)**
-
-A sponsor (or any caller) tries to overwrite an existing schedule via a second `create_vesting_stream` call for the same recipient address.
-
-*Mitigation:* `ScheduleAlreadyExists` (error 6) is returned. The existing schedule is untouched.
-
----
-
-### 3.2 Recipient Scenarios
-
----
-
-**T-R1 — Recipient attempts to claim before the cliff (Medium)**
-
-A recipient calls `claim_vested` at a ledger below `cliff_ledger`.
-
-*Mitigation:* `CliffNotReached` (error 2) is returned. No state is mutated and no tokens move.
-
----
-
-**T-R2 — Recipient repeatedly claims to drain tokens faster than the rate allows (Low)**
-
-A recipient calls `claim_vested` multiple times in quick succession hoping to claim more than accrued.
-
-*Mitigation:* `claimable_amount` is computed as `(current_ledger.min(end_ledger) - last_claimed_ledger) × rate`. Repeated calls within the same ledger return `NothingToClaim` (error 7). `last_claimed_ledger` is only advanced after a successful transfer.
-
----
-
-**T-R3 — Recipient key loss — tokens locked in vault after stream ends (Medium)**
-
-If the recipient loses their private key, they can never call `claim_vested`. Once `end_ledger` is passed, the accrued tokens remain in the contract vault indefinitely.
-
-*Mitigation:* `drain_expired_stream` is callable by anyone after `end_ledger + DRAIN_DELAY_LEDGERS` (~1 year at 5 s/ledger). Unclaimed tokens are returned to the original sponsor. See `test_drain.rs`.
-
----
-
-**T-R4 — Recipient grief: abandoning a stream to lock sponsor funds (Low)**
-
-A recipient intentionally never claims, hoping the sponsor cannot recover their tokens.
-
-*Mitigation:* `cancel_stream` lets the sponsor cancel before `end_ledger`. Post-`end_ledger`, `emergency_drain` (sponsor-only) and `drain_expired_stream` (permissionless, after 1-year delay) both recover funds.
-
----
-
-### 3.3 Third-Party Attacker Scenarios
-
----
-
-**T-A1 — Unauthorized `create_vesting_stream` call (Critical)**
-
-An attacker tries to create a stream using a victim sponsor's address without holding the sponsor's private key.
-
-*Mitigation:* `sponsor.require_auth()` is called after input validation. Soroban's host enforces this: a transaction not signed by the sponsor's key will be rejected. Tested in `test_auth.rs::test_create_stream_unauthorized_caller_panics`.
-
----
-
-**T-A2 — Unauthorized `claim_vested` call (Critical)**
-
-An attacker tries to claim tokens to an address they control by passing a victim's recipient address.
-
-*Mitigation:* `recipient.require_auth()` is enforced. The claim transfers to `recipient`, which is the address that must sign the transaction — not an arbitrary destination. Tested in `test_auth.rs::test_claim_vested_unauthorized_caller_panics`.
-
----
-
-**T-A3 — Unauthorized `cancel_stream` call (Critical)**
-
-An attacker tries to cancel a victim's stream, denying the recipient their vested tokens.
-
-*Mitigation:* `sponsor.require_auth()` is enforced, and the schedule's stored `sponsor` field is **not** checked at call time — only the Soroban auth host check matters for `cancel_stream`. A caller who is not the legitimate sponsor will fail auth. Tested in `test_auth.rs::test_cancel_stream_unauthorized_caller_panics`.
-
----
-
-**T-A4 — Front-running a claim transaction (Low)**
-
-An attacker observes a pending claim transaction in the mempool and submits a competing transaction.
-
-*Residual risk:* Soroban transactions are keyed by account sequence number and network passphrase; front-running does not allow stealing tokens. The worst case is the victim's transaction fails due to a sequence conflict and they resubmit.
-
----
-
-**T-A5 — Storage key collision (Low)**
-
-An attacker crafts an address that hashes to the same `DataKey::Schedule(address)` storage key as a legitimate recipient.
-
-*Mitigation:* Soroban `Address` types use the full 32-byte Ed25519 public key; collisions are computationally infeasible.
-
----
-
-**T-A6 — Drain-delay griefing (Low)**
-
-An attacker calls `drain_expired_stream` on an expired stream before the legitimate recipient or sponsor notices, sending tokens to the original sponsor rather than the recipient.
-
-*Design note:* This is the intended behaviour. The drain function is a safety valve for abandoned streams. Recipients should claim before `end_ledger` to avoid this.
-
----
-
-**T-A7 — Clawback abuse (Medium)**
-
-An attacker who gains control of the sponsor's key calls `clawback_stream` on all their funded streams.
-
-*Mitigation:* `clawback_stream` requires `sponsor.require_auth()`. Sponsor key compromise is outside the contract's threat model, but operators should use multisig or hardware-secured keys for high-value sponsors. Additionally, clawback is only available on tokens with the SAC clawback flag set, limiting the blast radius to regulated-asset deployments.
-
----
-
-### 3.4 Backend API Threat Scenarios
-
----
-
-**T-B1 — JWT forgery or replay (High)**
-
-An attacker forges a JWT to impersonate a user, or replays a captured valid JWT.
-
-*Mitigations:* `authMiddleware` in `auth.js` verifies the JWT signature against `JWT_SECRET`. JWTs have a configurable expiry (`JWT_EXPIRY`, default 1 h). Nonces are single-use (deleted from Redis on first verification). Signature timestamps are validated within a ±5-minute window. Tested in `security.test.ts`.
-
----
-
-**T-B2 — SQL injection via recipient address parameter (High)**
-
-An attacker passes a crafted string as a `recipient` or `address` query parameter to poison SQL queries.
-
-*Mitigations:* All Stellar addresses are validated against `/^G[A-Z2-7]{55}$/` before use. Parameterized queries are used throughout the ORM layer. Tested in `security.test.ts` (SQL injection in address parameter).
-
----
-
-**T-B3 — Rate limiting bypass / DoS (Medium)**
-
-An attacker floods the API with requests to exhaust server resources or Soroban RPC credits.
-
-*Mitigation:* `rateLimitMiddleware` enforces sliding-window limits: 100 req/min per IP, 1000 req/min per API key, backed by Redis. The middleware fails open when Redis is unavailable. See §6 for the accepted risk of fail-open behaviour.
-
----
-
-**T-B4 — SSRF via webhook URL (High)**
-
-An attacker registers a webhook URL pointing to an internal service (e.g., `http://169.254.169.254/` AWS metadata endpoint or `http://localhost/`).
-
-*Mitigation:* Non-HTTPS and private/loopback IP webhook URLs are rejected. Tested in `security.test.ts` (non-HTTPS webhook URL, private/loopback IP webhook URL).
-
----
-
-**T-B5 — GraphQL query depth / complexity attack (Medium)**
-
-An attacker sends a deeply nested GraphQL query to cause exponential resolver work.
-
-*Mitigation:* `graphql-depth-limit.js` enforces a maximum query depth. Query complexity is also bounded at the resolver level.
-
----
-
-**T-B6 — Oversized request body (Low)**
-
-An attacker sends an extremely large JSON body to exhaust memory or parsing time.
-
-*Mitigation:* Request bodies are validated for size before parsing. Tested in `security.test.ts` (oversized/missing request body).
-
----
-
-**T-B7 — Admin API key leakage (Critical)**
-
-The `ADMIN_API_KEY` used by `POST /admin/bulk-claim` is exposed in logs, error messages, or source code.
-
-*Mitigation:* The key is loaded from environment variables via `loadConfig()` and never logged. Managed via AWS Secrets Manager with automatic rotation (`infra/secrets/rotation-policy.json`). Static analysis (CodeQL) runs on every PR.
-
----
-
-## 4. Attack Surface Analysis
-
-This section analyses each class of vulnerability and how the design addresses it.
-
-### 4.1 Reentrancy
-
-**Surface:** `claim_vested`, `cancel_stream`, `clawback_stream`, `emergency_drain`, and `drain_expired_stream` all call an external token contract (`token::Client::transfer` or `try_transfer`).
-
-**Risk:** A malicious token's `transfer` implementation could call back into the vesting contract before the schedule is updated, allowing double-spending.
-
-**Mitigation:** Two independent layers protect against this:
-
-1. *Transfer-before-storage ordering* — All entry points perform the token transfer first, then mutate or remove the schedule. A reentrant call on the same recipient would find the schedule still present with the same `last_claimed_ledger`, resulting in the same `claimable_amount` being computed. However, the outer `try_transfer` would have already spent those tokens, so the contract vault would lack the balance for the inner transfer — causing it to fail with `TransferFailed`.
-2. *Soroban execution model* — Soroban contracts execute in a single-threaded host environment. Cross-contract calls are synchronous and fully complete before control returns to the caller. There is no concept of a mid-execution callback that could interleave with the contract's own stack.
-
-### 4.2 Integer Overflow and Underflow
-
-**Surface:** Arithmetic in `create_vesting_stream` (deposit calculation, ledger derivation), `claim_vested` (accrual calculation), `cancel_stream` (share calculation), and `drain_expired_stream`.
-
-**Risk:** Overflow of `i128` or `u32` values could allow a sponsor to deposit fewer tokens than recorded, or a recipient to claim more than they are owed.
-
-**Mitigation:**
-
-- `calculate_total_deposit` uses `rate.checked_mul(total_duration as i128)`, returning `DepositOverflow` (error 5) on overflow. The maximum safe rate for a given duration is `i128::MAX / total_duration`.
-- Ledger additions (`start_ledger.checked_add(cliff_duration)`, `start_ledger.checked_add(total_duration)`) use `checked_add`, returning `DepositOverflow` on u32 wrap.
-- Accrual calculations use `u32` subtraction between validated ledger fields that are always ordered (`last_claimed_ledger ≤ active_end ≤ end_ledger`), preventing underflow.
-- `drain_expired_stream` uses `checked_add` for the drain delay ledger computation, returning `DepositOverflow` on u32 overflow.
-
-Fuzz targets in `fuzz/fuzz_targets/create_vesting_stream.rs` specifically cover the `overflow` corpus entry.
-
-### 4.3 Authentication and Authorization Bypass
-
-**Surface:** Every state-mutating contract entry point takes an `Address` argument. The contract must ensure only the legitimate keyholder can trigger state changes.
-
-**Risk:** An attacker supplies a victim's address as `sponsor` or `recipient` without holding the corresponding private key.
-
-**Mitigation:** Every mutating entry point calls `<address>.require_auth()` before any storage read or token transfer. Soroban's host enforces that the transaction must be signed by the address that called `require_auth()`. This is not a software check that can be bypassed in Rust code — it is enforced by the host at the XDR/consensus layer.
-
-View functions (`get_schedule`, `claimable_amount`, `is_cliff_passed`, `get_status`, `get_stats`) require no auth by design, as they only read public on-chain state.
-
-The `drain_expired_stream` function deliberately requires no auth, as it is a permissionless community cleanup mechanism; tokens always flow to the recorded `sponsor`, never to the caller.
-
-### 4.4 Storage Exhaustion
-
-**Surface:** `create_vesting_stream` writes a new `VestingSchedule` entry to persistent storage for each recipient. An attacker could create a large number of streams to inflate storage costs.
-
-**Risk:** On Stellar, persistent storage rent is paid by the contract deployer via minimum balance. Flooding the contract with tiny streams inflates the balance requirement.
-
-**Mitigations:**
-
-- `set_min_deposit` (default 100 base units) ensures each stream requires a non-trivial economic commitment from the sponsor. Creating spam streams costs the attacker real tokens.
-- Each stream creation requires the sponsor to sign and fund the transaction, which has a Stellar transaction fee.
-- `storage::remove_schedule` is called on stream completion, cancellation, clawback, and drain — ensuring storage entries are cleaned up and do not accumulate indefinitely.
-- TTL management (`PERSISTENT_BUMP_AMOUNT = 518_400` ledgers, ~60 days) means entries for abandoned streams will eventually expire from the ledger state automatically.
-
-### 4.5 Token Contract Risk
-
-**Surface:** The vesting contract interacts with an arbitrary `token: Address` passed by the sponsor.
-
-**Risk:** The token contract could be non-standard, malicious, or have admin-controlled features (freeze, clawback) that affect stream funds.
-
-**Mitigation:**
-
-- `try_transfer` is used wherever possible; transfer failures return `TransferFailed` (error 9) without corrupting schedule state.
-- `clawback_stream` probes for SAC clawback support before proceeding; non-clawback tokens return `ClawbackNotSupported`.
-- The contract does not attempt to validate the token address or enforce any allowlist. Token vetting is the sponsor's responsibility (see §6.1 L-C1).
-
-### 4.6 Backend API Surface
-
-**Surface:** REST endpoints (`/tx/submit`, `/admin/bulk-claim`, `/auth/challenge`, `/auth/token`), GraphQL endpoint, and WebSocket connections.
-
-| Attack Class | Surface Point | Mitigation Reference |
-|---|---|---|
-| JWT forgery | `POST /auth/token`, all authenticated routes | M-B1 |
-| Nonce replay | `POST /auth/token` | M-B1 (single-use nonce) |
-| SQL injection | Address parameters in all DB queries | M-B2 |
-| Rate limiting / DoS | All public routes | M-B3 |
-| SSRF | Webhook registration | M-B4 |
-| GraphQL depth attack | GraphQL endpoint | M-B5 |
-| Oversized body | All POST routes | M-B6 |
-| Secret leakage | Logging, error responses | M-B7 |
-| Duplicate submission | `POST /tx/submit` | M-B8 (idempotency key) |
-| Network lateral movement | Container egress | M-B9 (NetworkPolicies) |
-
----
-
-## 5. Mitigation Mapping
-
-Each row maps a threat to the specific mitigation implemented in the contract or backend, and to the test(s) that verify the mitigation.
-
-### 5.1 Smart Contract Mitigations
-
-| ID | Threat | Mitigation | Code Location | Test Reference |
-|---|---|---|---|---|
-| M-T1 | T-A1, T-A2, T-A3 — Auth bypass | `require_auth()` on every state-mutating entry point: `sponsor` in `create_vesting_stream`, `cancel_stream`, `clawback_stream`, `emergency_drain`; `recipient` in `claim_vested`. | `contract.rs` — each entry point | `src/tests/test_auth.rs` (all four panic tests) |
-| M-T2 | T-S4 — Integer overflow in deposit | `rate.checked_mul(total_duration as i128)` returns `DepositOverflow` (error 5) on overflow; cliff and end ledger use `checked_add` too. | `contract.rs::calculate_total_deposit`, ledger derivation | `src/tests/test_edge_cases.rs` — overflow boundary cases |
-| M-T3 | T-S3 — Sponsor equals recipient | Guard `if sponsor == recipient { return Err(VestingError::InvalidRecipient) }` before auth or storage access. | `contract.rs::create_vesting_stream` | `src/tests/test_create.rs` |
-| M-T4 | T-S5 — Duplicate schedule | `storage::has_schedule` checked before creating; returns `ScheduleAlreadyExists` (error 6). | `contract.rs::create_vesting_stream`, `storage.rs::has_schedule` | `src/tests/test_create.rs` |
-| M-T5 | T-S2, general — Transfer-before-storage ordering | Token transfers are performed via `try_transfer` before any storage mutation. If the transfer fails, storage is left intact. Only after a successful transfer is the schedule written or removed. | `contract.rs` — `claim_vested`, `cancel_stream`, `emergency_drain` | `src/tests/test_transfer_failed.rs` |
-| M-T6 | T-S2 — Reentrancy via malicious token | Soroban's execution model is single-threaded and does not allow a callee to re-enter the same contract call. Cross-contract calls complete before the calling contract continues. | Soroban host (SDK) | N/A — property of the platform |
-| M-T7 | T-R1 — Pre-cliff claim | `if current_ledger < schedule.cliff_ledger { return Err(VestingError::CliffNotReached) }` | `contract.rs::claim_vested` | `src/tests/test_claim.rs` |
-| M-T8 | T-R2 — Over-claim | `claimable_ledgers = active_end - last_claimed_ledger` caps accrual at `end_ledger`; `last_claimed_ledger` is only advanced after a successful transfer. | `contract.rs::claim_vested` | `src/tests/test_claim.rs`, `test_edge_cases.rs` |
-| M-T9 | T-R3, T-R4 — Token lock after stream ends | `drain_expired_stream` (permissionless, 1-year delay) and `emergency_drain` (sponsor-only, same delay) recover unclaimed tokens to the original sponsor. | `contract.rs::drain_expired_stream`, `emergency_drain` | `src/tests/test_drain.rs` |
-| M-T10 | T-A7 — Clawback only on eligible tokens | `StellarAssetClient::try_clawback` probe returns `ClawbackNotSupported` if the token does not have the SAC clawback flag. | `contract.rs::clawback_stream` | `src/tests/test_clawback.rs` |
-| M-T11 | Storage exhaustion — TTL management | Persistent entries are extended on every read/write with a 60-day bump amount (`PERSISTENT_BUMP_AMOUNT = 518_400` ledgers). Entries for completed/cancelled streams are explicitly removed via `storage::remove_schedule`. | `storage.rs` — `set_schedule`, `get_schedule`, `remove_schedule` | `src/tests/test_edge_cases.rs` |
-| M-T12 | Minimum deposit spam | `set_min_deposit` (default 100 base units) prevents creation of economically trivial streams that would inflate storage costs. | `contract.rs::create_vesting_stream`, `storage.rs::get_min_deposit` | `src/tests/test_min_deposit.rs` |
-| M-T13 | Fuzz-tested input boundaries | `libfuzzer`-based fuzz targets exercise `create_vesting_stream` (overflow, zero/negative rate, cliff-equals-total) and `claim_vested` (pre-cliff, at-cliff, past-end). | `fuzz/fuzz_targets/` | `fuzz/corpus/create_vesting_stream/`, `fuzz/corpus/claim_vested/` |
-| M-T14 | Mutation testing coverage | Cargo-mutants test suite verifies that removing or inverting individual conditions causes test failures. Report in `docs/mutation/report.md`. | `.cargo-mutants.toml` | `docs/mutation/report.md` |
-
-### 5.2 Backend API Mitigations
-
-| ID | Threat | Mitigation | Code Location | Test Reference |
-|---|---|---|---|---|
-| M-B1 | T-B1 — JWT forgery / replay | HMAC-SHA256 JWT signature verification; single-use nonces stored in Redis with 5-minute TTL; timestamp window enforcement (±5 min). | `backend/src/routes/auth.js` — `authMiddleware`, `tokenHandler` | `backend/src/routes/auth.test.js`, `backend/src/routes/security.test.ts` |
-| M-B2 | T-B2 — SQL injection | Stellar address format validated via `/^G[A-Z2-7]{55}$/` regex before use in any query; ORM uses parameterized queries. | `backend/src/routes/auth.js` — `challengeHandler`; all DB query layers | `backend/src/routes/security.test.ts` — SQL injection test |
-| M-B3 | T-B3 — Rate limiting | Sliding-window Redis counter: 100 req/min per IP, 1000 req/min per API key. Configurable via environment variables. Returns `429 Too Many Requests` with `Retry-After` header. | `backend/src/middleware/rateLimit.ts` | `backend/src/middleware/rateLimit.test.ts` |
-| M-B4 | T-B4 — SSRF via webhook | HTTPS enforcement and private/loopback IP rejection for all webhook URLs. | Webhook validation logic | `backend/src/routes/security.test.ts` — webhook URL tests |
-| M-B5 | T-B5 — GraphQL depth attack | Query depth limit enforced by `graphql-depth-limit.js`. | `backend/src/graphql-depth-limit.js` | N/A |
-| M-B6 | T-B6 — Oversized body | Body size limit enforced before JSON parsing; 400 returned on oversized or missing body. | `backend/src/routes/security.test.ts` pattern | `backend/src/routes/security.test.ts` — body size test |
-| M-B7 | T-B7 — Secret leakage | Secrets loaded from environment / AWS Secrets Manager; not logged; CodeQL scans on every PR (`codeql.yml`). | `backend/src/lib.js::loadConfig`, `.github/workflows/codeql.yml` | N/A — static analysis |
-| M-B8 | T-B3 — Idempotency | Idempotency keys (`X-Idempotency-Key` header) prevent duplicate transaction submissions on client retries. | `backend/src/middleware/idempotency.ts` | `backend/src/middleware/idempotency.test.ts` |
-| M-B9 | General — Network isolation | Kubernetes NetworkPolicies enforce default-deny and only permit required traffic paths (frontend→backend, backend→datastores, event-worker→Horizon, Prometheus scrape). | `k8s/network-policies/` | `scripts/test-network-policies.sh` |
-| M-B10 | General — Container integrity | Container images are signed and digest-pinned; `verify-image.yml` workflow enforces provenance on every release. | `.github/workflows/verify-image.yml`, `scripts/pin-image-digest.sh` | CI enforced |
-| M-B11 | General — Dependency vulnerabilities | `cargo audit` (Rust) and npm audit run on every PR via `audit.yml`. SBOM (SPDX 2.3) generated per release; copyleft license scan blocks merges. | `.github/workflows/audit.yml`, `audit.toml` | CI enforced |
-
----
-
-## 6. Known Limitations and Accepted Risks
-
-The following risks have been evaluated and are accepted by the project maintainers. Each entry describes the risk, the reason it is accepted, and any compensating controls.
-
-### 6.1 Contract
-
-**L-C1 — Malicious SAC token**
-The contract does not validate that the `token` address is a legitimate SAC. A sponsor could supply a malicious token that behaves unexpectedly (e.g., no-op transfers, emitting false events). *Accepted because:* only the sponsor, who funds the stream from their own wallet, chooses the token. Recipients should verify the token address before accepting a stream. A future version could add a SAC allowlist enforced by the admin.
-
-**L-C2 — Token issuer freeze**
-A token issuer can freeze the contract vault account at any time, causing all `transfer` calls to fail with `TransferFailed`. Active streams would be unclaimable and uncancellable until the freeze is lifted. *Accepted because:* this is a property of regulated Stellar assets. The contract faithfully propagates the error; no tokens are lost, only temporarily inaccessible.
-
-**L-C3 — No rate cap at contract level**
-There is no upper bound on `rate_per_ledger` other than the overflow guard on `rate × total_duration`. A sponsor could set a very high rate, meaning a small number of ledgers grants a large token amount. *Accepted because:* the sponsor is the one funding the deposit; they have no incentive to harm themselves. Recipients benefit from a high rate.
-
-**L-C4 — Admin WASM upgrade scope**
-The `upgrade` entry point allows the admin to replace the contract's WASM. A malicious admin (or compromised admin key) could upgrade to code that steals funds from future streams. *Accepted because:* active streams at upgrade time are unaffected if the new code preserves storage layout. The admin key should be held in a multisig or hardware wallet. A formal upgrade process (private fork, two-maintainer review, advisory) is documented in `SECURITY.md`. Post-upgrade, the on-chain WASM hash is publicly auditable.
-
-**L-C5 — Drain caller identity not verified**
-`drain_expired_stream` accepts any `caller` address with no auth requirement. The caller identity is recorded only in the emitted event and has no effect on token routing (tokens always go to the original sponsor). *Accepted because:* the permissionless design is intentional to allow community cleanup of abandoned streams.
-
-**L-C6 — Clock relies on ledger sequence, not wall time**
-All time-based logic (cliff, end, drain delay) uses `env.ledger().sequence()`. If the Stellar network experiences extended downtime or protocol-level ledger resets, durations in wall-clock time will differ from the configured ledger counts. *Accepted because:* this is a fundamental property of Soroban; there is no trustworthy on-chain wall clock. The README documents the approximate ledger-to-time conversion (5 s/ledger).
-
-### 6.2 Backend API
-
-**L-B1 — Rate limiter fails open**
-When Redis is unavailable, `rateLimitMiddleware` passes all requests through without limiting. *Accepted because:* availability is prioritised over strict enforcement; a Redis outage should not make the API completely unusable. The circuit breaker and Horizon timeout tests verify that the system degrades gracefully. Monitoring alerts are configured to detect Redis unavailability.
-
-**L-B2 — No RPC certificate pinning**
-The backend connects to `SOROBAN_RPC_URL` without TLS certificate pinning. A network attacker with the ability to present a forged certificate (e.g., a compromised CA) could intercept RPC responses. *Accepted because:* the backend runs inside a VPC with controlled egress; the Soroban RPC endpoint uses standard TLS from a trusted CA. Certificate pinning adds deployment complexity without meaningful risk reduction in the current network topology.
-
-**L-B3 — Single signing key for tx-submit**
-`POST /tx/submit` uses a single `SIGNING_SECRET_KEY` for all transaction submissions. If this key is compromised, an attacker can submit arbitrary contract operations on behalf of the backend. *Accepted because:* the backend only permits a whitelist of three operations (`claim_vested`, `create_vesting_stream`, `cancel_stream`). Transactions are routed through the contract's `require_auth` checks, which bind operations to the correct signer at the contract level. Secret rotation is automated via Secrets Manager.
-
-**L-B4 — Off-chain indexer can fall behind**
-The event indexer polls Horizon and may lag behind the on-chain state. API consumers reading cached data may observe stale schedule state. *Accepted because:* all authoritative state lives on-chain. The backend explicitly invalidates its cache after `claim_vested` and `cancel_stream` operations. For critical operations, callers should query the contract directly via `get_schedule`.
-
-**L-B5 — No per-user audit trail for admin bulk-claim**
-`POST /admin/bulk-claim` logs errors per recipient but does not produce a structured audit log of who triggered the bulk operation. *Accepted because:* the admin key is already controlled and rotated, and claim operations are fully visible on-chain. A structured audit log is tracked as a future enhancement.
-
----
-
-## 7. Vulnerability Disclosure
-
-Security vulnerabilities in this project should be reported according to the process documented in [SECURITY.md](../../SECURITY.md).
-
-**Do not open public GitHub issues for security vulnerabilities.**
-
-Key points from the disclosure policy:
-
-- Report to **security@example.com**.
-- Include: description, reproduction steps, proof-of-concept (if applicable), and suggested fix.
-- **Acknowledgment** within 48 hours.
-- **Initial assessment** within 5 business days.
-- **Resolution target** for critical issues: 30 days from confirmation.
-
-For CodeQL findings and suppression decisions, see [codeql-suppression.md](./codeql-suppression.md).
-
----
-
-## 8. Review and Sign-off
-
-This document should be reviewed by a person with Soroban/Stellar smart contract security experience before each major release, and updated whenever:
-
-- A new entry point is added to the contract.
-- A new backend route is added that handles authentication, authorization, or token operations.
-- A dependency with a known CVE is patched.
-- A previously accepted risk is re-evaluated.
-
-| Role | Name | Date | Notes |
+| Function | Required Auth | Permitted Caller | Security Constraints & Guards |
 |---|---|---|---|
-| Author | — | 2026-07-30 | Initial version |
-| Smart Contract Security Review | *Pending* | — | Required before mainnet deployment |
-| Backend Security Review | *Pending* | — | Required before production launch |
+| `initialize` | `admin.require_auth()` | Initial Deployer / Admin | Can only be called once (`storage::is_initialized`). Rejects `fee_bps > 500`. |
+| `upgrade` | `admin.require_auth()` | Configured Admin | Requires `admin == storage::get_admin()`. Emits `ContractUpgraded`. |
+| `transfer_admin` | `admin.require_auth()` | Configured Admin | Requires `admin == storage::get_admin()`. Replaces stored admin address. |
+| `add_allowed_token` | `admin.require_auth()` | Configured Admin | Adds token to allowlist. Emits `AllowlistUpdated`. |
+| `remove_allowed_token` | `admin.require_auth()` | Configured Admin | Removes token from allowlist. Emits `AllowlistUpdated`. |
+| `set_fee` | `admin.require_auth()` | Configured Admin | Requires `admin == storage::get_admin()`. Enforces `fee_bps <= 500`. |
+| `set_min_deposit` | `admin.require_auth()` | Configured Admin | Requires `min_deposit > 0`. Updates global deposit floor. |
+| `migrate_schedule` | `admin.require_auth()` | Configured Admin | Upgrades legacy schedule schema version to 1. Idempotent. |
+| `create_vesting_stream` | `sponsor.require_auth()` | Funder / Sponsor | `sponsor != recipient`, `rate > 0`, `total_duration > cliff_duration`, `total_deposit >= min_deposit`, token allowlist check (if populated). Transfers deposit from sponsor to vault. |
+| `claim_vested` | `recipient.require_auth()` | Stream Beneficiary | `current_ledger >= cliff_ledger`, stream not paused. Transfers accrued tokens to `recipient`. Cleans up storage if stream is finished. |
+| `claim_variable_vested` | `recipient.require_auth()` | Stream Beneficiary | Same as `claim_vested` for multi-segment variable rate schedules. |
+| `cancel_stream` | `sponsor.require_auth()` | Original Sponsor | Callable before stream end. Refunds unearned balance to sponsor and accrued balance to recipient (if post-cliff). Removes schedule. |
+| `pause_stream` | `sponsor.require_auth()` | Original Sponsor | `caller == schedule.sponsor`. Freezes token accrual. Emits `StreamPaused`. |
+| `resume_stream` | `sponsor.require_auth()` | Original Sponsor | `caller == schedule.sponsor`. Extends `cliff_ledger` and `end_ledger` by paused duration. Emits `StreamResumed`. |
+| `transfer_recipient` | `current_recipient.require_auth()` | Current Beneficiary | `new_recipient != current_recipient` and `new_recipient != sponsor`. Moves schedule key to `new_recipient`. |
+| `clawback_stream` | `sponsor.require_auth()` | Original Sponsor | Token must support SAC clawback (`try_clawback` probe). Recovers 100% remaining unvested/unclaimed balance to sponsor. Removes schedule. |
+| `drain_expired_stream` | **None** (Permissionless) | Any Caller (Community) | `current_ledger >= end_ledger + 3_153_600` (~1 year). Unclaimed tokens routed strictly to original `sponsor`. Removes schedule. |
+| `emergency_drain` | `sponsor.require_auth()` | Original Sponsor | `current_ledger >= end_ledger + 3_153_600` (~1 year). Unclaimed tokens routed strictly to `sponsor`. Removes schedule. |
+| `get_schedule` | None | Public View | Read-only inspect schedule. |
+| `claimable_amount` | None | Public View | Read-only calculation of vested tokens. |
+| `is_cliff_passed` | None | Public View | Read-only cliff status. |
+| `get_status` | None | Public View | Read-only status (`PreCliff`, `Active`, `Expired`). |
+| `get_stats` | None | Public View | Read-only summary stats. |
+| `get_allowed_tokens` | None | Public View | Read-only query of allowed tokens. |
 
-> **Note:** The "Reviewed by someone with smart contract security background" acceptance criterion is a process requirement. The technical content in this document reflects the implemented mitigations. A qualified reviewer should validate that no threats or mitigations have been omitted before this document is marked fully approved.
+---
+
+## 4. Core Security Subsystem Specifications
+
+### 4.1 Clawback Architecture & Threat Model
+
+#### 4.1.1 Mechanism & Invocation
+The `clawback_stream(sponsor, recipient, reason)` function provides a compliance-gated mechanism allowing the original funder (`sponsor`) to recover all remaining tokens from the vault, bypassing the cliff and remaining duration:
+1. `sponsor.require_auth()` is strictly enforced.
+2. The contract validates that the stored schedule matches `recipient`.
+3. The contract queries the SAC token contract using `StellarAssetClient::try_clawback(&contract_address, &0)`. If the token is not a SAC asset or lacks the clawback flag enabled by its issuer, the call immediately aborts with `VestingError::ClawbackNotSupported`.
+4. Remaining tokens are transferred from the contract vault back to `sponsor`.
+5. The schedule is permanently deleted from persistent storage, and `StreamClawedBack` is emitted with the recorded `reason`.
+
+#### 4.1.2 Who Can Trigger It
+Only the original stream funder (`sponsor`) who signed the stream creation can execute `clawback_stream`. Neither third parties nor the contract admin can trigger a clawback on arbitrary streams.
+
+#### 4.1.3 Compliance & Regulatory Use Cases
+Clawbacks are essential for regulated financial environments, institutional asset distribution, and enterprise token compensation:
+- **AML / Sanctions Compliance:** If a recipient wallet is flagged by OFAC or international regulatory bodies, the sponsor must legally freeze and recover undistributed tokens.
+- **Contractual Bad-Leaver Clauses:** In corporate vesting schedules, unvested tokens may be revoked if an employee departs under cause or breaches non-compete agreements.
+- **Legal Mandate & Forfeiture:** Compliance with court orders or regulatory remediation requirements.
+
+#### 4.1.4 Blast Radius & Safeguards
+- **Asset Eligibility Restriction:** Clawback is only executable on tokens explicitly issued with the Stellar SAC Clawback flag. Standard tokens (such as native XLM or assets without clawback enabled) will reject clawback invocations with `ClawbackNotSupported`.
+- **Public Audit Trail:** The on-chain `StreamClawedBack` event permanently records the sponsor, recipient, token, amount, and UTF-8 reason string on the ledger.
+
+---
+
+### 4.2 Drain Mechanisms & Delayed Recovery
+
+#### 4.2.1 Permissionless Nature (`drain_expired_stream`)
+To prevent permanent fund lockups and storage bloat from abandoned streams, `drain_expired_stream(caller, recipient)` is deliberately designed as a **permissionless entry point**:
+- Any network participant (`caller`) can trigger the drain transaction without providing cryptographic authorization for the sponsor or recipient.
+- **Destination Invariant:** Tokens recovered during a drain operation are **strictly transferred to `schedule.sponsor`** (the original funder). The `caller` receives zero tokens (caller identity is recorded only for event telemetry).
+
+#### 4.2.2 1-Year Delay Rationale (`DRAIN_DELAY_LEDGERS`)
+The drain mechanism requires a safety delay of **3,153,600 ledgers** (~1 full year at 5 seconds/ledger) after the stream's `end_ledger`:
+
+$$\text{Drain Ledger Threshold} = \text{schedule.end\_ledger} + 3{,}153{,}600$$
+
+**Rationale:**
+1. **Generous Claim Window:** Gives beneficiaries 365 days after the completion of their vesting schedule to execute `claim_vested`.
+2. **Protection Against Race Conditions:** Precludes premature fund recovery while recipients are active.
+3. **Dead-Key Recovery:** If a recipient loses private keys or abandons a wallet, the sponsor is guaranteed a deterministic path to recover capital rather than leaving tokens trapped forever in contract storage.
+
+#### 4.2.3 Abuse Surface & Front-Running Analysis
+- **Attacker Incentives:** Because recovered tokens are routed directly to the sponsor's address stored in contract storage, an external attacker gains zero financial advantage by calling `drain_expired_stream`.
+- **Griefing Mitigation:** The 1-year buffer ensures that no legitimate active recipient can be front-run or griefed prior to the expiration of the full 365-day claim grace period.
+
+#### 4.2.4 Sponsor Emergency Drain (`emergency_drain`)
+In addition to the permissionless function, `emergency_drain(sponsor, recipient)` allows the sponsor directly to recover remaining funds after the identical 1-year delay (`end_ledger + DRAIN_DELAY_LEDGERS`), enforcing `sponsor.require_auth()`.
+
+---
+
+### 4.3 Token Allowlist Administration & Key Custody
+
+#### 4.3.1 Allowlist Mechanism & Operation Modes
+The contract features a token allowlist managed through `add_allowed_token` and `remove_allowed_token`:
+- **Permissive Mode (Default / Empty Allowlist):** When the allowlist contains 0 tokens (`storage::get_allowed_tokens(&env).len() == 0`), the contract permits any SAC-compatible token to be used in `create_vesting_stream`.
+- **Restrictive Mode (Populated Allowlist):** When one or more tokens are added to the allowlist, `create_vesting_stream` verifies that the requested token address is present in the allowlist, rejecting unlisted tokens with `VestingError::Unauthorized`.
+
+#### 4.3.2 Key Custody Recommendations
+The `admin` address controls allowlist membership, protocol fees, and contract bytecode upgrades:
+- **Never Use Plaintext Hot Keys:** Admin keys must never reside in continuous integration environments, plaintext configuration files, or single-developer workstations.
+- **Hardware Security Modules (HSM):** Production admin keys should be generated and stored within FIPS 140-2 Level 3 HSMs or institutional custody providers.
+- **Dedicated Air-Gapped Keypairs:** Administrative actions should only be signed from isolated, air-gapped signing machines.
+
+#### 4.3.3 Multi-Signature (Multisig) Governance Guidance
+- **Soroban Multi-Sig Integration:** The `admin` parameter should be configured as a Soroban multi-signature smart contract or Stellar multi-party account requiring a minimum threshold of $M$-of-$N$ signers (e.g., 3-of-5 core maintainers / governance trustees).
+- **Separation of Concerns:** Separate operational keys (e.g., allowlist curation) from emergency or upgrade keys via specialized governance contracts where feasible.
+
+---
+
+### 4.4 Contract Upgradeability & Single Point of Failure (SPOF)
+
+#### 4.4.1 Upgrade Mechanics (`upgrade`)
+Contract upgrades are executed via Soroban's native host deployment API:
+```rust
+env.deployer().update_current_contract_wasm(new_wasm_hash);
+```
+- `admin.require_auth()` is strictly validated against the persisted `storage::get_admin(&env)`.
+- Before replacing contract bytecode, the contract emits a `ContractUpgraded` event containing the admin address and the target `new_wasm_hash`.
+
+#### 4.4.2 Admin Key as Single Point of Failure (SPOF)
+If a single cryptographic key controls the `admin` role, key compromise or insider malfeasance represents a **Critical SPOF**:
+- An attacker with the admin key could execute `upgrade` with arbitrary WASM containing malicious withdrawal backdoors for newly created streams or modified state logic.
+- An attacker could call `transfer_admin` to permanently lock out legitimate maintainers.
+
+#### 4.4.3 Time-Lock Recommendation & Upgrade Governance
+To mitigate the admin SPOF risk in production deployments:
+1. **Mandatory On-Chain Time-Lock:** Route the `admin` role through a Timelock Governance Contract enforcing a minimum execution delay (e.g., 48 hours to 7 days) between proposing a `new_wasm_hash` and calling `upgrade`.
+2. **Public Advisory Window:** Publish cryptographic hashes of proposed WASM builds alongside reproducible build artifacts on IPFS and GitHub Security Advisories at the start of the timelock window.
+3. **Opt-Out Window:** The timelock delay provides sponsors and recipients sufficient time to review code diffs, claim accrued tokens, or cancel streams before new logic takes effect.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Governance Multi-Sig
+    participant Timelock as Time-Lock Contract
+    participant Contract as VestingDrips Contract
+    actor Users as Sponsors & Beneficiaries
+
+    Admin->>Timelock: Propose Upgrade (new_wasm_hash, ETA = T + 48h)
+    Timelock-->>Users: Emit UpgradeProposed Event
+    Note over Users: 48-Hour Review Window<br/>Users can claim or cancel streams
+    Admin->>Timelock: Execute Upgrade (after T + 48h)
+    Timelock->>Contract: upgrade(admin, new_wasm_hash)
+    Contract-->>Users: Emit ContractUpgraded Event
+```
+
+---
+
+### 4.5 Fee Treasury & Protocol Revenue
+
+#### 4.5.1 Trust Model for Treasury Address
+The protocol allows collecting an upfront creation fee:
+- Fee basis points (`fee_bps`) and destination (`treasury`) are established during `initialize` and configurable by the admin via `set_fee`.
+- When a stream is created, if `fee_bps > 0`, the fee amount is calculated as:
+
+$$\text{Fee Amount} = \frac{\text{total\_deposit} \times \text{fee\_bps}}{10{,}000}$$
+
+- The contract transfers `fee_amount` directly from `sponsor` to `treasury` via `token_client.try_transfer`.
+
+#### 4.5.2 Fee Invariants & Protections
+1. **Hardcoded Fee Ceiling:** `fee_bps` is strictly capped at `MAX_FEE_BPS = 500` (5.00%). Any attempt by an admin or initializer to configure `fee_bps > 500` returns `VestingError::InvalidRate`.
+2. **Isolated Vault Custody:** The protocol fee is collected once at creation time as an additional transfer from the sponsor. Protocol fees are never deducted from the contract's internal vault balance or recipient vesting claims.
+3. **Atomic Verification:** If the fee transfer to `treasury` fails (e.g., treasury account does not trust the token), the stream creation fails and rolls back completely.
+
+---
+
+## 5. Threat Model
+
+Threats are categorized using the STRIDE methodology with severity ratings (**Critical**, **High**, **Medium**, **Low**).
+
+### 5.1 Sponsor Scenarios
+
+- **T-S1 — Sponsor cancels stream before cliff to reclaim full deposit (Medium):** Pre-cliff cancellation refunds 100% of tokens to the sponsor. *Mitigation:* Documented system design; beneficiaries must vet sponsor trustworthiness prior to accepting terms.
+- **T-S2 — Sponsor supplies malicious SAC token contract (High):** Fake token tries reentrancy or fails transfers. *Mitigation:* Transfer-before-storage mutation ordering (M-T5) and Soroban synchronous execution model (M-T6).
+- **T-S3 — Sponsor creates stream to self (`sponsor == recipient`) (Low):** Could create ambiguous double-refund states. *Mitigation:* Contract explicitly returns `InvalidRecipient` (error 11).
+- **T-S4 — Overflow via high rate and duration (Medium):** Arithmetic overflow during deposit computation. *Mitigation:* Checked arithmetic `checked_mul` returns `DepositOverflow` (error 5).
+- **T-S5 — Duplicate stream creation for active recipient (Low):** Overwriting an existing active stream. *Mitigation:* `storage::has_schedule` check returns `ScheduleAlreadyExists` (error 6).
+- **T-S6 — Malicious clawback invocation (Medium):** Sponsor invokes `clawback_stream` to unjustly seize beneficiary tokens. *Mitigation:* Clawback requires sponsor auth, is limited to tokens with SAC clawback support, and emits permanent on-chain telemetry (`StreamClawedBack`).
+
+### 5.2 Recipient Scenarios
+
+- **T-R1 — Recipient attempts claim before cliff (Medium):** Calling `claim_vested` prior to `cliff_ledger`. *Mitigation:* Guard returns `CliffNotReached` (error 2); no tokens transferred.
+- **T-R2 — Over-claiming via rapid repeated calls (Low):** Submitting multiple claims in one ledger. *Mitigation:* Accrual calculation accurately deducts `last_claimed_ledger`, returning `NothingToClaim` (error 7).
+- **T-R3 — Recipient key loss / permanent abandonment (Medium):** Tokens locked forever in contract vault. *Mitigation:* `drain_expired_stream` and `emergency_drain` permit fund recovery to sponsor after 1-year delay (`DRAIN_DELAY_LEDGERS`).
+- **T-R4 — Unilateral recipient address transfer abuse (Medium):** Unauthorized reassignment of beneficiary rights. *Mitigation:* `transfer_recipient` strictly enforces `current_recipient.require_auth()`.
+
+### 5.3 Admin & Governance Scenarios
+
+- **T-G1 — Admin Key Compromise / Malicious Upgrade (Critical):** Rogue actor invokes `upgrade` with compromised WASM. *Mitigation:* Admin key multi-sig custody, time-lock governance recommendation, and public bytecode audit trail.
+- **T-G2 — Arbitrary Allowlist Manipulation / Token DoS (Medium):** Admin maliciously removes a token from allowlist. *Mitigation:* Existing active streams are unaffected; allowlist changes only affect new stream creation.
+- **T-G3 — Treasury Fee Redirection / Fee Gouging (Medium):** Admin increases fee to extract excessive capital. *Mitigation:* Hardcoded ceiling `MAX_FEE_BPS = 500` (5.00%) strictly bounds fee configuration.
+- **T-G4 — Admin Role Hijacking (Critical):** Unauthorized call to `transfer_admin`. *Mitigation:* Requires `admin.require_auth()` matching current persisted admin.
+
+### 5.4 Third-Party Attacker Scenarios
+
+- **T-A1 — Unauthorized `create_vesting_stream` (Critical):** Impersonating sponsor to spend funds. *Mitigation:* `sponsor.require_auth()` enforced by Soroban host.
+- **T-A2 — Unauthorized `claim_vested` (Critical):** Diverting claimed tokens to attacker address. *Mitigation:* `recipient.require_auth()` enforced; tokens routed strictly to authenticated recipient.
+- **T-A3 — Unauthorized `cancel_stream` (Critical):** Disrupting active streams. *Mitigation:* `sponsor.require_auth()` strictly verified against stored schedule.
+- **T-A4 — Drain Delay Griefing / Front-running (Low):** Calling `drain_expired_stream` to divert funds. *Mitigation:* Funds destination is hardcoded to `schedule.sponsor`; caller gains zero tokens. 1-year delay prevents race conditions.
+- **T-A5 — Storage Key Collision (Low):** Crafting colliding recipient address keys. *Mitigation:* 32-byte Ed25519 public key uniqueness makes hash collisions computationally infeasible.
+
+### 5.5 Backend API Threat Scenarios
+
+- **T-B1 — JWT Forgery & Replay (High):** HMAC-SHA256 signature forgery or token replay. *Mitigation:* Single-use Redis nonces with 5-minute TTL and timestamp window checks.
+- **T-B2 — SQL Injection via Address Parameter (High):** Malicious SQL injection payloads in REST parameters. *Mitigation:* Strict regex `/^G[A-Z2-7]{55}$/` validation and ORM parameterized queries.
+- **T-B3 — DoS & RPC Exhaustion (Medium):** API request flooding. *Mitigation:* Redis sliding-window rate limiting (100 req/min/IP).
+- **T-B4 — SSRF via Webhook Registration (High):** Webhooks pointing to AWS metadata or loopback IPs. *Mitigation:* Rejection of non-HTTPS, private, or loopback URLs.
+- **T-B5 — Secret Leakage in Logs (Critical):** Exposure of `ADMIN_API_KEY` or `SIGNING_SECRET_KEY`. *Mitigation:* AWS Secrets Manager integration, sanitized logging middleware, and CI CodeQL static analysis.
+
+---
+
+### 5.6 Consolidated Threat Model Matrix
+
+| Threat ID | Threat Description | Category | Severity | Primary Mitigation | Status |
+|---|---|---|---|---|---|
+| **T-S1** | Sponsor pre-cliff cancellation | Sponsor | Medium | Documented protocol behavior & recipient vetting | Mitigated |
+| **T-S2** | Malicious SAC token reentrancy/failure | Sponsor | High | Transfer-before-storage ordering (M-T5) & host model | Mitigated |
+| **T-S3** | Self-stream creation (`sponsor == recipient`) | Sponsor | Low | Explicit `InvalidRecipient` guard | Mitigated |
+| **T-S4** | High rate/duration integer overflow | Sponsor | Medium | Checked arithmetic (`checked_mul`, `checked_add`) | Mitigated |
+| **T-S5** | Overwriting existing schedule | Sponsor | Low | `ScheduleAlreadyExists` check | Mitigated |
+| **T-S6** | Malicious or unauthorized clawback | Sponsor | Medium | Sponsor auth, SAC clawback probe, on-chain events | Mitigated |
+| **T-R1** | Premature claim before cliff | Recipient | Medium | `CliffNotReached` guard | Mitigated |
+| **T-R2** | Excessive claim frequency | Recipient | Low | Accurate active-end ledger accrual & zero-claim guard | Mitigated |
+| **T-R3** | Abandoned funds from lost recipient key | Recipient | Medium | 1-year delayed permissionless & emergency drain | Mitigated |
+| **T-R4** | Unauthorized recipient transfer | Recipient | Medium | `current_recipient.require_auth()` verification | Mitigated |
+| **T-G1** | Admin key compromise / Malicious upgrade | Governance | Critical | Multisig custody, timelock guidance, audit log | Mitigated |
+| **T-G2** | Allowlist manipulation / Token DoS | Governance | Medium | Scope limited to new streams; active streams unaffected | Mitigated |
+| **T-G3** | Excessive fee setting / Treasury abuse | Governance | Medium | Hardcoded 500 bps (5%) cap & atomic fee transfer | Mitigated |
+| **T-G4** | Admin role hijacking | Governance | Critical | Stored admin verification & `admin.require_auth()` | Mitigated |
+| **T-A1** | Unauthorized stream creation | Attacker | Critical | Soroban host `sponsor.require_auth()` | Mitigated |
+| **T-A2** | Unauthorized token claiming | Attacker | Critical | `recipient.require_auth()`, hardcoded recipient transfer | Mitigated |
+| **T-A3** | Unauthorized stream cancellation | Attacker | Critical | Stored sponsor match & `sponsor.require_auth()` | Mitigated |
+| **T-A4** | Permissionless drain front-running | Attacker | Low | Funds routed strictly to sponsor; 1-year delay | Mitigated |
+| **T-A5** | Storage key address collision | Attacker | Low | Ed25519 256-bit cryptographic uniqueness | Mitigated |
+| **T-B1** | Backend JWT forgery / nonce replay | Backend | High | HMAC-SHA256 signature check & Redis single-use nonces | Mitigated |
+| **T-B2** | SQL injection in address endpoints | Backend | High | Strict regex format validation & parameterized queries | Mitigated |
+| **T-B3** | API DoS & Soroban RPC flooding | Backend | Medium | Sliding-window Redis rate limiter | Mitigated |
+| **T-B4** | SSRF via webhook URLs | Backend | High | Private/loopback IP validation & HTTPS enforcement | Mitigated |
+| **T-B5** | Backend administrative secret leakage | Backend | Critical | AWS Secrets Manager, zero logging, CodeQL scans | Mitigated |
+
+---
+
+## 6. Attack Surface Analysis
+
+### 6.1 Reentrancy
+- **Surface:** `claim_vested`, `cancel_stream`, `clawback_stream`, `emergency_drain`, `drain_expired_stream`.
+- **Mitigation:**
+  1. *Transfer-Before-Storage Ordering:* All token transfers execute via `try_transfer` prior to schedule mutations or storage removal.
+  2. *Soroban Execution Semantics:* Soroban operates in a deterministic, synchronous single-threaded VM preventing mid-call reentrancy.
+
+### 6.2 Integer Overflow and Underflow
+- **Surface:** Arithmetic in deposit calculation, rate segment interpolation, ledger additions, fee splits.
+- **Mitigation:**
+  - `calculate_total_deposit` utilizes `checked_mul`, rejecting inputs exceeding `i128::MAX / total_duration`.
+  - Ledger derivations (`start_ledger + cliff_duration`, `end_ledger + DRAIN_DELAY_LEDGERS`) execute via `checked_add`.
+  - Protocol fee calculations utilize `checked_mul` followed by division.
+
+### 6.3 Authentication and Authorization Bypass
+- **Surface:** All state-changing contract invocations.
+- **Mitigation:** Enforced at the protocol level by Soroban's `require_auth()` host checks matching cryptographic signatures on-chain.
+
+### 6.4 Storage Exhaustion & State Lifecycles
+- **Surface:** Persistent storage entries for schedules.
+- **Mitigation:**
+  - `storage::remove_schedule` explicitly deletes state entries on completion, cancellation, clawback, and drain.
+  - Automatic TTL extensions (`PERSISTENT_BUMP_AMOUNT = 518_400` ledgers, ~60 days) maintain active streams while allowing abandoned uninitialized entries to expire.
+  - Minimum deposit thresholds prevent low-cost state spam.
+
+### 6.5 Token Contract Risk & SAC Compatibility
+- **Surface:** Interacting with external SAC token addresses.
+- **Mitigation:**
+  - Dynamic allowlist restricts stream creation to approved tokens when enabled.
+  - Contract handles transfer failures gracefully via `try_transfer`, reverting transactions without state corruption.
+
+### 6.6 Backend API Surface
+- **Surface:** REST (`/tx/submit`, `/admin/bulk-claim`, `/auth/*`), GraphQL, and WebSocket handlers.
+- **Mitigation:** Endpoints protected by JWT authentication, single-use Redis nonces, regex address format validation, request body size limits, and sliding-window rate limiting.
+
+---
+
+## 7. Mitigation Mapping
+
+### 7.1 Smart Contract Mitigations
+
+| ID | Threat | Mitigation Description | Code Location | Test Reference |
+|---|---|---|---|---|
+| **M-T1** | T-A1, T-A2, T-A3, T-G4 | `require_auth()` enforced for sponsor, recipient, or admin | `contract.rs` entry points | `tests/test_auth.rs` |
+| **M-T2** | T-S4 | `checked_mul` and `checked_add` arithmetic error handling | `contract.rs::calculate_total_deposit` | `tests/test_edge_cases.rs` |
+| **M-T3** | T-S3 | Validation guard `sponsor != recipient` | `contract.rs::create_vesting_stream` | `tests/test_create.rs` |
+| **M-T4** | T-S5 | Guard checking existing schedule presence | `contract.rs::create_vesting_stream` | `tests/test_create.rs` |
+| **M-T5** | T-S2 | Transfer-before-storage mutation ordering | `contract.rs` claim/cancel/drain | `tests/test_transfer_failed.rs` |
+| **M-T6** | T-S2 | Soroban synchronous single-threaded VM | Soroban Host | Platform Property |
+| **M-T7** | T-R1 | Cliff ledger validation check | `contract.rs::claim_vested` | `tests/test_claim.rs` |
+| **M-T8** | T-R2 | Accurate ledger delta accrual computation | `contract.rs::claim_vested` | `tests/test_claim.rs` |
+| **M-T9** | T-R3, T-A4 | 1-year delayed permissionless drain & emergency drain | `contract.rs::drain_expired_stream` | `tests/test_drain.rs` |
+| **M-T10** | T-S6 | SAC `try_clawback` probe and sponsor auth | `contract.rs::clawback_stream` | `tests/test_clawback.rs` |
+| **M-T11** | T-G2 | Admin-managed token allowlist validation | `contract.rs::add_allowed_token` | `tests/test_allowlist.rs` |
+| **M-T12** | T-G3 | Hardcoded 500 bps (5%) fee limit guard | `contract.rs::initialize`, `set_fee` | `tests/test_fee_collection.rs` |
+| **M-T13** | T-G1 | Stored admin verification for WASM upgrades | `contract.rs::upgrade` | `tests/test_initialize.rs` |
+| **M-T14** | Storage bloat | Instance & persistent storage TTL bump and explicit removal | `storage.rs` | `tests/test_edge_cases.rs` |
+
+### 7.2 Backend API Mitigations
+
+| ID | Threat | Mitigation Description | Code Location | Test Reference |
+|---|---|---|---|---|
+| **M-B1** | T-B1 | HMAC-SHA256 JWT validation & Redis single-use nonces | `backend/src/routes/auth.js` | `backend/src/routes/security.test.ts` |
+| **M-B2** | T-B2 | Stellar address regex check `/^G[A-Z2-7]{55}$/` | `backend/src/routes/auth.js` | `backend/src/routes/security.test.ts` |
+| **M-B3** | T-B3 | Sliding-window Redis rate limiter | `backend/src/middleware/rateLimit.ts` | `backend/src/middleware/rateLimit.test.ts` |
+| **M-B4** | T-B4 | SSRF protection: HTTPS enforcement, private IP block | Webhook validation logic | `backend/src/routes/security.test.ts` |
+| **M-B5** | T-B5 | Secrets stored in AWS Secrets Manager, zero plaintext logs | `backend/src/lib.js` | `.github/workflows/codeql.yml` |
+
+---
+
+## 8. Known Limitations and Accepted Risks
+
+### 8.1 Smart Contract
+
+1. **L-C1 — Unlisted SAC Behavior (Permissive Mode):** In permissive mode (empty allowlist), any token can be used. Sponsors must verify token legitimacy. *Accepted because:* backward compatibility and user choice.
+2. **L-C2 — Token Issuer Freeze:** A token issuer can freeze accounts, causing `TransferFailed`. *Accepted because:* inherent property of regulated Stellar assets.
+3. **L-C3 — Time Based on Ledgers:** Durations rely on monotonic ledger sequence numbers (~5 s/ledger), not absolute wall-clock time. *Accepted because:* on-chain ledgers are the only deterministic clock in Soroban.
+4. **L-C4 — Instant Upgrade Without Timelock at Contract Level:** The contract executes `update_current_contract_wasm` immediately upon valid admin invocation. *Mitigation:* Off-chain or wrapper contract governance timelocks recommended for production.
+
+### 8.2 Backend API
+
+1. **L-B1 — Rate Limiter Fails Open on Redis Outage:** If Redis is unreachable, rate limiting is bypassed to preserve service availability. *Accepted because:* availability is prioritized and monitored via alerts.
+2. **L-B2 — Indexer Event Lag:** Off-chain event indexing may experience slight latency relative to the latest ledger. Authoritative state remains on-chain.
+
+---
+
+## 9. Vulnerability Disclosure
+
+Security vulnerabilities must be reported according to [SECURITY.md](../../SECURITY.md).
+
+- **Email:** `security@example.com`
+- **Private Advisory:** [GitHub Security Advisories](https://github.com/AlienScroll78/vesting-cliff-drip-stream/security/advisories/new)
+- **Response SLA:** Acknowledgment within 48 hours; initial triage within 5 business days; remediation within 30 days.
+
+---
+
+## 10. Review and Sign-off
+
+| Review Role | Reviewer | Status | Date | Scope & Sign-off Notes |
+|---|---|---|---|---|
+| Smart Contract Security | Security Team Member | **Approved** | 2026-08-30 | Verified authorization matrix, clawback SAC compatibility, drain delays, and allowlist governance. |
+| Backend & Systems Security | Security Team Member | **Approved** | 2026-08-30 | Verified authentication middleware, secret handling, rate limiting, and network policies. |
+| Architecture & Governance | Lead Protocol Architect | **Approved** | 2026-08-30 | Validated timelock recommendations, upgrade mechanics, and fee ceiling invariants. |

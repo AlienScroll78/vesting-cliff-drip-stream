@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Create Vesting Stream</title>
+  <!-- #539 — PWA manifest & theme -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#3182ce" />
   <link rel="stylesheet" href="print.css" media="print" />
   <!-- no-FOUC: apply dark class before first paint -->
   <script>
@@ -81,10 +84,53 @@
     .dark-toggle:hover { border-color: var(--accent); }
     .dark-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+    /* ── Focus visibility (WCAG 2.4.7) ── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    /* ── Skip link ── */
+    .skip-nav {
+      position: absolute;
+      top: -100%;
+      left: 0.5rem;
+      z-index: 1000;
+      padding: 0.6rem 1rem;
+      background: var(--surface);
+      color: var(--accent);
+      border: 2px solid var(--accent);
+      border-radius: 0 0 8px 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: underline;
+    }
+    .skip-nav:focus { top: 0; }
+
     main {
       max-width: 600px;
       margin: 2.5rem auto;
       padding: 0 1rem;
+    }
+
+    /* ── Form error region ── */
+    .form-error {
+      display: none;
+      margin-bottom: 1.25rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid #b91c1c;
+      border-radius: 8px;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .form-error.visible { display: block; }
+    .dark .form-error {
+      border-color: #f87171;
+      background: #450a0a;
+      color: #fecaca;
     }
 
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
@@ -161,6 +207,12 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 0.9rem;
+    }
+    caption {
+      text-align: left;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      padding-bottom: 0.5rem;
     }
     th, td {
       text-align: left;
@@ -362,6 +414,16 @@
     preview.style.display = 'block';
     preview.scrollIntoView({ behavior: 'smooth' });
   });
+
+  // #539 — register service worker for offline support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/' })
+        .then(function (reg) { console.info('[SW] registered, scope:', reg.scope); })
+        .catch(function (err) { console.warn('[SW] registration failed:', err); });
+    });
+  }
 </script>
 
 </body>

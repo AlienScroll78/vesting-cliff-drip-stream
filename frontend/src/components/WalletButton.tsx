@@ -1,22 +1,45 @@
 "use client";
 import { useState } from "react";
 import { useWallet } from "@/contexts/WalletContext";
+import { WalletModal } from "@/components/WalletModal";
 import { CopyButton } from "@/components/CopyButton";
 import { DisconnectWalletDialog } from "@/components/CancelConfirmModal";
 
 export function WalletButton() {
-  const { address, freighterInstalled, connect, disconnect } = useWallet();
+  const {
+    address,
+    network,
+    freighterInstalled,
+    modalOpen,
+    openModal,
+    closeModal,
+    connect,
+    connectWithProvider,
+    disconnect,
+  } = useWallet();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDisconnect, setShowDisconnect] = useState(false);
 
-  async function handleConnect() {
+  // Legacy single-click connect path (Freighter extension only)
+  async function handleQuickConnect() {
+    // If Freighter is known to be installed, connect directly
+    // Otherwise open the modal for provider selection
+    if (freighterInstalled === false) {
+      openModal();
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       await connect();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Connection failed");
+      const msg = e instanceof Error ? e.message : "Connection failed";
+      if (msg === "Freighter not installed") {
+        openModal();
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -84,22 +107,34 @@ export function WalletButton() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem" }}>
-      <button
-        type="button"
-        onClick={handleConnect}
-        className="btn btn-primary"
-        disabled={loading}
-        data-testid="connect-wallet"
-        aria-busy={loading}
-      >
-        {loading ? "Connecting…" : "Connect Wallet"}
-      </button>
-      {error && (
-        <span role="alert" style={{ fontSize: "0.75rem", color: "var(--color-cancelled)" }}>
-          {error}
-        </span>
-      )}
-    </div>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem" }}>
+        <button
+          type="button"
+          onClick={handleQuickConnect}
+          className="btn btn-primary"
+          disabled={loading}
+          data-testid="connect-wallet"
+          aria-busy={loading}
+        >
+          {loading ? "Connecting…" : "Connect Wallet"}
+        </button>
+        {error && (
+          <span role="alert" style={{ fontSize: "0.75rem", color: "var(--color-cancelled)" }}>
+            {error}
+          </span>
+        )}
+      </div>
+
+      {/* Modal for provider selection */}
+      <WalletModal
+        isOpen={modalOpen}
+        connectedAddress={null}
+        network={network}
+        onConnected={handleModalConnect}
+        onDisconnect={disconnect}
+        onClose={closeModal}
+      />
+    </>
   );
 }

@@ -19,6 +19,14 @@
  *
  * When the endpoint is empty the SDK still starts but uses a no-op exporter,
  * so instrumentation is always active (useful in development / testing).
+ *
+ * Span helpers exported from this module
+ * ──────────────────────────────────────
+ *   sanitiseSql(sql)           Strip literals from SQL for safe span attributes.
+ *   withDbQuerySpan(sql, fn)   Manual DB-query span with sanitised db.statement.
+ *   withHorizonSpan(op, fn)    Manual Horizon RPC span.
+ *   withCacheSpan(op, key, fn) Manual Redis cache span that records hit/miss.
+ *   withIndexerSpan(op, fn)    Manual indexer polling-cycle span.
  */
 
 import { NodeSDK } from '@opentelemetry/sdk-node';
@@ -39,7 +47,14 @@ import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg';
 import { RedisInstrumentation } from '@opentelemetry/instrumentation-redis-4';
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import {
+  diag,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  trace,
+  SpanKind,
+  SpanStatusCode,
+} from '@opentelemetry/api';
 
 // ── Read configuration from environment ──────────────────────────────────────
 
@@ -107,18 +122,21 @@ const instrumentations = [
   }),
 
   // PostgreSQL query tracing via pg / pg-pool.
+  // enhancedDatabaseReporting captures full query text which is then
+  // sanitised by the dbStatementSerializer to remove literal values.
   new PgInstrumentation({
-    // Capture the full query text for easier debugging.
-    // Disable in high-throughput production if sensitive data is a concern.
     addSqlCommenterCommentToQueries: false,
     enhancedDatabaseReporting: true,
+    // Sanitise SQL before recording as a span attribute so no PII leaks.
+    dbStatementSerializer: (sql: string) => sanitiseSql(sql),
   }),
 
   // Redis 4.x client tracing.
   new RedisInstrumentation({
-    // Capture the db.statement attribute (the Redis command + key).
-    dbStatementSerializer: (cmdName, cmdArgs) =>
-      `${cmdName} ${cmdArgs.slice(0, 2).join(' ')}`,
+    // Record the command name and the first argument (key) only;
+    // never include the value payload which may contain cached PII.
+    dbStatementSerializer: (cmdName: string, cmdArgs: string[]) =>
+      `${cmdName} ${cmdArgs[0] ?? ''}`.trimEnd(),
   }),
 ];
 
@@ -153,5 +171,188 @@ process.on('SIGINT', () => {
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 });
+
+// ── SQL sanitiser ─────────────────────────────────────────────────────────────
+
+/**
+ * Strip literal string and number values from a SQL statement so that
+ * addresses, amounts, and other PII are never stored in span attributes.
+ *
+ * Examples:
+ *   "SELECT * FROM t WHERE id = 'GABC...'" → "SELECT * FROM t WHERE id = ?"
+ *   "INSERT INTO t VALUES (1, 'foo')"       → "INSERT INTO t VALUES (?, ?)"
+ *
+ * Positional $N parameters (pg-style) are normalised to ? for consistency.
+ */
+export function sanitiseSql(sql: string): string {
+  return sql
+    // Remove single-quoted string literals (handles escaped quotes '')
+    .replace(/'(?:[^'\\]|\\.)*'/g, '?')
+    // Remove double-quoted identifiers that look like values (e.g. "GABC...")
+    .replace(/"[A-Z2-7]{10,}"/g, '?')
+    // Replace numeric literals (integers and decimals)
+    .replace(/\b\d+(?:\.\d+)?\b/g, '?')
+    // Normalise pg positional params ($1, $2, …) → ?
+    .replace(/\$\d+/g, '?')
+    // Collapse excess whitespace introduced by the above replacements
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// ── Tracer instance ───────────────────────────────────────────────────────────
+
+const _tracer = trace.getTracer('vesting-backend', serviceVersion);
+
+// ── Manual span helpers ───────────────────────────────────────────────────────
+
+/**
+ * Wrap a database query in a manual span that records the sanitised SQL
+ * statement as `db.statement` so no literal values (addresses, amounts) are
+ * stored in trace backends.
+ *
+ * @param sql   Raw SQL string (will be sanitised before recording).
+ * @param fn    Async factory that executes the query.
+ */
+export async function withDbQuerySpan<T>(
+  sql: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return _tracer.startActiveSpan(
+    'db.query',
+    {
+      kind: SpanKind.CLIENT,
+      attributes: {
+        'db.system':    'postgresql',
+        'db.statement': sanitiseSql(sql),
+      },
+    },
+    async (span) => {
+      try {
+        const result = await fn();
+        return result;
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Wrap a Horizon RPC call in a manual span.
+ *
+ * @param operation  Human-readable name of the RPC operation, e.g. "getEvents".
+ * @param fn         Async factory that performs the call.
+ */
+export async function withHorizonSpan<T>(
+  operation: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return _tracer.startActiveSpan(
+    `horizon.${operation}`,
+    {
+      kind: SpanKind.CLIENT,
+      attributes: {
+        'rpc.system':  'horizon',
+        'rpc.method':  operation,
+      },
+    },
+    async (span) => {
+      try {
+        const result = await fn();
+        return result;
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Wrap a Redis cache operation and record whether it was a hit or miss.
+ *
+ * NOTE: The cache *key* is recorded but the cache *value* is never included
+ * in span attributes because it may contain serialised PII.
+ *
+ * @param operation  'get' | 'set' | 'del' | 'invalidate'
+ * @param key        Cache key (safe to record — scoped to recipient + ledger).
+ * @param fn         Async factory.  For 'get' operations return the cached
+ *                   value (or null/undefined for a miss).
+ */
+export async function withCacheSpan<T>(
+  operation: string,
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return _tracer.startActiveSpan(
+    `cache.${operation}`,
+    {
+      kind: SpanKind.CLIENT,
+      attributes: {
+        'db.system':    'redis',
+        'db.operation': operation,
+        'cache.key':    key,
+      },
+    },
+    async (span) => {
+      try {
+        const result = await fn();
+        // Record hit/miss semantics for GET-style operations.
+        if (operation === 'get') {
+          const hit = result !== null && result !== undefined;
+          span.setAttribute('cache.hit', hit);
+        }
+        return result;
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Wrap a single indexer polling cycle in a span so that lag, event counts,
+ * and errors are visible in the trace.
+ *
+ * @param operation  e.g. 'tick' | 'fetchEvents' | 'upsertEvents'
+ * @param fn         Async factory.
+ */
+export async function withIndexerSpan<T>(
+  operation: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return _tracer.startActiveSpan(
+    `indexer.${operation}`,
+    {
+      kind: SpanKind.INTERNAL,
+      attributes: {
+        'indexer.operation': operation,
+      },
+    },
+    async (span) => {
+      try {
+        const result = await fn();
+        return result;
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
 
 export { sdk };

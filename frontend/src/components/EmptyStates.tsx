@@ -272,3 +272,20 @@ export function SponsorDashboardEmpty() {
     />
   );
 }
+
+// ── Sponsor stream list (for /sponsor page) ──────────────────────────────────
+
+export function SponsorStreamListEmpty() {
+  return (
+    <EmptyState
+      illustration={<SponsorIllustration />}
+      heading="You haven't sponsored any streams yet"
+      subtext="Create your first vesting stream to start sponsoring contributors."
+      cta={
+        <a href="/" className="btn btn-primary" data-testid="empty-create-sponsor-stream">
+          Create your first stream →
+        </a>
+      }
+    />
+  );
+}

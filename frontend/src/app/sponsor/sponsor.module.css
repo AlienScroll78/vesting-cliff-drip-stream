@@ -1,0 +1,111 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.exportButton {
+  padding: 0.75rem 1.5rem;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.exportButton:hover {
+  background-color: #2563eb;
+}
+
+.exportButton:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.alert,
+.error {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.alert {
+  background-color: #dbeafe;
+  border: 1px solid #7dd3fc;
+  color: #0c4a6e;
+}
+
+.error {
+  background-color: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #7f1d1d;
+}
+
+@media (prefers-color-scheme: dark) {
+  .container {
+    background: #0f172a;
+    min-height: 100vh;
+  }
+
+  .title {
+    color: #f3f4f6;
+  }
+
+  .exportButton {
+    background-color: #2563eb;
+  }
+
+  .exportButton:hover {
+    background-color: #1d4ed8;
+  }
+
+  .alert {
+    background-color: #0c4a6e;
+    border-color: #0284c7;
+    color: #7dd3fc;
+  }
+
+  .error {
+    background-color: #7f1d1d;
+    border-color: #dc2626;
+    color: #fca5a5;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 1.5rem 1rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .exportButton {
+    width: 100%;
+    text-align: center;
+  }
+}

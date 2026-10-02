@@ -63,9 +63,7 @@ export default function TransactionHistoryPage() {
       )}
 
       {loading ? (
-        <p aria-busy="true" style={{ textAlign: "center", padding: "2rem 0", color: "#6b7280" }}>
-          Loading…
-        </p>
+        <TransactionTableSkeleton rows={5} />
       ) : transactions.length === 0 ? (
         /* #373 — illustrated empty state */
         <TxHistoryEmpty />

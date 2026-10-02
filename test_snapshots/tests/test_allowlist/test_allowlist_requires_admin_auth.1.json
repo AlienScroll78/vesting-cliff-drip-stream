@@ -145,19 +145,14 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Allowlist"
+                              "symbol": "AllowedTokens"
                             }
                           ]
                         },
                         "val": {
-                          "map": [
+                          "vec": [
                             {
-                              "key": {
-                                "address": "CBUSYNQKASUYFWYC3M2GUEDMX4AIVWPALDBYJPNK6554BREHTGZ2IUNF"
-                              },
-                              "val": {
-                                "bool": true
-                              }
+                              "address": "CBUSYNQKASUYFWYC3M2GUEDMX4AIVWPALDBYJPNK6554BREHTGZ2IUNF"
                             }
                           ]
                         }
@@ -169,7 +164,7 @@
             },
             "ext": "v0"
           },
-          518500
+          1099
         ]
       ],
       [
@@ -335,7 +330,7 @@
             },
             "ext": "v0"
           },
-          518500
+          1099
         ]
       ]
     ]

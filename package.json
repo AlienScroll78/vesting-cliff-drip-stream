@@ -10,6 +10,8 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
+    "lint:css": "stylelint \"design-system/**/*.css\" \"ui/**/*.css\" --config .stylelintrc.json",
+    "lint:css:check": "stylelint \"ui/styles.css\" --config .stylelintrc.json",
     "test:e2e": "npm run test:e2e --workspace=frontend",
     "test:e2e:contract": "node tests/e2e/run_e2e.js"
   },
@@ -36,6 +38,8 @@
     "@storybook/react": "^8.4.7",
     "@storybook/react-vite": "^8.4.7",
     "@storybook/test": "^8.4.7",
-    "chromatic": "^11.20.2"
+    "chromatic": "^11.20.2",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^36.0.1"
   }
 }

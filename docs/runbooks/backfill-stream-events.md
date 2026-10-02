@@ -1,15 +1,16 @@
 # Runbook: Backfill Stream Events
 
-**Script:** `backend/scripts/backfill_stream_events.ts`  
-**Issue:** [#286](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/286)  
-**Last updated:** 2026-08-29
+**API endpoint:** `POST /admin/backfill?from_ledger=N&to_ledger=M`  
+**Script (legacy):** `backend/scripts/backfill_stream_events.ts`  
+**Issue:** [#749](https://github.com/DevNiola/vesting-cliff-drip-stream/issues/749)  
+**Last updated:** 2026-10-02
 
 ---
 
 ## Overview
 
-The `backfill_stream_events` script replays historical contract events from
-Horizon into the `stream_events` PostgreSQL table. Run it when:
+The backfill service replays historical contract events from Horizon into the
+`stream_events` PostgreSQL table. Use it when:
 
 - The event indexer worker was down and missed a contiguous ledger range.
 - The `stream_events` table was dropped and needs to be rebuilt from scratch.
@@ -39,9 +40,69 @@ SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 5;
 
 ---
 
-## Usage
+## Usage via API (recommended)
 
-### Basic backfill (all history)
+The backfill service is available as an authenticated admin API endpoint.
+This is the preferred method for production use as it tracks progress in the
+`backfill_jobs` table and is resumable after a restart.
+
+### Start a backfill job
+
+```bash
+curl -X POST \
+  "https://api.example.com/admin/backfill?from_ledger=5000000&to_ledger=5100000" \
+  -H "Authorization: Bearer $ADMIN_API_KEY"
+```
+
+Response `202 Accepted`:
+
+```json
+{
+  "message": "Backfill job started",
+  "job": {
+    "id": "a1b2c3d4-...",
+    "from_ledger": 5000000,
+    "to_ledger": 5100000,
+    "status": "running",
+    "events_fetched": 0,
+    "events_inserted": 0,
+    "events_skipped": 0,
+    "last_cursor": null,
+    "created_at": "2026-10-02T13:00:00Z",
+    "started_at": "2026-10-02T13:00:00Z",
+    "completed_at": null,
+    "error_message": null
+  }
+}
+```
+
+### Check job progress
+
+```bash
+curl "https://api.example.com/admin/backfill/a1b2c3d4-..." \
+  -H "Authorization: Bearer $ADMIN_API_KEY"
+```
+
+### List all backfill jobs
+
+```bash
+curl "https://api.example.com/admin/backfill" \
+  -H "Authorization: Bearer $ADMIN_API_KEY"
+```
+
+### Notes on the API
+
+- The job runs asynchronously in the background; poll the job endpoint for progress.
+- Progress is persisted after every Horizon page via `last_cursor`, enabling
+  resumability: if the process restarts, progress is preserved in `backfill_jobs`.
+- The upsert uses `ON CONFLICT (tx_hash) DO NOTHING` — safe to call multiple
+  times over the same ledger range without creating duplicates.
+- The `backfill_events_processed_total` Prometheus metric is incremented for
+  every event successfully written.
+
+---
+
+## Usage via script (legacy)
 
 ```bash
 DATABASE_URL="postgres://..." \

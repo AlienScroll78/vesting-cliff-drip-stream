@@ -2,6 +2,8 @@
 
 Thank you for contributing! This guide covers everything you need to go from a clean checkout to an approved PR.
 
+> **New to the project?** For a step-by-step local development environment setup from scratch on Ubuntu 24.04, see the [Developer Onboarding Guide](docs/developer-onboarding.md).
+
 ---
 
 ## Table of Contents
@@ -385,7 +387,7 @@ See [`tests/load/README.md`](tests/load/README.md) for running k6 and Locust loa
 
 **TypeScript / CSS**
 - Match the style of the surrounding file.
-- No new dependencies without discussion in an issue first.
+- No new dependencies without discussion in an issue first. See the [SBOM & License Compliance](docs/sbom.md#contributor-guide--adding-dependencies) guide for how to add dependencies correctly.
 
 **Commit messages** — [Conventional Commits](https://www.conventionalcommits.org/):
 

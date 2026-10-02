@@ -26,8 +26,6 @@ function DialogShell({ titleId, onClose, borderColor = "var(--color-cancelled)",
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); onClose(); }
-      // Suppress Enter from accidentally triggering the primary button
-      // when focus is on the backdrop/wrapper (not an interactive element).
       if (e.key === "Enter" && e.target === document.body) e.preventDefault();
     };
     document.addEventListener("keydown", handler);
@@ -40,18 +38,17 @@ function DialogShell({ titleId, onClose, borderColor = "var(--color-cancelled)",
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem",
       }}
       onClick={handleBackdropClick}
-      aria-hidden="false"
     >
       <div
         ref={containerRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         style={{
           background: "var(--color-surface)",
           borderRadius: "var(--radius)",
@@ -96,22 +93,26 @@ interface CancelStreamProps {
 
 export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: CancelStreamProps) {
   const [loading, setLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  const inputId = useId();
   const titleId = useId();
 
-  // Move focus to confirm button (NOT auto-focused to prevent Enter-key accidents)
+  // "Go back" button gets auto-focus — safer default than the destructive action
   useEffect(() => {
-    // Focus the "Keep Stream" / dismiss button first — safer default
-    const cancelBtn = document.getElementById("cancel-stream-keep-btn");
-    cancelBtn?.focus();
+    const goBackBtn = document.getElementById("cancel-stream-go-back-btn");
+    goBackBtn?.focus();
   }, []);
 
+  const isConfirmed = confirmText === "CANCEL";
+
   async function handleConfirm() {
+    if (!isConfirmed) return;
     setLoading(true);
     try { await onConfirm(); } finally { setLoading(false); }
   }
 
-  // Block Enter on confirm button itself to prevent accidental submission
+  // Block Enter on confirm button to prevent accidental keyboard submission
   function handleConfirmKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
     if (e.key === "Enter") { e.preventDefault(); }
   }
@@ -136,7 +137,7 @@ export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: Canc
         <span style={{ fontFamily: "monospace", color: "var(--color-text)" }}>{stream.recipient}</span>
       </p>
 
-      {/* Cliff not reached warning */}
+      {/* Cliff not yet reached warning */}
       {!amounts.cliffReached && (
         <div
           role="status"
@@ -149,12 +150,12 @@ export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: Canc
             lineHeight: 1.5,
           }}
         >
-          ⚠️ <strong>Cliff not reached</strong> — the full deposit will be refunded to the sponsor.
+          ⚠️ <strong>Cliff not yet reached</strong> — the full deposit will be refunded to the sponsor.
           The recipient will receive nothing.
         </div>
       )}
 
-      {/* Explicit amount breakdown */}
+      {/* Refund breakdown */}
       <dl
         style={{
           background: "var(--color-bg)",
@@ -170,38 +171,76 @@ export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: Canc
       >
         <dt style={{ color: "#6b7280" }}>Recipient receives</dt>
         <dd style={{ fontWeight: 700, textAlign: "right", color: amounts.cliffReached ? "var(--color-completed)" : "#9ca3af" }}>
-          {formatAmount(amounts.recipientAmount)} {stream.token}
+          <span>{formatAmount(amounts.recipientAmount)}</span>{" "}
+          <span style={{ fontWeight: 400, color: "#6b7280" }}>{stream.token}</span>
         </dd>
         <dt style={{ color: "#6b7280" }}>Sponsor refund</dt>
         <dd style={{ fontWeight: 700, textAlign: "right", color: "var(--color-active)" }}>
-          {formatAmount(amounts.sponsorRefund)} {stream.token}
+          <span>{formatAmount(amounts.sponsorRefund)}</span>{" "}
+          <span style={{ fontWeight: 400, color: "#6b7280" }}>{stream.token}</span>
         </dd>
       </dl>
 
       <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
 
-      {/* Actions — dismiss is the safe/primary focus default */}
+      {/* CANCEL confirmation gate – two-step: type CANCEL to unlock the button */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <label
+          htmlFor={inputId}
+          style={{ fontSize: "0.875rem", color: "#374151" }}
+        >
+          Type <strong>CANCEL</strong> to confirm
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          disabled={loading}
+          aria-label="Type CANCEL to confirm stream cancellation"
+          placeholder="CANCEL"
+          style={{
+            padding: "0.5rem 0.75rem",
+            borderRadius: "var(--radius)",
+            border: `1.5px solid ${isConfirmed ? "var(--color-cancelled)" : "var(--color-border)"}`,
+            fontFamily: "monospace",
+            fontSize: "0.95rem",
+            outline: "none",
+            transition: "border-color 0.15s",
+            background: loading ? "#f9fafb" : undefined,
+          }}
+        />
+      </div>
+
+      {/* Actions */}
       <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
         <button
-          id="cancel-stream-keep-btn"
+          id="cancel-stream-go-back-btn"
           className="btn btn-outline"
           onClick={onClose}
           disabled={loading}
           data-testid="cancel-keep-btn"
           autoFocus
         >
-          Keep Stream
+          Go back
         </button>
         <button
           ref={confirmBtnRef}
           className="btn btn-primary"
-          style={{ background: "var(--color-cancelled)", borderColor: "var(--color-cancelled)" }}
-          disabled={loading}
+          style={{
+            background: "var(--color-cancelled)",
+            borderColor: "var(--color-cancelled)",
+            opacity: isConfirmed && !loading ? 1 : 0.5,
+            cursor: isConfirmed && !loading ? "pointer" : "not-allowed",
+          }}
+          disabled={!isConfirmed || loading}
           onClick={handleConfirm}
           onKeyDown={handleConfirmKeyDown}
           data-testid="cancel-confirm-btn"
         >
-          {loading ? "Cancelling…" : "Cancel Stream"}
+          {loading ? "Cancelling…" : "I understand, cancel stream"}
         </button>
       </div>
     </DialogShell>

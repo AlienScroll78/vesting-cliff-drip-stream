@@ -6,6 +6,8 @@ A production-ready Soroban smart contract that combines a **time-locked cliff** 
 
 > Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
 >
+> Setting up a local development environment? See the [Developer Onboarding Guide](docs/developer-onboarding.md) for step-by-step instructions.
+>
 > Have a question? Check the [FAQ](docs/faq.md) for common answers about stream lifecycle, claiming, token support, and fees.
 
 ---
@@ -76,6 +78,8 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 
 A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
 
+> For the full event schema with field types, topic discriminators, and XDR/JSON examples for indexers, see [docs/events.md](docs/events.md).
+
 ```mermaid
 flowchart TD
     UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
@@ -114,6 +118,7 @@ A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) run
 | [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
 | [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
 | [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
+| [Backup Restore Verification](docs/runbooks/backup-restore-verification.md) | Weekly automated proof that backups restore; run one on demand |
 | [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
 | [Backfill Stream Events](docs/runbooks/backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or decoder fix |
 
@@ -134,18 +139,25 @@ pub fn create_vesting_stream(
     rate: i128,           // tokens per ledger (> 0)
     cliff_duration: u32,  // ledgers until cliff
     total_duration: u32,  // total stream length (> cliff_duration)
-) -> Result<(), VestingError>
+) -> Result<u32, VestingError> // newly allocated stream_id
 ```
 
-Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
+Stream IDs start at `0` for new recipients and increase per recipient. Existing deployments read their legacy single schedule as stream ID `0`; newly created streams receive subsequent IDs. Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
+
+`cliff_duration` must be at least `1`; a zero-length cliff is rejected with
+`InvalidCliffDuration` (code 12) because it provides no lockup guarantee.
 
 ### `claim_vested`
 
 ```rust
-pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError>
+pub fn claim_vested(
+    env: Env,
+    recipient: Address,
+    stream_id: Option<u32>, // None claims all active streams
+) -> Result<i128, VestingError>
 ```
 
-Returns the amount transferred. Fails with `CliffNotReached` before the cliff.
+Returns the total amount transferred across the selected stream(s). Streams use their own token; pass `Some(stream_id)` to claim one stream or `None` to claim all claimable streams.
 
 ### `cancel_stream`
 
@@ -154,6 +166,7 @@ pub fn cancel_stream(
     env: Env,
     sponsor: Address,
     recipient: Address,
+    stream_id: u32,
 ) -> Result<(), VestingError>
 ```
 
@@ -166,6 +179,7 @@ pub fn clawback_stream(
     env: Env,
     sponsor: Address,    // original stream funder; must sign
     recipient: Address,
+    stream_id: u32,
     reason: String,      // compliance reason (max 256 chars)
 ) -> Result<(), VestingError>
 ```
@@ -201,7 +215,10 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | Function | Returns |
 |---|---|
 | `get_schedule(recipient)` | `Option<VestingSchedule>` |
+| `get_stream_ids(recipient)` | `Vec<u32>` — active stream IDs in ascending order |
+| `get_schedule_by_id(recipient, stream_id)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
+| `get_claimable_batch(recipients)` | `Vec<(Address, i128)>` — preserves input order; unknown recipients return `0` |
 | `is_cliff_passed(recipient)` | `bool` |
 | `get_min_deposit()` | `i128` — current minimum deposit threshold |
 
@@ -214,14 +231,31 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 1 | `ScheduleNotFound` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | Ledger is still before `cliff_ledger` |
 | 3 | `InvalidDuration` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `rate` is zero or negative |
+| 4 | `InvalidRate` | `rate ≤ 0` (checked before deposit arithmetic); or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
-| 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
+| 6 | `ScheduleAlreadyExists` | A conflicting schedule already exists |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
 | 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
 | 9 | `TransferFailed` | Token transfer failed |
 | 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
+| 12 | `InvalidCliffDuration` | `cliff_duration` is zero; a cliff must have positive length |
+| 13 | `AlreadyInitialized` | `initialize` has already been called |
+| 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
+| 15 | `StreamPaused` | Claim attempted on a paused stream |
+| 16 | `BatchTooLarge` | Batch size exceeds the maximum of 20 |
+| 17 | `RateTooLow` | `rate > 0` but `rate × total_duration < min_deposit` (total deposit is below the configured floor) |
+| 18 | `NotInitialized` | `initialize` has not yet been called |
+| 19 | `InvalidSegments` | Variable-rate segments are invalid (empty, out-of-order, or bad rate) |
+| 20 | `MetadataTooLong` | `metadata` exceeds 256 UTF-8 bytes |
+| 21 | `Unauthorized` | Caller is not the contract admin or original sponsor |
+| 22 | `DepositBelowMinimum` | Overflow check passed but `rate × total_duration < min_deposit`; total deposit is below the configured minimum |
+| 23 | `StreamAlreadyPaused` | Stream is already paused |
+| 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
+| 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
+| 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 27 | `InvalidToken` | `token` is not a valid SAC; the `try_balance` probe failed |
+| 27 | `InvalidToken` | Token address is not a valid SAC contract |
 
 ---
 
@@ -277,9 +311,10 @@ export TOTAL_DURATION=172800  # ~10 days
 ## Security Considerations
 
 - **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Same-address guard**: `create_vesting_stream` rejects calls where `sponsor == recipient`, returning `InvalidRecipient` (error 11) immediately before any token transfer. This prevents a sponsor from vesting tokens to themselves and bypassing the cliff lock.
 - **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
 - **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
-- **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
+- **Multiple streams**: Each recipient can have concurrent streams, identified by an auto-incremented `stream_id`.
 - **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
@@ -293,7 +328,8 @@ See [docs/sbom.md](docs/sbom.md) for the full policy, allowed license list, and 
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a full history of notable changes.
+- [CHANGELOG.md](CHANGELOG.md) — Project-level changes and release history.
+- [API Changelog](docs/api-changelog.md) — Contract and backend API changes for integrators.
 
 ## License
 

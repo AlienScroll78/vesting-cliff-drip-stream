@@ -1,19 +1,23 @@
 /**
- * StreamStatusBadge — Issue #378
+ * StreamStatusBadge — Issue #543
  *
  * Reusable badge component implementing all stream statuses defined in
- * docs/stream-status-badges.md, with distinct colors, icons, and optional
- * pulse animations for active states.
+ * docs/stream-status-badges.md.  Each badge carries:
+ *   - A distinct background / text colour
+ *   - A visible text label (colour is never the sole indicator — WCAG 1.4.1)
+ *   - role="status" and aria-label for screen-reader accessibility
+ *   - An optional pulse animation for the Active state
+ *   - An optional hover tooltip with a fuller description
  *
- * Statuses:
- *   Pre-Cliff  → gray/amber  (locked period before cliff)
- *   Active     → green       (tokens dripping, animated pulse)
- *   Expired    → orange      (stream ended, unclaimed tokens remain)
- *   Cancelled  → red         (stream terminated by sponsor)
- *   Drained    → purple      (all tokens claimed)
- *   Paused     → yellow      (stream temporarily paused)
+ * States (per spec):
+ *   Pre-cliff  → Yellow  — "Locked"
+ *   Active     → Green   — "Streaming"   (animated pulse)
+ *   Claimable  → Blue    — "Claim Available"
+ *   Cancelled  → Grey    — "Cancelled"
+ *   Expired    → Red     — "Expired"
+ *   Drained    → Purple  — "Drained"
  *
- * Size variants: sm (tables), md (cards), lg (detail view)
+ * Size variants: sm (tables), md (cards, default), lg (detail view)
  */
 
 import { useState } from "react";
@@ -23,10 +27,10 @@ import { useState } from "react";
 export type StreamBadgeStatus =
   | "pre-cliff"
   | "active"
-  | "expired"
+  | "claimable"
   | "cancelled"
-  | "drained"
-  | "paused";
+  | "expired"
+  | "drained";
 
 export type BadgeSize = "sm" | "md" | "lg";
 
@@ -35,23 +39,23 @@ export interface StreamStatusBadgeProps {
   status: StreamBadgeStatus;
   /** Size variant — sm for tables, md for cards, lg for detail views */
   size?: BadgeSize;
-  /** Whether to show the tooltip on hover. Defaults to true. */
+  /** Whether to show a tooltip on hover. Defaults to true. */
   showTooltip?: boolean;
   /** Additional CSS class names */
   className?: string;
 }
 
-// ─── Configuration ────────────────────────────────────────────────────────────
+// ─── Badge configuration ──────────────────────────────────────────────────────
 
 interface BadgeConfig {
+  /** Short visible label shown on the badge */
   label: string;
-  /** Short description shown in the tooltip */
+  /** Longer description shown in the tooltip and used to build aria-label */
   tooltip: string;
-  /** Icon character / emoji (aria-hidden) */
+  /** Icon character / emoji (always aria-hidden) */
   icon: string;
-  /** Whether to show a pulsing ring animation */
+  /** Whether to show a pulsing ring animation (Active state only) */
   pulse: boolean;
-  /** Inline style colors */
   colors: {
     background: string;
     text: string;
@@ -60,76 +64,95 @@ interface BadgeConfig {
   };
 }
 
+/**
+ * BADGE_CONFIG maps each StreamBadgeStatus to its visual + semantic config.
+ *
+ * Colour choices match the spec table in docs/stream-status-badges.md:
+ *   Pre-cliff  → Amber/Yellow  (#F59E0B / bg #FEF3C7)
+ *   Active     → Green         (#16A34A / bg #DCFCE7)
+ *   Claimable  → Blue          (#2563EB / bg #DBEAFE)
+ *   Cancelled  → Grey          (#6B7280 / bg #F3F4F6)
+ *   Expired    → Red           (#DC2626 / bg #FEE2E2)
+ *   Drained    → Purple        (#7C3AED / bg #F3E8FF)
+ *
+ * All text/background pairs meet WCAG 2.1 AA (≥ 4.5:1 for normal text).
+ */
 const BADGE_CONFIG: Record<StreamBadgeStatus, BadgeConfig> = {
   "pre-cliff": {
-    label: "Pre-Cliff",
-    tooltip: "The cliff period has not yet been reached. Tokens are locked and cannot be claimed.",
+    label: "Locked",
+    tooltip:
+      "Tokens are locked until the cliff date is reached. No claims are possible yet.",
     icon: "🔒",
     pulse: false,
     colors: {
-      background: "#F3F4F6",
-      text: "#6B7280",
-      border: "#D1D5DB",
+      background: "#FEF3C7", // amber-100
+      text: "#92400E",       // amber-800 — 5.1:1 on #FEF3C7
+      border: "#FCD34D",     // amber-300
       pulseColor: "transparent",
     },
   },
   active: {
-    label: "Active",
-    tooltip: "Tokens are actively dripping and available to claim.",
+    label: "Streaming",
+    tooltip:
+      "Tokens are actively dripping. The cliff has passed and tokens accrue each ledger.",
     icon: "▶",
     pulse: true,
     colors: {
-      background: "#DCFCE7",
-      text: "#15803D",
-      border: "#86EFAC",
-      pulseColor: "#22C55E",
+      background: "#DCFCE7", // green-100
+      text: "#14532D",       // green-900 — 7.9:1 on #DCFCE7
+      border: "#86EFAC",     // green-300
+      pulseColor: "#16A34A", // green-600
     },
   },
-  expired: {
-    label: "Expired",
-    tooltip: "The stream period has ended. Unclaimed tokens may still be available.",
-    icon: "⏱",
+  claimable: {
+    label: "Claim Available",
+    tooltip:
+      "Tokens are available to claim. Tap the Claim button to transfer your vested tokens.",
+    icon: "💰",
     pulse: false,
     colors: {
-      background: "#FEF3C7",
-      text: "#B45309",
-      border: "#FCD34D",
+      background: "#DBEAFE", // blue-100
+      text: "#1E3A8A",       // blue-900 — 8.1:1 on #DBEAFE
+      border: "#93C5FD",     // blue-300
       pulseColor: "transparent",
     },
   },
   cancelled: {
     label: "Cancelled",
-    tooltip: "This stream was cancelled by the sponsor. No further tokens will accrue.",
+    tooltip:
+      "This stream was cancelled by the sponsor. No further tokens will accrue.",
     icon: "✕",
     pulse: false,
     colors: {
-      background: "#FEE2E2",
-      text: "#B91C1C",
-      border: "#FCA5A5",
+      background: "#F3F4F6", // gray-100
+      text: "#374151",       // gray-700 — 7.1:1 on #F3F4F6
+      border: "#D1D5DB",     // gray-300
+      pulseColor: "transparent",
+    },
+  },
+  expired: {
+    label: "Expired",
+    tooltip:
+      "The stream period has ended. Unclaimed tokens may still be withdrawable.",
+    icon: "⏱",
+    pulse: false,
+    colors: {
+      background: "#FEE2E2", // red-100
+      text: "#7F1D1D",       // red-900 — 8.5:1 on #FEE2E2
+      border: "#FCA5A5",     // red-300
       pulseColor: "transparent",
     },
   },
   drained: {
     label: "Drained",
-    tooltip: "All tokens have been claimed. The stream is fully settled.",
+    tooltip:
+      "All tokens have been claimed or recovered. The stream is fully settled.",
     icon: "✓",
     pulse: false,
     colors: {
-      background: "#F3E8FF",
-      text: "#7E22CE",
-      border: "#C4B5FD",
-      pulseColor: "transparent",
-    },
-  },
-  paused: {
-    label: "Paused",
-    tooltip: "The stream is temporarily paused. Token accrual is suspended.",
-    icon: "⏸",
-    pulse: false,
-    colors: {
-      background: "#FEF9C3",
-      text: "#854D0E",
-      border: "#FDE047",
+      background: "#F3E8FF", // violet-100
+      text: "#3B0764",       // violet-950 — 10.1:1 on #F3E8FF
+      border: "#C4B5FD",     // violet-300
       pulseColor: "transparent",
     },
   },
@@ -138,18 +161,18 @@ const BADGE_CONFIG: Record<StreamBadgeStatus, BadgeConfig> = {
 // ─── Size tokens ──────────────────────────────────────────────────────────────
 
 const SIZE_STYLES: Record<BadgeSize, React.CSSProperties> = {
-  sm: { fontSize: "0.7rem", padding: "0.125rem 0.5rem", gap: "0.25rem", borderRadius: "9999px" },
-  md: { fontSize: "0.8rem", padding: "0.25rem 0.65rem", gap: "0.35rem", borderRadius: "9999px" },
-  lg: { fontSize: "0.95rem", padding: "0.35rem 0.85rem", gap: "0.45rem", borderRadius: "9999px" },
+  sm: { fontSize: "0.7rem",  padding: "0.125rem 0.5rem",  gap: "0.25rem", borderRadius: "9999px" },
+  md: { fontSize: "0.8rem",  padding: "0.25rem 0.65rem",  gap: "0.35rem", borderRadius: "9999px" },
+  lg: { fontSize: "0.95rem", padding: "0.35rem 0.85rem",  gap: "0.45rem", borderRadius: "9999px" },
 };
 
 const PULSE_SIZE: Record<BadgeSize, { width: string; height: string }> = {
-  sm: { width: "6px", height: "6px" },
-  md: { width: "8px", height: "8px" },
+  sm: { width: "6px",  height: "6px" },
+  md: { width: "8px",  height: "8px" },
   lg: { width: "10px", height: "10px" },
 };
 
-// ─── Pulse animation (injected once) ─────────────────────────────────────────
+// ─── Pulse animation (injected once into <head>) ───────────────────────────────
 
 const PULSE_KEYFRAMES = `
 @keyframes stream-pulse {
@@ -176,7 +199,6 @@ interface TooltipProps {
 
 function Tooltip({ text, children }: TooltipProps) {
   const [visible, setVisible] = useState(false);
-
   return (
     <span
       style={{ position: "relative", display: "inline-flex" }}
@@ -204,11 +226,10 @@ function Tooltip({ text, children }: TooltipProps) {
             zIndex: 9999,
             boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
             maxWidth: "260px",
-            whiteSpaceCollapse: "preserve",
           }}
         >
           {text}
-          {/* Arrow */}
+          {/* Caret */}
           <span
             aria-hidden="true"
             style={{
@@ -229,7 +250,12 @@ function Tooltip({ text, children }: TooltipProps) {
 
 // ─── PulseRing ────────────────────────────────────────────────────────────────
 
-function PulseRing({ color, size }: { color: string; size: { width: string; height: string } }) {
+interface PulseRingProps {
+  color: string;
+  size: { width: string; height: string };
+}
+
+function PulseRing({ color, size }: PulseRingProps) {
   ensurePulseStyle();
   return (
     <span
@@ -272,12 +298,17 @@ function PulseRing({ color, size }: { color: string; size: { width: string; heig
 // ─── StreamStatusBadge ────────────────────────────────────────────────────────
 
 /**
- * Displays the status of a vesting stream with an icon, label, optional
- * pulse animation (active state), and a tooltip with a full description.
+ * Displays the lifecycle status of a vesting stream as a compact badge.
+ *
+ * Accessibility:
+ *   - role="status" — announces updates to assistive technologies
+ *   - aria-label — combines "Stream status: " with the label and tooltip text
+ *   - Colour is never the only differentiator; every badge has a visible label
  *
  * @example
- * <StreamStatusBadge status="active" size="md" />
+ * <StreamStatusBadge status="active" />
  * <StreamStatusBadge status="pre-cliff" size="sm" showTooltip={false} />
+ * <StreamStatusBadge status="claimable" size="lg" />
  */
 export function StreamStatusBadge({
   status,
@@ -325,15 +356,17 @@ export function StreamStatusBadge({
   );
 
   if (!showTooltip) return badge;
-
   return <Tooltip text={tooltip}>{badge}</Tooltip>;
 }
 
 // ─── StreamStatusLegend ───────────────────────────────────────────────────────
 
 /**
- * Renders a horizontal legend of all stream statuses.
- * Useful above or below stream list tables.
+ * Renders a horizontal legend showing all six stream statuses.
+ * Place above or below the stream list table.
+ *
+ * @example
+ * <StreamStatusLegend size="sm" />
  */
 export function StreamStatusLegend({ size = "sm" }: { size?: BadgeSize }) {
   const statuses = Object.keys(BADGE_CONFIG) as StreamBadgeStatus[];
@@ -341,15 +374,10 @@ export function StreamStatusLegend({ size = "sm" }: { size?: BadgeSize }) {
     <div
       role="note"
       aria-label="Stream status legend"
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: "0.5rem",
-        alignItems: "center",
-      }}
+      style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}
     >
       {statuses.map((s) => (
-        <StreamStatusBadge key={s} status={s} size={size} />
+        <StreamStatusBadge key={s} status={s} size={size} showTooltip={false} />
       ))}
     </div>
   );

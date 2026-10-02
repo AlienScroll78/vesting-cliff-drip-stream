@@ -16,6 +16,12 @@ fn test_deposit_below_default_minimum_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -25,7 +31,7 @@ fn test_deposit_below_default_minimum_fails() {
     mint_to(&env, &token_id, &sponsor, 50);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::DepositBelowMinimum.into());
@@ -36,6 +42,12 @@ fn test_deposit_at_minimum_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -45,7 +57,7 @@ fn test_deposit_at_minimum_succeeds() {
     mint_to(&env, &token_id, &sponsor, 100);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
@@ -56,6 +68,12 @@ fn test_deposit_above_minimum_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -64,7 +82,7 @@ fn test_deposit_above_minimum_succeeds() {
     mint_to(&env, &token_id, &sponsor, 2_000);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
@@ -75,6 +93,9 @@ fn test_get_min_deposit_returns_default() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     assert_eq!(client.get_min_deposit(), DEFAULT_MIN_DEPOSIT);
 }
@@ -84,10 +105,16 @@ fn test_set_min_deposit_updates_threshold() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let admin = Address::generate(&env);
     // Set minimum to 500
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
     assert_eq!(client.get_min_deposit(), 500);
 }
 
@@ -96,6 +123,12 @@ fn test_custom_minimum_deposit_enforced() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let admin = Address::generate(&env);
     let sponsor = Address::generate(&env);
@@ -103,13 +136,13 @@ fn test_custom_minimum_deposit_enforced() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     // Raise minimum to 500.
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
 
     // rate=10, total=40 → deposit=400, below new min of 500
     mint_to(&env, &token_id, &sponsor, 400);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &40)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &40, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::DepositBelowMinimum.into());
@@ -120,6 +153,12 @@ fn test_stream_above_custom_minimum_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let admin = Address::generate(&env);
     let sponsor = Address::generate(&env);
@@ -127,14 +166,282 @@ fn test_stream_above_custom_minimum_succeeds() {
     let (token_id, _) = create_token(&env, &sponsor);
 
     // Set minimum to 500.
-    client.set_min_deposit(&admin, &500).unwrap();
+    client.set_min_deposit(&admin, &500);
 
     // rate=10, total=60 → deposit=600, above new min
     mint_to(&env, &token_id, &sponsor, 600);
 
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &60)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &60, &None)
         .unwrap();
 
     assert!(client.get_schedule(&recipient).is_some());
+}
+
+#[test]
+fn test_deposit_exactly_at_minimum_boundary_passes() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Set min deposit to 500
+    client.set_min_deposit(&admin, &500).unwrap();
+
+    // rate=5, total=100 → deposit=500, exactly at new min
+    mint_to(&env, &token_id, &sponsor, 500);
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &5, &20, &100, &None)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_some());
+}
+
+#[test]
+fn test_deposit_one_below_minimum_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Set min deposit to 500
+    client.set_min_deposit(&admin, &500).unwrap();
+
+    // rate=499, total=1 → deposit=499, one below minimum of 500
+    mint_to(&env, &token_id, &sponsor, 499);
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &499, &0, &1, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
+
+#[test]
+fn test_set_min_deposit_zero_fails_with_invalid_rate() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+
+    // min_deposit = 0 should fail with InvalidRate
+    let err = client.set_min_deposit(&admin, &0).unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+#[test]
+fn test_set_min_deposit_i128_max_prevents_streams() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Set minimum to i128::MAX — no stream can ever be created
+    client.set_min_deposit(&admin, &i128::MAX).unwrap();
+    assert_eq!(client.get_min_deposit(), i128::MAX);
+
+    // Any attempt to create a stream should fail
+    mint_to(&env, &token_id, &sponsor, 1_000_000);
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
+        .unwrap_err();
+    // Either DepositOverflow or DepositBelowMinimum are acceptable
+    assert!(
+        err == VestingError::DepositBelowMinimum.into()
+            || err == VestingError::DepositOverflow.into(),
+        "Expected DepositBelowMinimum or DepositOverflow"
+    );
+}
+
+#[test]
+fn test_set_min_deposit_negative_fails() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let admin = Address::generate(&env);
+    let err = client.set_min_deposit(&admin, &-1).unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+#[test]
+fn test_min_deposit_default_boundary_exact() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // rate=1, total_duration=DEFAULT_MIN_DEPOSIT(100) → deposit=100, exact boundary
+    mint_to(&env, &token_id, &sponsor, DEFAULT_MIN_DEPOSIT);
+    client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &100, &None)
+        .unwrap();
+    assert!(client.get_schedule(&recipient).is_some());
+}
+
+// ── Error code disambiguation: InvalidRate (4) vs DepositBelowMinimum (22) ──
+//
+// InvalidRate (code 4)       — fires when `rate ≤ 0`, checked before deposit arithmetic.
+// RateTooLow (code 17)       — fires when `rate × total_duration < min_deposit`
+//                              (alternative name used by some contract versions).
+// DepositBelowMinimum (22)   — fires after overflow check passes but total < min.
+//
+// Each test below exercises exactly one path so the trigger conditions remain
+// unambiguous.
+
+/// `rate = 0` → `InvalidRate` (code 4).
+/// This fires before any deposit arithmetic takes place.
+#[test]
+fn test_rate_zero_triggers_invalid_rate_not_deposit_check() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 100);
+
+    // rate=0 must fail with InvalidRate (code 4), not DepositBelowMinimum (22).
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &0, &10, &100, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+/// `rate > 0` but `rate × total_duration < min_deposit` → `DepositBelowMinimum` (22).
+/// Verifies the deposit-floor check fires even when the rate itself is valid.
+#[test]
+fn test_positive_rate_but_total_below_min_triggers_deposit_below_minimum() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // rate=1, total_duration=50 → deposit=50, below DEFAULT_MIN_DEPOSIT (100).
+    // rate is positive and valid; only the total deposit is too small.
+    mint_to(&env, &token_id, &sponsor, 50);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &50, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
+
+/// `total deposit = min_deposit - 1` → `DepositBelowMinimum` (22).
+/// Verifies the boundary: one token short of the minimum is still rejected.
+#[test]
+fn test_total_at_min_minus_one_fails_deposit_below_minimum() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // DEFAULT_MIN_DEPOSIT = 100. rate=1, total_duration=99 → deposit=99 (min-1).
+    mint_to(&env, &token_id, &sponsor, 99);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &1, &10, &99, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
+}
+
+/// `rate = -1` → `InvalidRate` (code 4).
+/// Negative rates are rejected before any deposit check, same as zero.
+#[test]
+fn test_negative_rate_triggers_invalid_rate() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 200);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &-1, &10, &100, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::InvalidRate.into());
+}
+
+/// After `set_min_deposit` raises the floor, a stream whose deposit was
+/// previously valid now fails with `DepositBelowMinimum`.
+/// Confirms that `set_min_deposit` interacts correctly with the deposit check.
+#[test]
+fn test_set_min_deposit_interaction_with_deposit_check() {
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sponsor = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+
+    // Raise minimum to 1_000.
+    client.set_min_deposit(&admin, &1_000).unwrap();
+
+    // rate=10, total_duration=99 → deposit=990, below new minimum of 1_000.
+    mint_to(&env, &token_id, &sponsor, 990);
+
+    let err = client
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &99, &None)
+        .unwrap_err();
+    assert_eq!(err, VestingError::DepositBelowMinimum.into());
 }

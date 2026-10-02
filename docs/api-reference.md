@@ -6,11 +6,20 @@ Contract ID is referred to as `$VESTING_CONTRACT` throughout the CLI examples.
 All amounts are in the token's smallest unit (stroops for XLM-based SAC tokens).
 Ledger sequences are `u32` values from `env.ledger().sequence()`.
 
+> 📋 **Looking for version-by-version API history?** See the [API Changelog](api-changelog.md) for breaking changes, additions, deprecations, and fixes.
+
 ---
 
 ## Table of Contents
 
 - [HTTP API](#http-api)
+- [Admin API](#admin-api)
+  - [Authentication](#authentication)
+  - [GET /admin/streams](#get-adminstreams)
+  - [GET /admin/indexer/status](#get-adminindexerstatus)
+  - [POST /admin/indexer/restart](#post-adminindexerrestart)
+  - [GET /admin/webhooks/dlq](#get-adminwebhooksdlq)
+  - [POST /admin/webhooks/dlq/replay](#post-adminwebhooksdlqreplay)
 - [Mutating Functions](#mutating-functions)
   - [create_vesting_stream](#create_vesting_stream)
   - [cancel_stream](#cancel_stream)
@@ -71,6 +80,211 @@ The OpenAPI document is available in [docs/api.yaml](docs/api.yaml).
 
 ---
 
+---
+
+## Admin API
+
+The Admin API provides operator-level access to monitor streams, manage the event indexer, and inspect the webhook dead-letter queue. All endpoints require a valid API key passed as a Bearer token.
+
+> **Note:** Admin endpoints are intended for internal operator use only. Do not expose them on the public ingress. In production they run behind a separate internal port or a private load-balancer rule.
+
+### Authentication
+
+Every admin endpoint validates the `Authorization` header using a constant-time comparison against the `ADMIN_API_KEY` environment variable.
+
+```
+Authorization: Bearer <ADMIN_API_KEY>
+```
+
+**Error responses**
+
+| HTTP Status | Condition |
+|------------|-----------|
+| `401 Unauthorized` | `Authorization` header absent or not a `Bearer` scheme |
+| `403 Forbidden` | Token present but does not match `ADMIN_API_KEY` |
+| `503 Service Unavailable` | `ADMIN_API_KEY` environment variable is not set |
+
+---
+
+### GET /admin/streams
+
+List all vesting streams with optional filters.
+
+**Query parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | no | Filter by stream status: `active`, `pre_cliff`, `expired`, `cancelled` |
+| `sponsor` | string | no | Filter by sponsor Stellar public key (G…) |
+| `recipient` | string | no | Filter by recipient Stellar public key (G…) |
+| `limit` | integer | no | Maximum rows (default `50`, max `200`) |
+| `offset` | integer | no | Pagination offset (default `0`) |
+
+**Response 200**
+
+```json
+{
+  "total": 42,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "id": 1,
+      "sponsor": "GABC...",
+      "recipient": "GDEF...",
+      "token": "CABC...",
+      "rate_per_ledger": "10",
+      "start_ledger": 51200000,
+      "cliff_ledger": 51217280,
+      "end_ledger": 51372800,
+      "status": "active",
+      "cancelled_at": null,
+      "created_at": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `400` | `status` is not one of the allowed values |
+| `400` | `sponsor` or `recipient` is not a valid Stellar public key |
+| `500` | Database query failed |
+
+---
+
+### GET /admin/indexer/status
+
+Returns the current state of the Horizon event indexer, including lag, last cursor, and error count.
+
+**Response 200**
+
+```json
+{
+  "status": "running",
+  "lastCursor": "51203447-0",
+  "lastIndexedLedger": 51203447,
+  "chainTipLedger": 51203450,
+  "lagLedgers": 3,
+  "errorCount": 0,
+  "lastError": null,
+  "uptimeSeconds": 3600
+}
+```
+
+**Fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `"running" \| "stopped" \| "error"` | Current indexer lifecycle state |
+| `lastCursor` | string | Horizon paging token last consumed |
+| `lastIndexedLedger` | integer | Sequence of the last indexed ledger |
+| `chainTipLedger` | integer | Latest ledger seen on-chain |
+| `lagLedgers` | integer | `chainTipLedger − lastIndexedLedger` |
+| `errorCount` | integer | Cumulative error count since last restart |
+| `lastError` | string \| null | Last error message, if any |
+| `uptimeSeconds` | integer \| null | Seconds since the indexer last started |
+
+> The endpoint degrades gracefully if the database is unavailable — it returns the last known in-process state rather than a 503.
+
+---
+
+### POST /admin/indexer/restart
+
+Signal the event indexer to stop polling and restart from its last saved cursor.
+
+**Request body:** none required.
+
+**Response 200**
+
+```json
+{ "ok": true, "message": "Indexer restarted successfully" }
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `500` | Restart function threw an error |
+
+---
+
+### GET /admin/webhooks/dlq
+
+List items in the webhook dead-letter queue, newest first.
+
+**Query parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `limit` | integer | no | Maximum rows (default `100`, max `500`) |
+
+**Response 200**
+
+```json
+{
+  "total": 2,
+  "limit": 100,
+  "items": [
+    {
+      "id": 7,
+      "webhook_url": "https://partner.example.com/hooks",
+      "payload": { "event": "stream_created", "recipient": "G..." },
+      "last_error": "connect ECONNREFUSED 93.184.216.34:443",
+      "retry_count": 3,
+      "failed_at": "2024-06-01T12:00:00.000Z",
+      "last_retry_at": "2024-06-01T13:30:00.000Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `500` | Database query failed |
+
+---
+
+### POST /admin/webhooks/dlq/replay
+
+Replay one or all items in the dead-letter queue. Items are replayed in ascending `failed_at` order.
+
+**Request body (optional)**
+
+```json
+{ "id": 7 }
+```
+
+Omit `id` (or send an empty object `{}`) to replay **all** DLQ items.
+
+**Response 200**
+
+```json
+{
+  "replayed": 2,
+  "succeeded": 2,
+  "failed": 0,
+  "results": [
+    { "id": 7, "ok": true },
+    { "id": 8, "ok": true }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Reason |
+|--------|--------|
+| `400` | `id` is present but not a positive integer |
+| `404` | No DLQ item found with the given `id` |
+| `500` | Database query or replay function failed |
+
+---
+
 ## Mutating Functions
 
 ### `create_vesting_stream`
@@ -101,7 +315,7 @@ pub fn create_vesting_stream(
 | `recipient` | `Address` | Beneficiary who will claim tokens | Must differ from `sponsor` |
 | `token` | `Address` | [SAC](../docs/glossary.md#sac-stellar-asset-contract)-compatible token contract | — |
 | `rate` | `i128` | Tokens released per [ledger](../docs/glossary.md#ledger) | Must be > 0 |
-| `cliff_duration` | `u32` | Ledgers from now until [cliff](../docs/glossary.md#cliff) | Must be < `total_duration` |
+| `cliff_duration` | `u32` | Ledgers from now until [cliff](../docs/glossary.md#cliff) | Must be ≥ `1` and < `total_duration`; `0` returns `InvalidCliffDuration` |
 | `total_duration` | `u32` | Total stream length in ledgers | Must be > `cliff_duration` |
 
 #### Derived Values
@@ -1291,7 +1505,7 @@ All errors are returned as `u32` in the XDR `ScError::Contract` envelope. Code 0
 | 1 | `ScheduleNotFound` | `claim_vested`, `cancel_stream`, `clawback_stream`, `migrate_schedule`, `emergency_drain`, `drain_expired_stream` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | `claim_vested` | `current_ledger` < `cliff_ledger` |
 | 3 | `InvalidDuration` | `create_vesting_stream` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `create_vesting_stream`, `set_min_deposit` | `rate` ≤ 0 or `min_deposit` ≤ 0 |
+| 4 | `InvalidRate` | `create_vesting_stream`, `initialize` | `rate` ≤ 0, or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | `create_vesting_stream`, `drain_expired_stream`, `emergency_drain` | `rate × total_duration` overflows `i128`, or ledger addition overflows `u32` |
 | 6 | `ScheduleAlreadyExists` | `create_vesting_stream` | Stream already exists for recipient |
 | 7 | `NothingToClaim` | `claim_vested` | Claimable amount is 0 at current ledger |
@@ -1299,10 +1513,22 @@ All errors are returned as `u32` in the XDR `ScError::Contract` envelope. Code 0
 | 9 | `TransferFailed` | `create_vesting_stream`, `claim_vested`, `cancel_stream`, `emergency_drain` | Token transfer call failed |
 | 10 | `DrainDelayNotExpired` | `emergency_drain`, `drain_expired_stream` | The 1-year delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `create_vesting_stream` | `sponsor` and `recipient` are the same address |
-| 12 | `AlreadyInitialized` | `initialize` | Admin has already been set |
-| 13 | `Unauthorized` | `upgrade`, `transfer_admin`, `migrate_schedule` | Caller is not the contract admin |
-| 14 | `DepositBelowMinimum` | `create_vesting_stream` | `total_deposit` < configured minimum |
-| 15 | `ClawbackNotSupported` | `clawback_stream` | Token does not support SAC clawback |
+| 12 | `InvalidCliffDuration` | `create_vesting_stream` | `cliff_duration` is zero; a cliff must have positive length |
+| 13 | `AlreadyInitialized` | `initialize` | `initialize` has already been called on this contract instance |
+| 14 | `RecipientNotAllowed` | `create_vesting_stream` | Recipient address is not on the configured allowlist |
+| 15 | `StreamPaused` | `claim_vested` | Claim attempted on a stream that is currently paused |
+| 16 | `BatchTooLarge` | `create_vesting_stream` (batch) | Batch size exceeds the maximum of 20 |
+| 17 | `RateTooLow` | `create_vesting_stream` | `rate × total_duration` is below the configured minimum deposit |
+| 18 | `NotInitialized` | `create_vesting_stream`, `create_variable_rate_stream` | `initialize` has not yet been called |
+| 19 | `InvalidSegments` | `create_variable_rate_stream` | Segments are empty, exceed 10, out of order, or contain non-positive rates |
+| 20 | `MetadataTooLong` | `create_vesting_stream` | `metadata` string exceeds 256 UTF-8 bytes |
+| 21 | `Unauthorized` | `upgrade`, `transfer_admin`, `migrate_schedule`, `set_fee` | Caller is not the contract admin or original sponsor |
+| 22 | `DepositBelowMinimum` | `create_vesting_stream`, `create_variable_rate_stream` | `total_deposit` < configured minimum (`get_min_deposit`) |
+| 23 | `StreamAlreadyPaused` | `pause_stream` | Stream is already in a paused state |
+| 24 | `StreamNotPaused` | `resume_stream` | Stream is not currently paused |
+| 25 | `VersionOverflow` | `claim_vested`, `cancel_stream` | Version counter has reached `u32::MAX` |
+| 26 | `ClawbackNotSupported` | `clawback_stream` | Token does not support SAC clawback flag |
+| 27 | `InvalidToken` | `create_vesting_stream` | `token` is not a valid SAC; the `try_balance` probe failed |
 
 ### Safe Deposit Boundary
 

@@ -34,6 +34,12 @@ fn test_create_transfer_failed_no_schedule_written() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -44,7 +50,7 @@ fn test_create_transfer_failed_no_schedule_written() {
     freeze_account(&env, &token_id, &sponsor);
 
     let err = client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap_err();
 
     assert_eq!(err, VestingError::TransferFailed.into());
@@ -65,6 +71,12 @@ fn test_claim_transfer_failed_schedule_not_mutated() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -73,7 +85,7 @@ fn test_claim_transfer_failed_schedule_not_mutated() {
     // rate=10, cliff=50, total=200 → deposit=2000; cliff_ledger=150
     mint_to(&env, &token_id, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance past the cliff.
@@ -104,6 +116,12 @@ fn test_claim_final_transfer_failed_schedule_preserved() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -112,7 +130,7 @@ fn test_claim_final_transfer_failed_schedule_preserved() {
     // rate=10, cliff=50, total=100 → deposit=1000; end_ledger=200
     mint_to(&env, &token_id, &sponsor, 1_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &100, &None)
         .unwrap();
 
     // Advance past end of stream.
@@ -139,6 +157,12 @@ fn test_cancel_recipient_frozen_schedule_not_removed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -147,7 +171,7 @@ fn test_cancel_recipient_frozen_schedule_not_removed() {
     // rate=10, cliff=50, total=200 → deposit=2000; cliff_ledger=150
     mint_to(&env, &token_id, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Advance past the cliff so recipient has a non-zero share.
@@ -156,7 +180,7 @@ fn test_cancel_recipient_frozen_schedule_not_removed() {
     // Freeze the recipient.
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.cancel_stream(&sponsor, &recipient).unwrap_err();
+    let err = client.cancel_stream(&sponsor, &recipient, &0).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must still be present — cancel did not commit.
@@ -173,6 +197,12 @@ fn test_cancel_before_cliff_sponsor_frozen_schedule_not_removed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -181,7 +211,7 @@ fn test_cancel_before_cliff_sponsor_frozen_schedule_not_removed() {
     // rate=10, cliff=50, total=200 → deposit=2000; cliff_ledger=150
     mint_to(&env, &token_id, &sponsor, 2_000);
     client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
+        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
         .unwrap();
 
     // Still before cliff (ledger 100 < cliff_ledger 150).
@@ -189,7 +219,7 @@ fn test_cancel_before_cliff_sponsor_frozen_schedule_not_removed() {
     // Freeze the sponsor so the refund transfer will fail.
     freeze_account(&env, &token_id, &sponsor);
 
-    let err = client.cancel_stream(&sponsor, &recipient).unwrap_err();
+    let err = client.cancel_stream(&sponsor, &recipient, &0).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must be intact — nothing was removed.
