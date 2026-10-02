@@ -557,6 +557,7 @@ fn _exhaustive_variant_check(e: VestingError) -> u32 {
         VestingError::StreamNotExpired      => 8,   // test_error_8_stream_not_expired
         VestingError::DrainDelayNotExpired  => 9,   // test_error_9_drain_delay_not_expired
         VestingError::InvalidRecipient      => 10,  // test_error_10_invalid_recipient
+        VestingError::TransferFailed        => 11,  // token transfer failed
         VestingError::InvalidCliffDuration  => 12,  // test_error_12_invalid_cliff_duration
         VestingError::AlreadyInitialized    => 13,  // test_error_13_already_initialized
         VestingError::RecipientNotAllowed   => 14,  // test_error_14_recipient_not_allowed_code
@@ -572,5 +573,10 @@ fn _exhaustive_variant_check(e: VestingError) -> u32 {
         VestingError::StreamNotPaused       => 24,  // code 24 — resume without pause
         VestingError::VersionOverflow       => 25,  // code 25 — version counter overflow
         VestingError::ClawbackNotSupported  => 26,  // code 26 — non-clawback token
+        VestingError::ReasonTooLong         => 27,  // clawback reason too long
+        VestingError::Reentrancy            => 28,  // reentrancy detected
+        VestingError::BatchSizeExceeded     => 29,  // extended batch size exceeded
+        VestingError::InvalidMilestones     => 30,  // milestone validation failed
+        VestingError::InvalidToken          => 31,  // invalid SAC token address
     }
 }

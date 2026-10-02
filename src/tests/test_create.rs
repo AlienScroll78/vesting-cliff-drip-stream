@@ -77,7 +77,7 @@ fn test_create_duplicate_stream_fails() {
     // deposit = 10 * 200 = 2000
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200, &None);
 
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
@@ -98,8 +98,8 @@ fn test_two_recipients_claim_independently() {
 
     let rate_alice = 10 * RATE_DECIMALS;
     let rate_bob = 10 * RATE_DECIMALS;
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &50, &200);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &30, &100);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &50, &200, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &30, &100, &None);
 
     advance_ledger(&env, 60);
 
@@ -122,8 +122,8 @@ fn test_storage_keys_are_per_recipient() {
 
     let rate_alice = 7 * RATE_DECIMALS;
     let rate_bob = 13 * RATE_DECIMALS;
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &40, &150);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &60, &200);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &40, &150, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &60, &200, &None);
 
     let alice_sched = client.get_schedule(&alice).unwrap();
     let bob_sched = client.get_schedule(&bob).unwrap();
