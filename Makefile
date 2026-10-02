@@ -2,9 +2,10 @@
 # Vesting Cliff Drip Stream – Build & Test Makefile
 # ──────────────────────────────────────────────────────────────
 
-CONTRACT_NAME = vesting_cliff_drip_stream
-WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
-OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
+CONTRACT_NAME    = vesting_cliff_drip_stream
+WASM_OUTPUT      = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
+OPTIMIZED        = target/$(CONTRACT_NAME).optimized.wasm
+MAX_WASM_SIZE_KB ?= 50
 
 .PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci bench bench-update
 
@@ -54,6 +55,20 @@ optimize: build
 	stellar contract optimize --wasm $(WASM_OUTPUT) --wasm-out $(OPTIMIZED)
 	@echo "Optimized: $(OPTIMIZED)"
 	@ls -lh $(OPTIMIZED)
+
+## Check that the optimized WASM does not exceed MAX_WASM_SIZE_KB (default: 50 KB).
+## Builds and optimizes first if the optimized WASM is not already present.
+## Exit 1 if over threshold; exit 0 if within budget.
+## Override threshold:  make check-wasm-size MAX_WASM_SIZE_KB=60
+check-wasm-size: optimize
+	@SIZE_BYTES=$$(wc -c < "$(OPTIMIZED)"); \
+	SIZE_KB=$$(( SIZE_BYTES / 1024 )); \
+	echo "Optimized WASM size: $${SIZE_KB} KB ($${SIZE_BYTES} bytes) — limit: $(MAX_WASM_SIZE_KB) KB"; \
+	if [ "$$SIZE_KB" -gt "$(MAX_WASM_SIZE_KB)" ]; then \
+		echo "ERROR: WASM size $${SIZE_KB} KB exceeds limit of $(MAX_WASM_SIZE_KB) KB" >&2; \
+		exit 1; \
+	fi; \
+	echo "OK: $${SIZE_KB} KB <= $(MAX_WASM_SIZE_KB) KB"
 
 ## Format source code
 fmt:
