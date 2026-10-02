@@ -375,4 +375,6 @@ VITE_CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 - Check out the [Contribution Guidelines](../CONTRIBUTING.md) for PR submission and commit guidelines.
 - Explore the system design in [Full-Stack Architecture](architecture.md).
 - Review the API documentation in [API Reference](api-reference.md).
+- Read the [FAQ](faq.md) for common questions about stream lifecycle, claiming, token support, and fees.
+- See [Deployment Environments](deployment-environments.md) for the differences between testnet and mainnet configuration.
 - Read the [Stellar Wave Program guide](stellar-wave.md) if participating in bounty sprints.

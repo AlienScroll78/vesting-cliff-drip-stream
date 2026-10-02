@@ -19,6 +19,13 @@
  *   StreamListSkeleton          — list of StreamCardSkeletons (max 3)
  *   DashboardSkeleton           — StatsRow + StreamList
  *   FormSkeleton                — generic form field skeleton
+ *   SponsorStreamListSkeleton   — sponsor list rows with varying widths (#823)
+ *   StreamExplorerSkeleton      — explorer table rows (#823)
+ *   NotificationListSkeleton    — notification items (#823)
+ *   AnalyticsSummarySkeleton    — stat cards + chart placeholder (#823)
+ *
+ * Motion: the shimmer is a CSS animation that is switched off entirely under
+ * `prefers-reduced-motion: reduce`, leaving a static placeholder block.
  */
 
 import React from "react";

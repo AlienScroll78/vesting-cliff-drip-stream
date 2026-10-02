@@ -1,0 +1,74 @@
+name: Cypress E2E — Claim Flow
+
+on:
+  push:
+    branches: [main, "feat/775-*"]
+    paths:
+      - "frontend/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+
+jobs:
+  cypress:
+    name: Cypress E2E Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+        env:
+          VITE_SENTRY_DSN: ""
+
+      - name: Start preview server and run Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: frontend
+          start: npm run preview
+          wait-on: "http://localhost:4173"
+          wait-on-timeout: 30
+          browser: chrome
+          spec: "cypress/e2e/**/*.cy.ts"
+          config: "video=true"
+        env:
+          CYPRESS_BASE_URL: "http://localhost:4173"
+
+      - name: Upload Cypress screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: frontend/cypress/screenshots
+          retention-days: 7
+
+      - name: Upload Cypress videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: frontend/cypress/videos
+          retention-days: 7
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-coverage
+          path: frontend/coverage
+          retention-days: 14

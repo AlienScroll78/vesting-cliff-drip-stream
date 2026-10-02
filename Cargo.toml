@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "db-tests"]
+resolver = "2"
+
 [package]
 name = "vesting-cliff-drip-stream"
 version = "1.0.0"
