@@ -138,8 +138,8 @@ fn test_transfer_to_existing_recipient_fails() {
     let (token_id, _) = setup_token(&env, &sponsor, 4_000);
     let rate = 10 * RATE_DECIMALS;
 
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate, &50, &200);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate, &50, &200);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate, &50, &200, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate, &50, &200, &None);
 
     let err = client
         .try_transfer_stream(&alice, &bob)
