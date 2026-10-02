@@ -12,6 +12,13 @@ interface Props {
   onBack: () => void
 }
 
+/** Converts a `yyyy-mm-dd` value from `<input type="date">` into a ledger count. */
+function dateToLedgers(value: string): number | null {
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) return null;
+  return Math.max(1, Math.round((ms - Date.now()) / 1000 / LEDGERS_PER_SECOND));
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -23,6 +30,16 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export function StepSchedule({ data, update, touch, touched, onNext, onBack }: Props) {
   const [blurred, setBlurred] = useState<Set<string>>(new Set())
+  // Native date field value (yyyy-mm-dd). Kept separate from the ledger count so
+  // the picker keeps a valid value even when the user edits ledgers by hand.
+  const [cliffDate, setCliffDate] = useState('')
+
+  const handleCliffDateChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setCliffDate(value)
+    const ledgers = dateToLedgers(value)
+    if (ledgers !== null) update({ cliffDuration: String(ledgers) })
+  }, [update])
 
   const result = scheduleSchema.safeParse({
     rate: data.rate,
@@ -96,16 +113,22 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
         <label key={f.key} style={styles.fieldLabel}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {f.label}
+            {/* Visual required indicator — aria-required on the input conveys this to AT */}
+            <span aria-hidden="true" style={{ color: 'var(--color-cancelled)', marginLeft: 2 }}>*</span>
             <Tooltip content={f.tooltip} />
           </span>
           <input
+            id={`wizard-${f.key}-input`}
             type="number"
             min={1}
             placeholder={f.placeholder}
             value={data[f.key]}
             onChange={e => update({ [f.key]: e.target.value })}
             onBlur={() => handleBlur(f.key)}
+            required
+            aria-required="true"
             aria-invalid={!!fieldError(f.key)}
+            aria-describedby={fieldError(f.key) ? `wizard-${f.key}-error` : undefined}
             style={{
               ...styles.input,
               borderColor: fieldError(f.key) ? 'var(--color-cancelled)' : 'var(--color-border)',
@@ -113,7 +136,7 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
             data-testid={f.testId}
           />
           {fieldError(f.key) && (
-            <span role="alert" style={styles.error} data-testid={`${f.testId}-error`}>
+            <span id={`wizard-${f.key}-error`} role="alert" style={styles.error} data-testid={`${f.testId}-error`}>
               {fieldError(f.key)}
             </span>
           )}

@@ -11,10 +11,16 @@ pub const PERSISTENT_BUMP_AMOUNT: u32 = 3_110_400;
 ///
 /// Equivalent to ~1 year at ~5 s/ledger: 6 * 60 * 24 * 365 = 3_153_600 ledgers.
 /// We cap at `PERSISTENT_BUMP_AMOUNT` (Soroban maximum) if the computed value exceeds it.
-pub const TTL_BUFFER_LEDGERS: u32 = 6_307_200;
+pub const TTL_BUFFER_LEDGERS: u32 = 3_153_600;
 
 /// Default minimum total deposit (in token base units).
 pub const DEFAULT_MIN_DEPOSIT: i128 = 100;
+
+/// Default maximum cliff ratio: 50% of total duration (in basis points).
+pub const DEFAULT_MAX_CLIFF_RATIO_BPS: u32 = 5_000;
+
+/// Default minimum rate per ledger.
+pub const DEFAULT_MIN_RATE: i128 = 1;
 
 // ── TTL helpers ───────────────────────────────────────────────────────────────
 
@@ -34,96 +40,170 @@ pub fn bump_instance(env: &Env) {
         .extend_ttl(PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
 }
 
-/// Computes the proactive TTL for a stream based on its `end_ledger` (Issue #585).
-///
-/// For streams longer than ~60 days (the passive bump threshold), the standard
-/// `ensure_ttl` may not be sufficient if the stream has no activity for an
-/// extended period. This function returns a TTL sufficient to cover the stream
-/// from the current ledger to `end_ledger + TTL_BUFFER_LEDGERS`, capped at
-/// `PERSISTENT_BUMP_AMOUNT`.
-///
-/// # Arguments
-/// * `env`       – Soroban environment (used to read the current ledger sequence).
-/// * `end_ledger` – The stream's end ledger.
-///
-/// Returns the TTL in ledgers to use for `extend_ttl`.
+/// Computes the proactive TTL for a stream based on its `end_ledger`.
 pub fn compute_stream_ttl(env: &Env, end_ledger: u32) -> u32 {
     let current = env.ledger().sequence();
-    // Total ledgers remaining until end + 1-year buffer.
     let target_ttl = end_ledger
         .saturating_add(TTL_BUFFER_LEDGERS)
         .saturating_sub(current);
-    // Cap at Soroban's maximum persistent storage TTL.
     target_ttl.min(PERSISTENT_BUMP_AMOUNT)
 }
 
-/// Extends TTL for a schedule key based on the stream's own duration (Issue #585).
-///
-/// On `create_vesting_stream`, sets TTL = `total_duration + TTL_BUFFER_LEDGERS` (capped at max).
-/// On `claim_vested`, re-extends to `end_ledger + TTL_BUFFER_LEDGERS` (capped at max).
-///
-/// Falls back to `ensure_ttl` behaviour if the computed TTL would be ≤ the threshold.
+/// Extends TTL for a schedule key based on the stream's own duration.
 pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
-    let key = DataKey::Schedule(recipient.clone());
+    ensure_ttl_for_stream_id(env, recipient, 0, schedule);
+}
+
+pub fn ensure_ttl_for_stream_id(
+    env: &Env,
+    recipient: &Address,
+    stream_id: u32,
+    schedule: &VestingSchedule,
+) {
+    let key = DataKey::ScheduleById(recipient.clone(), stream_id);
     if env.storage().persistent().has(&key) {
         let ttl = compute_stream_ttl(env, schedule.end_ledger);
-        // Use the larger of the proactive TTL and the standard threshold.
-        let bump = ttl.max(PERSISTENT_BUMP_AMOUNT);
-        env.storage().persistent().extend_ttl(
-            &key,
-            PERSISTENT_LEDGER_THRESHOLD,
-            bump,
-        );
+        if ttl > PERSISTENT_LEDGER_THRESHOLD {
+            env.storage().persistent().extend_ttl(
+                &key,
+                PERSISTENT_LEDGER_THRESHOLD,
+                ttl,
+            );
+        }
     }
     env.storage()
         .instance()
         .extend_ttl(PERSISTENT_LEDGER_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
 }
 
-// ── Read ─────────────────────────────────────────────────────────────────────
+// ── Fixed-rate schedule ───────────────────────────────────────────────────────
 
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    let schedule = env
+    let mut schedule = env
         .storage()
         .persistent()
         .get::<DataKey, VestingSchedule>(&key)?;
+    // Apply forward-compatible schema migration before returning.
+    // This is a no-op when the record is already at CURRENT_SCHEMA_VERSION.
+    crate::migration::migrate_schedule(env, recipient, &mut schedule);
     ensure_ttl_for_stream(env, recipient, &schedule);
     Some(schedule)
 }
 
-/// Returns the vesting schedule for `recipient` and bumps TTL via [`ensure_ttl_for_stream`].
+/// Returns the vesting schedule for `recipient` without modifying TTL.
 pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
     let key = DataKey::Schedule(recipient.clone());
-    let schedule = env
-        .storage()
+    env.storage()
         .persistent()
-        .get::<DataKey, VestingSchedule>(&key)?;
-    ensure_ttl_for_stream(env, recipient, &schedule);
-    Some(schedule)
+        .get::<DataKey, VestingSchedule>(&key)
 }
 
 pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
-        .has(&DataKey::Schedule(recipient.clone()))
+        .has(&DataKey::ScheduleById(recipient.clone(), 0))
+        || env
+            .storage()
+            .persistent()
+            .has(&DataKey::Schedule(recipient.clone()))
 }
 
-/// Persists `schedule` for `recipient` and bumps TTL proactively based on stream duration.
-///
-/// Uses `ensure_ttl_for_stream` to set TTL = `end_ledger + TTL_BUFFER_LEDGERS` (capped at max),
-/// ensuring the entry survives the full stream lifetime without relying solely on passive
-/// bump-on-access (Issue #585).
 pub fn set_schedule(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
-    let key = DataKey::Schedule(recipient.clone());
+    set_schedule_by_id(env, recipient, 0, schedule);
+}
+
+pub fn set_schedule_by_id(
+    env: &Env,
+    recipient: &Address,
+    stream_id: u32,
+    schedule: &VestingSchedule,
+) {
+    let key = DataKey::ScheduleById(recipient.clone(), stream_id);
     env.storage().persistent().set(&key, schedule);
-    ensure_ttl_for_stream(env, recipient, schedule);
+    if stream_id == 0 {
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Schedule(recipient.clone()));
+    }
+    if let Some(next_id) = stream_id.checked_add(1) {
+        let next_key = DataKey::NextStreamId(recipient.clone());
+        let stored_next = env.storage().persistent().get::<DataKey, u32>(&next_key).unwrap_or(0);
+        if stored_next < next_id {
+            env.storage().persistent().set(&next_key, &next_id);
+        }
+    }
+    ensure_ttl_for_stream_id(env, recipient, stream_id, schedule);
 }
 
 pub fn remove_schedule(env: &Env, recipient: &Address) {
+    remove_schedule_by_id(env, recipient, 0);
+}
+
+pub fn remove_schedule_by_id(env: &Env, recipient: &Address, stream_id: u32) {
     env.storage()
         .persistent()
-        .remove(&DataKey::Schedule(recipient.clone()));
+        .remove(&DataKey::ScheduleById(recipient.clone(), stream_id));
+    if stream_id == 0 {
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Schedule(recipient.clone()));
+    }
+}
+
+pub fn next_stream_id(env: &Env, recipient: &Address) -> Result<u32, crate::error::VestingError> {
+    let key = DataKey::NextStreamId(recipient.clone());
+    let next_id = env.storage().persistent().get::<DataKey, u32>(&key).unwrap_or_else(|| {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Schedule(recipient.clone()))
+        {
+            1
+        } else {
+            0
+        }
+    });
+    let following_id = next_id
+        .checked_add(1)
+        .ok_or(crate::error::VestingError::DepositOverflow)?;
+    env.storage().persistent().set(&key, &following_id);
+    env.storage().persistent().extend_ttl(
+        &key,
+        PERSISTENT_LEDGER_THRESHOLD,
+        PERSISTENT_BUMP_AMOUNT,
+    );
+    Ok(next_id)
+}
+
+pub fn get_stream_ids(env: &Env, recipient: &Address) -> Vec<u32> {
+    let mut ids = Vec::new(env);
+    let next_id = env
+        .storage()
+        .persistent()
+        .get::<DataKey, u32>(&DataKey::NextStreamId(recipient.clone()))
+        .unwrap_or(0);
+    for stream_id in 0..next_id {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::ScheduleById(recipient.clone(), stream_id))
+            || (stream_id == 0
+                    && env.storage().persistent().has(&DataKey::Schedule(recipient.clone())))
+        {
+            ids.push_back(stream_id);
+        }
+    }
+    if next_id == 0
+        && (env
+            .storage()
+            .persistent()
+            .has(&DataKey::ScheduleById(recipient.clone(), 0))
+            || env.storage().persistent().has(&DataKey::Schedule(recipient.clone())))
+    {
+        ids.push_back(0);
+    }
+    ids
 }
 
 // ── Variable-rate schedule ────────────────────────────────────────────────────
@@ -141,13 +221,9 @@ pub fn get_variable_schedule(env: &Env, recipient: &Address) -> Option<VariableR
 
 pub fn get_variable_schedule_readonly(env: &Env, recipient: &Address) -> Option<VariableRateSchedule> {
     let key = DataKey::VariableSchedule(recipient.clone());
-    let schedule = env
-        .storage()
+    env.storage()
         .persistent()
-        .get::<DataKey, VariableRateSchedule>(&key)?;
-    bump_persistent(env, &key);
-    bump_instance(env);
-    Some(schedule)
+        .get::<DataKey, VariableRateSchedule>(&key)
 }
 
 pub fn has_variable_schedule(env: &Env, recipient: &Address) -> bool {
@@ -204,9 +280,7 @@ pub fn remove_milestone_schedule(env: &Env, recipient: &Address) {
 // ── Instance-level config ─────────────────────────────────────────────────────
 
 pub fn is_initialized(env: &Env) -> bool {
-    env.storage()
-        .instance()
-        .has(&DataKey::Initialized)
+    env.storage().instance().has(&DataKey::Initialized)
 }
 
 pub fn set_initialized(env: &Env) {
@@ -223,27 +297,172 @@ pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
 
-pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
-    let fee_bps = env
+pub fn get_fee_bps(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::FeeBps)
+        .unwrap_or(0);
+    let treasury = env
         .storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Treasury);
+    (fee_bps, treasury)
+}
+
+#[allow(dead_code)]
+pub fn get_fee_bps(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::FeeBps)
+        .unwrap_or(0)
+}
+
+#[allow(dead_code)]
+pub fn set_fee_bps(env: &Env, fee_bps: u32) {
+    env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
+}
+
+#[allow(dead_code)]
+pub fn get_treasury(env: &Env) -> Option<Address> {
+    env.storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Treasury)
+}
+
+#[allow(dead_code)]
+pub fn set_treasury(env: &Env, treasury: &Address) {
+    env.storage().instance().set(&DataKey::Treasury, treasury);
+}
+
+pub fn set_fee_bps(env: &Env, fee_bps: u32) {
+    env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
+}
+
+pub fn get_treasury(env: &Env) -> Option<Address> {
+    env.storage()
+        .instance()
+        .get::<DataKey, Address>(&DataKey::Treasury)
+}
+
+pub fn set_treasury(env: &Env, treasury: &Address) {
+    env.storage().instance().set(&DataKey::Treasury, treasury);
+}
+
+pub fn get_min_deposit(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get::<DataKey, i128>(&DataKey::MinDeposit)
+        .unwrap_or(DEFAULT_MIN_DEPOSIT)
+}
+
+pub fn set_min_deposit(env: &Env, min_deposit: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MinDeposit, &min_deposit);
+}
+
+#[allow(dead_code)]
+pub fn is_token_allowed(env: &Env, token: &Address) -> bool {
+    let tokens = get_allowed_tokens(env);
+    if tokens.is_empty() {
+        return true;
+    }
+    tokens.contains(token)
+}
+
+pub fn get_allowed_tokens(env: &Env) -> Vec<Address> {
+    env.storage()
         .instance()
         .get::<DataKey, Vec<Address>>(&DataKey::AllowedTokens)
         .unwrap_or_else(|| Vec::new(env))
 }
 
-pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
-    env.storage().instance().set(&DataKey::FeeBps, &fee_bps);
-    env.storage().instance().set(&DataKey::Treasury, treasury);
+pub fn add_allowed_token(env: &Env, token: &Address) {
+    let mut tokens = get_allowed_tokens(env);
+    if !tokens.contains(token) {
+        tokens.push_back(token.clone());
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedTokens, &tokens);
+    }
+}
+
+pub fn remove_allowed_token(env: &Env, token: &Address) {
+    let tokens = get_allowed_tokens(env);
+    let mut new_tokens = Vec::new(env);
+    for i in 0..tokens.len() {
+        let t = tokens.get(i).unwrap();
+        if t != *token {
+            new_tokens.push_back(t);
+        }
+    }
+    env.storage()
+        .instance()
+        .set(&DataKey::AllowedTokens, &new_tokens);
+}
+
+pub fn get_sponsor_streams(env: &Env, sponsor: &Address) -> Vec<Address> {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    bump_persistent(env, &key);
+    bump_instance(env);
+    env.storage()
+        .persistent()
+        .get::<DataKey, Vec<Address>>(&key)
+        .unwrap_or_else(|| Vec::new(env))
+}
+
+pub fn add_sponsor_stream(env: &Env, sponsor: &Address, recipient: &Address) {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    let mut streams = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<Address>>(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    streams.push_back(recipient.clone());
+    env.storage().persistent().set(&key, &streams);
+    bump_persistent(env, &key);
+    bump_instance(env);
+}
+
+pub fn remove_sponsor_stream(env: &Env, sponsor: &Address, recipient: &Address) {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    if let Some(streams) = env.storage().persistent().get::<DataKey, Vec<Address>>(&key) {
+        let mut new_streams = Vec::new(env);
+        for i in 0..streams.len() {
+            let addr = streams.get(i).unwrap();
+            if addr != *recipient {
+                new_streams.push_back(addr);
+            }
+        }
+        env.storage().persistent().set(&key, &new_streams);
+        bump_persistent(env, &key);
+        bump_instance(env);
+    }
 }
 
 /// Default maximum cliff ratio: 50% of total duration (in basis points).
 pub const DEFAULT_MAX_CLIFF_RATIO_BPS: u32 = 5_000;
 
-/// Default minimum rate per ledger.
-pub const DEFAULT_MIN_RATE: i128 = 1;
+/// Sets both fee_bps and treasury atomically.
+pub fn set_fee(env: &Env, fee_bps: u32, treasury: &Address) {
+    set_fee_bps(env, fee_bps);
+    set_treasury(env, treasury);
+}
+
+pub fn get_min_deposit(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get::<DataKey, i128>(&DataKey::MinDeposit)
+        .unwrap_or(DEFAULT_MIN_DEPOSIT)
+}
+
+pub fn set_min_deposit(env: &Env, min_deposit: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MinDeposit, &min_deposit);
+}
 
 /// Returns the configured max cliff ratio in basis points.
-/// Falls back to [`DEFAULT_MAX_CLIFF_RATIO_BPS`] if not set.
 pub fn get_max_cliff_ratio(env: &Env) -> u32 {
     env.storage()
         .instance()
@@ -259,7 +478,6 @@ pub fn set_max_cliff_ratio(env: &Env, bps: u32) {
 }
 
 /// Returns the configured minimum rate per ledger.
-/// Falls back to [`DEFAULT_MIN_RATE`] if not set.
 pub fn get_min_rate(env: &Env) -> i128 {
     env.storage()
         .instance()
@@ -274,30 +492,134 @@ pub fn set_min_rate(env: &Env, min_rate: i128) {
         .set(&DataKey::ConfigMinRate, &min_rate);
 }
 
+// ── Token allowlist ───────────────────────────────────────────────────────────
+
+pub fn get_allowed_tokens(env: &Env) -> Vec<Address> {
+    env.storage()
+        .instance()
+        .get::<DataKey, Vec<Address>>(&DataKey::AllowedTokens)
+        .unwrap_or_else(|| Vec::new(env))
+}
+
+pub fn add_allowed_token(env: &Env, token: &Address) {
+    let mut list = get_allowed_tokens(env);
+    if !list.contains(token) {
+        list.push_back(token.clone());
+        env.storage().instance().set(&DataKey::AllowedTokens, &list);
+    }
+}
+
+pub fn remove_allowed_token(env: &Env, token: &Address) {
+    let old = get_allowed_tokens(env);
+    let mut new_list: Vec<Address> = Vec::new(env);
+    for addr in old.iter() {
+        if addr != *token {
+            new_list.push_back(addr);
+        }
+    }
+    env.storage().instance().set(&DataKey::AllowedTokens, &new_list);
+}
+
+/// Returns `true` if `token` is in the allowlist, or if the allowlist is empty (permissive mode).
+pub fn is_token_allowed(env: &Env, token: &Address) -> bool {
+    let list = get_allowed_tokens(env);
+    if list.is_empty() {
+        return true;
+    }
+    list.contains(token)
+}
+
+// ── Recipient allowlist ───────────────────────────────────────────────────────
+
+/// Returns `true` if the recipient allowlist feature is enabled.
+pub fn is_allowlist_enabled(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get::<DataKey, bool>(&DataKey::AllowlistEnabled)
+        .unwrap_or(false)
+}
+
+/// Sets whether the recipient allowlist enforcement is enabled.
+pub fn set_allowlist_enabled(env: &Env, enabled: bool) {
+    env.storage()
+        .instance()
+        .set(&DataKey::AllowlistEnabled, &enabled);
+}
+
+/// Returns `true` if `recipient` is on the recipient allowlist.
+///
+/// When the allowlist is disabled, all recipients are allowed.
+pub fn is_recipient_allowed(env: &Env, recipient: &Address) -> bool {
+    if !is_allowlist_enabled(env) {
+        return true;
+    }
+    env.storage()
+        .instance()
+        .get::<DataKey, bool>(&DataKey::RecipientAllowlist(recipient.clone()))
+        .unwrap_or(false)
+}
+
+/// Sets the allowlist status for a recipient.
+pub fn set_recipient_allowlist(env: &Env, recipient: &Address, allowed: bool) {
+    env.storage()
+        .instance()
+        .set(&DataKey::RecipientAllowlist(recipient.clone()), &allowed);
+}
+
+// ── Sponsor stream index ──────────────────────────────────────────────────────
+
+pub fn get_sponsor_streams(env: &Env, sponsor: &Address) -> Vec<Address> {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    let list = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<Address>>(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    bump_persistent(env, &key);
+    list
+}
+
+pub fn add_sponsor_stream(env: &Env, sponsor: &Address, recipient: &Address) {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    let mut list = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<Address>>(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    if !list.contains(recipient) {
+        list.push_back(recipient.clone());
+        env.storage().persistent().set(&key, &list);
+        bump_persistent(env, &key);
+    }
+}
+
+pub fn remove_sponsor_stream(env: &Env, sponsor: &Address, recipient: &Address) {
+    let key = DataKey::SponsorStreams(sponsor.clone());
+    let old = env
+        .storage()
+        .persistent()
+        .get::<DataKey, Vec<Address>>(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    let mut new_list: Vec<Address> = Vec::new(env);
+    for addr in old.iter() {
+        if addr != *recipient {
+            new_list.push_back(addr);
+        }
+    }
+    env.storage().persistent().set(&key, &new_list);
+    bump_persistent(env, &key);
+}
+
 // ── Reentrancy lock ───────────────────────────────────────────────────────────
 
-/// Returns `true` if the reentrancy lock is currently held.
-///
-/// The lock is a temporary instance-storage flag set before token transfers
-/// and cleared immediately after, providing defence-in-depth against
-/// cross-contract re-entrant calls (Issue #13).
 pub fn is_locked(env: &Env) -> bool {
     env.storage().instance().has(&DataKey::Lock)
 }
 
-/// Acquires the reentrancy lock.
-///
-/// Must be called before any outbound token transfer. Pair with
-/// `release_lock` after the transfer completes.
 pub fn acquire_lock(env: &Env) {
     env.storage().instance().set(&DataKey::Lock, &true);
 }
 
-/// Releases the reentrancy lock.
-///
-/// Must be called after every outbound token transfer, even if the
-/// transfer fails (the Soroban runtime reverts storage on panic, but
-/// explicit release is clearer and handles `try_transfer` error paths).
 pub fn release_lock(env: &Env) {
     env.storage().instance().remove(&DataKey::Lock);
 }
