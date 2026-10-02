@@ -1489,3 +1489,6 @@ fn compute_variable_claimable(
 
     claimable
 }
+
+// Issue #718: create_batch_streams and batch_create_vesting_streams are
+// implemented above. Max batch: 20 (BatchTooLarge) / 50 (BatchSizeExceeded).
