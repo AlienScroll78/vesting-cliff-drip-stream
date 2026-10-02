@@ -70,7 +70,7 @@ fn test_stream_cancelled_event_emitted() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let all_events = env.events().all();
     let found = all_events.iter().any(|(contract, topics, _data)| {

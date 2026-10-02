@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ledgersToDuration, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData
@@ -50,10 +51,10 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
       ? 'https://stellar.expert/explorer/public/tx/'
       : 'https://stellar.expert/explorer/testnet/tx/'
     return (
-      <div style={{ ...styles.card, alignItems: 'center', textAlign: 'center' }}>
-        <div style={styles.successIcon}>✓</div>
-        <h2 style={styles.heading}>Stream created!</h2>
-        <p style={styles.sub}>
+      <div className={styles.step} style={{ alignItems: 'center', textAlign: 'center' }}>
+        <div className={styles.successIcon}>✓</div>
+        <h2 className={styles.stepHeading}>Stream created!</h2>
+        <p className={styles.stepSub}>
           Tokens are now locked. The recipient can claim after the cliff.
         </p>
         {txHash && (
@@ -61,92 +62,94 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
             href={`${explorerBase}${txHash}`}
             target="_blank"
             rel="noreferrer"
-            style={{ fontSize: '0.8rem', color: 'var(--color-active)', fontFamily: 'monospace', wordBreak: 'break-all' }}
+            style={{ fontSize: '0.8rem', color: 'var(--color-active, #1d6ae5)', fontFamily: 'monospace', wordBreak: 'break-all' }}
             data-testid="tx-explorer-link"
           >
             View on Stellar Expert ↗
           </a>
         )}
-        <button
-          type="button"
-          className="btn btn-primary btn-full"
-          onClick={onDone}
-          data-testid="wizard-done-btn"
-          style={{ marginTop: '1rem' }}
-        >
-          Done
-        </button>
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={onDone}
+            data-testid="wizard-done-btn"
+          >
+            Done
+          </button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div style={styles.card}>
-      <h2 style={styles.heading}>Review stream</h2>
-      <p style={styles.sub}>Review all values before signing. Nothing is sent until you confirm.</p>
+    <div className={styles.step}>
+      <h2 className={styles.stepHeading}>Review stream</h2>
+      <p className={styles.stepSub}>Review all values before signing. Nothing is sent until you confirm.</p>
 
-      <dl style={styles.dl}>
-        <Row label="Recipient" value={data.recipient} mono />
-        <Row label="Token" value={`${data.tokenSymbol} (${data.tokenAddress.slice(0, 8)}…)`} />
-        <Row label="Rate" value={`${rate.toLocaleString()} tokens / ledger`} />
-        <Row
-          label="Cliff"
-          value={`${cliff.toLocaleString()} ledgers ≈ ${ledgersToDuration(cliff)}`}
-        />
-        <Row
-          label="Total duration"
-          value={`${total.toLocaleString()} ledgers ≈ ${ledgersToDuration(total)}`}
-        />
-      </dl>
+      {/* Scrollable summary so long addresses never push the CTA off-screen (#822). */}
+      <div className={styles.summaryScroll}>
+        <dl className={styles.summary}>
+          <Row label="Recipient" value={data.recipient} mono />
+          <Row label="Token" value={`${data.tokenSymbol} (${data.tokenAddress.slice(0, 8)}…)`} />
+          <Row label="Rate" value={`${rate.toLocaleString()} tokens / ledger`} />
+          <Row
+            label="Cliff"
+            value={`${cliff.toLocaleString()} ledgers ≈ ${ledgersToDuration(cliff)}`}
+          />
+          <Row
+            label="Total duration"
+            value={`${total.toLocaleString()} ledgers ≈ ${ledgersToDuration(total)}`}
+          />
+        </dl>
 
-      <div style={styles.costBreakdown}>
-        <h3 style={styles.costTitle}>Cost breakdown</h3>
-        <div style={styles.costRow}>
-          <span>Cliff release</span>
-          <span>{costBreakdown.cliffTokens.toLocaleString()} {data.tokenSymbol}</span>
-        </div>
-        <div style={styles.costRow}>
-          <span>Linear streaming</span>
-          <span>{costBreakdown.linearTokens.toLocaleString()} {data.tokenSymbol}</span>
-        </div>
-        <div style={{ ...styles.costRow, fontWeight: 700, borderTop: '1px solid var(--color-border)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
-          <span>Total deposit</span>
-          <span data-testid="preview-total-deposit">{costBreakdown.totalDeposit.toLocaleString()} {data.tokenSymbol}</span>
+        <div className={styles.costBreakdown}>
+          <h3 style={{ fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' }}>Cost breakdown</h3>
+          <div className={styles.costRow}>
+            <span>Cliff release</span>
+            <span>{costBreakdown.cliffTokens.toLocaleString()} {data.tokenSymbol}</span>
+          </div>
+          <div className={styles.costRow}>
+            <span>Linear streaming</span>
+            <span>{costBreakdown.linearTokens.toLocaleString()} {data.tokenSymbol}</span>
+          </div>
+          <div
+            className={styles.costRow}
+            style={{
+              fontWeight: 700,
+              borderTop: '1px solid var(--color-border, #e5e7eb)',
+              paddingTop: '0.5rem',
+              marginTop: '0.25rem',
+            }}
+          >
+            <span>Total deposit</span>
+            <span data-testid="preview-total-deposit">{costBreakdown.totalDeposit.toLocaleString()} {data.tokenSymbol}</span>
+          </div>
         </div>
       </div>
 
       {overflow && (
-        <div
-          role="alert"
-          data-testid="overflow-warning"
-          style={{
-            padding: '0.75rem',
-            background: '#fef2f2',
-            border: '1px solid var(--color-cancelled)',
-            borderRadius: 'var(--radius)',
-            fontSize: '0.85rem',
-            color: 'var(--color-cancelled)',
-          }}
-        >
-          ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration.
+        <div role="alert" className={styles.warning} data-testid="overflow-warning">
+          <strong>Too large:</strong> rate × total duration is more than this contract can
+          track. Reduce the rate or duration.
         </div>
       )}
 
-      <div style={styles.warningBox}>
-        ⚠️ The full deposit of <strong>{deposit.toLocaleString()} {data.tokenSymbol || 'tokens'}</strong> will be
+      <div className={styles.warning}>
+        The full deposit of <strong>{deposit.toLocaleString()} {data.tokenSymbol || 'tokens'}</strong> will be
         transferred from your wallet on confirmation. Once submitted you cannot undo the deposit.
       </div>
 
       {state === 'error' && (
-        <p role="alert" style={styles.error}>
+        <p role="alert" className={styles.error}>
           {errorMsg}
         </p>
       )}
 
-      <div style={styles.actions}>
+      <div className={styles.actions}>
         <button
           type="button"
-          className="btn btn-ghost"
+          className={styles.secondaryBtn}
           onClick={onBack}
           disabled={state === 'submitting'}
           data-testid="wizard-back-btn"
@@ -155,7 +158,7 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
         </button>
         <button
           type="button"
-          className="btn btn-primary"
+          className={styles.primaryBtn}
           disabled={state === 'submitting' || overflow}
           onClick={submit}
           data-testid="wizard-submit-btn"
@@ -184,34 +187,4 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       </dd>
     </>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  card: { display: 'flex', flexDirection: 'column', gap: '1rem' },
-  heading: { fontSize: '1.25rem', fontWeight: 700 },
-  sub: { fontSize: '0.9rem', color: '#6b7280' },
-  dl: { display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '0 1rem' },
-  costBreakdown: {
-    padding: '0.75rem',
-    background: '#f8fafc',
-    borderRadius: 'var(--radius)',
-    border: '1px solid var(--color-border)',
-  },
-  costTitle: { fontSize: '0.85rem', fontWeight: 700, margin: '0 0 0.5rem' },
-  costRow: {
-    display: 'flex', justifyContent: 'space-between',
-    fontSize: '0.85rem', padding: '0.15rem 0',
-  },
-  warningBox: {
-    padding: '0.75rem', background: '#fffbeb',
-    border: '1px solid #fde68a', borderRadius: 'var(--radius)', fontSize: '0.85rem',
-  },
-  error: { color: 'var(--color-cancelled)', fontSize: '0.875rem' },
-  actions: { display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' },
-  successIcon: {
-    width: '3.5rem', height: '3.5rem', borderRadius: '50%',
-    background: 'var(--color-completed)', color: '#fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: '1.75rem', fontWeight: 700,
-  },
 }

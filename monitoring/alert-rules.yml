@@ -1,0 +1,139 @@
+---
+# Prometheus alerting rules for vesting-backend
+# Deploy alongside your Prometheus server configuration.
+# These rules fire alerts for the three critical conditions:
+#   1. Indexer lag > 60 seconds behind chain tip
+#   2. HTTP 5xx error rate > 5%
+#   3. DB connection pool near exhaustion
+
+groups:
+  - name: vesting_backend_alerts
+    interval: 30s
+    rules:
+
+      # ── Indexer ──────────────────────────────────────────────────────────────
+
+      - alert: IndexerLagCritical
+        expr: |
+          indexer_poll_lag_seconds{service="vesting-backend"} > 60
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Indexer lag exceeds 60 seconds"
+          description: >-
+            The vesting-backend indexer is {{ $value | printf "%.0f" }} seconds
+            behind the chain tip (threshold: 60s). Events may not be reflected
+            in the API. Check the indexer process and Horizon connectivity.
+          runbook_url: "https://github.com/DevvJenny/vesting-cliff-drip-stream/blob/main/docs/runbooks/alert-response.md"
+
+      - alert: IndexerLagWarning
+        expr: |
+          indexer_poll_lag_seconds{service="vesting-backend"} > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Indexer lag exceeds 30 seconds"
+          description: >-
+            The vesting-backend indexer is {{ $value | printf "%.0f" }} seconds
+            behind the chain tip (warning threshold: 30s).
+          runbook_url: "https://github.com/DevvJenny/vesting-cliff-drip-stream/blob/main/docs/runbooks/alert-response.md"
+
+      # ── HTTP error rate ───────────────────────────────────────────────────────
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{service="vesting-backend",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="vesting-backend"}[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "HTTP 5xx error rate exceeds 5%"
+          description: >-
+            The vesting-backend API 5xx error rate is
+            {{ $value | printf "%.1f%%" }} over the last 5 minutes
+            (threshold: 5%). Check application logs for errors.
+          runbook_url: "https://github.com/DevvJenny/vesting-cliff-drip-stream/blob/main/docs/runbooks/alert-response.md"
+
+      - alert: HighErrorRateWarning
+        expr: |
+          (
+            sum(rate(http_requests_total{service="vesting-backend",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="vesting-backend"}[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "HTTP 5xx error rate exceeds 1%"
+          description: >-
+            The vesting-backend API 5xx error rate is
+            {{ $value | printf "%.1f%%" }} over the last 5 minutes.
+
+      # ── Database ──────────────────────────────────────────────────────────────
+
+      - alert: DbPoolExhaustion
+        expr: |
+          (
+            sum(rate(db_query_duration_seconds_count{service="vesting-backend"}[1m])) == 0
+          ) and on()
+          (
+            sum(rate(http_requests_total{service="vesting-backend"}[1m])) > 0
+          )
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Database connection pool may be exhausted"
+          description: >-
+            No DB queries are completing while HTTP requests are arriving.
+            This may indicate the PG connection pool is exhausted or the
+            database is unreachable. Check DB_POOL_MAX and RDS health.
+          runbook_url: "https://github.com/DevvJenny/vesting-cliff-drip-stream/blob/main/docs/runbooks/rds-restore.md"
+
+      - alert: DbQuerySlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(db_query_duration_seconds_bucket{service="vesting-backend"}[5m]))
+            by (le, query)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Database query p95 latency > 1s"
+          description: >-
+            DB query '{{ $labels.query }}' p95 latency is
+            {{ $value | printf "%.2f" }}s. Consider adding an index or
+            reviewing query plan.
+
+      # ── RPC ───────────────────────────────────────────────────────────────────
+
+      - alert: RpcHighErrorRate
+        expr: |
+          (
+            sum(rate(rpc_calls_total{service="vesting-backend",status="error"}[5m]))
+            /
+            sum(rate(rpc_calls_total{service="vesting-backend"}[5m]))
+          ) > 0.10
+        for: 3m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Soroban RPC error rate exceeds 10%"
+          description: >-
+            {{ $value | printf "%.1f%%" }} of Soroban RPC calls are failing.
+            Check Soroban RPC node connectivity.
