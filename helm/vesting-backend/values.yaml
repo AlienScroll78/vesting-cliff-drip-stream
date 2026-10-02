@@ -109,6 +109,13 @@ config:
   # GraphQL query depth limit
   graphqlMaxDepth: "5"
 
+logging:
+  fluentBit:
+    enabled: true
+    image: public.ecr.aws/aws-observability/aws-for-fluent-bit:stable
+    awsRegion: us-east-1
+    logGroupPrefix: /vesting/production
+
 # ── External Secrets Operator (ExternalSecret CRD → AWS Secrets Manager) ─────
 #
 # All keys map to a single remote secret object.  Each entry becomes one env
