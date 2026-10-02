@@ -295,6 +295,7 @@ export TOTAL_DURATION=172800  # ~10 days
 ## Security Considerations
 
 - **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Same-address guard**: `create_vesting_stream` rejects calls where `sponsor == recipient`, returning `InvalidRecipient` (error 11) immediately before any token transfer. This prevents a sponsor from vesting tokens to themselves and bypassing the cliff lock.
 - **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
 - **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
