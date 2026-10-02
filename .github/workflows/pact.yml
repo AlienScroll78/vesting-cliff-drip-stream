@@ -1,0 +1,110 @@
+# .github/workflows/pact.yml — issue #791
+#
+# Consumer-driven contract tests using Pact.
+#
+# Pipeline:
+#   consumer-pact  → runs frontend pact consumer tests, generates pact files,
+#                    publishes them to the Pact Broker.
+#   provider-pact  → waits for consumer-pact, then starts the backend provider
+#                    verifier against the broker.
+#
+# Both jobs must pass before merge (enforced via branch protection rules).
+#
+# Required repository secrets:
+#   PACT_BROKER_URL      — URL of the Pact Broker (self-hosted or PactFlow)
+#   PACT_BROKER_USERNAME — basic-auth username (self-hosted only)
+#   PACT_BROKER_PASSWORD — basic-auth password (self-hosted only)
+#   PACT_BROKER_TOKEN    — bearer token (PactFlow only; takes precedence)
+
+name: Pact Contract Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  # ── Consumer: generate + publish pacts ──────────────────────────────────────
+  consumer-pact:
+    name: Consumer — generate & publish pacts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run Pact consumer tests (generate pact files)
+        run: npm run test:pact
+
+      - name: Upload pact files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-contracts
+          path: pacts/
+          retention-days: 7
+
+      - name: Publish pacts to Pact Broker
+        if: env.PACT_BROKER_URL != ''
+        env:
+          PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+          PACT_BROKER_USERNAME: ${{ secrets.PACT_BROKER_USERNAME }}
+          PACT_BROKER_PASSWORD: ${{ secrets.PACT_BROKER_PASSWORD }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: npm run pact:publish
+
+  # ── Provider: verify pacts from broker (or local artifact) ──────────────────
+  provider-pact:
+    name: Provider — verify pacts
+    runs-on: ubuntu-latest
+    needs: consumer-pact
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download pact files artifact (fallback when broker not set)
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-contracts
+          path: pacts/
+        # Don't fail if the broker is configured — the verifier will pull from
+        # there directly. But when the broker is absent, we need local files.
+        continue-on-error: true
+
+      - name: Run Pact provider verification
+        env:
+          CI: "true"
+          PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+          PACT_BROKER_USERNAME: ${{ secrets.PACT_BROKER_USERNAME }}
+          PACT_BROKER_PASSWORD: ${{ secrets.PACT_BROKER_PASSWORD }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+        run: npm run test:pact

@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, KeyboardEvent } from "react";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
 import { trapFocus } from "@/utils/focusTrap";
+import { TransactionReviewSummary } from "@/components/TransactionReviewSummary";
 
 // ── Shared dialog shell ───────────────────────────────────────────────────────
 
@@ -180,6 +181,10 @@ export function CancelConfirmModal({ stream, amounts, onConfirm, onClose }: Canc
           <span style={{ fontWeight: 400, color: "#6b7280" }}>{stream.token}</span>
         </dd>
       </dl>
+
+      <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
+
+      <TransactionReviewSummary kind="cancel" />
 
       <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: 0 }} />
 
