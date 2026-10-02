@@ -78,6 +78,8 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 
 A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
 
+> For the full event schema with field types, topic discriminators, and XDR/JSON examples for indexers, see [docs/events.md](docs/events.md).
+
 ```mermaid
 flowchart TD
     UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
@@ -213,6 +215,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | `get_stream_ids(recipient)` | `Vec<u32>` — active stream IDs in ascending order |
 | `get_schedule_by_id(recipient, stream_id)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
+| `get_claimable_batch(recipients)` | `Vec<(Address, i128)>` — preserves input order; unknown recipients return `0` |
 | `is_cliff_passed(recipient)` | `bool` |
 | `get_min_deposit()` | `i128` — current minimum deposit threshold |
 
@@ -225,7 +228,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 1 | `ScheduleNotFound` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | Ledger is still before `cliff_ledger` |
 | 3 | `InvalidDuration` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `rate` is zero or negative; or `fee_bps` > 500 |
+| 4 | `InvalidRate` | `rate ≤ 0` (checked before deposit arithmetic); or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
 | 6 | `ScheduleAlreadyExists` | A conflicting schedule already exists |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
@@ -238,16 +241,17 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
 | 15 | `StreamPaused` | Claim attempted on a paused stream |
 | 16 | `BatchTooLarge` | Batch size exceeds the maximum of 20 |
-| 17 | `RateTooLow` | `rate × total_duration` is below the configured minimum |
+| 17 | `RateTooLow` | `rate > 0` but `rate × total_duration < min_deposit` (total deposit is below the configured floor) |
 | 18 | `NotInitialized` | `initialize` has not yet been called |
 | 19 | `InvalidSegments` | Variable-rate segments are invalid (empty, out-of-order, or bad rate) |
 | 20 | `MetadataTooLong` | `metadata` exceeds 256 UTF-8 bytes |
 | 21 | `Unauthorized` | Caller is not the contract admin or original sponsor |
-| 22 | `DepositBelowMinimum` | Total deposit is below the configured minimum |
+| 22 | `DepositBelowMinimum` | Overflow check passed but `rate × total_duration < min_deposit`; total deposit is below the configured minimum |
 | 23 | `StreamAlreadyPaused` | Stream is already paused |
 | 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
 | 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
 | 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 27 | `InvalidToken` | Token address is not a valid SAC contract |
 
 ---
 
@@ -303,6 +307,7 @@ export TOTAL_DURATION=172800  # ~10 days
 ## Security Considerations
 
 - **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Same-address guard**: `create_vesting_stream` rejects calls where `sponsor == recipient`, returning `InvalidRecipient` (error 11) immediately before any token transfer. This prevents a sponsor from vesting tokens to themselves and bypassing the cliff lock.
 - **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
 - **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
 - **Multiple streams**: Each recipient can have concurrent streams, identified by an auto-incremented `stream_id`.

@@ -33,6 +33,12 @@ fn make_stream(
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -53,6 +59,12 @@ fn m01_negative_rate_rejected() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -73,6 +85,12 @@ fn m02_total_equals_cliff_duration_rejected() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, _) = create_token(&env, &sponsor);
@@ -99,6 +117,12 @@ fn m03_cancel_exactly_at_cliff_pays_earned_tokens() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, token_client) = create_token(&env, &sponsor);
@@ -125,6 +149,12 @@ fn m04_cancel_after_end_ledger_caps_at_end() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, token_client) = create_token(&env, &sponsor);
@@ -152,6 +182,12 @@ fn m05_cancel_at_start_with_cliff_zero_no_recipient_transfer() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, token_client) = create_token(&env, &sponsor);
@@ -184,7 +220,7 @@ fn m06_claim_at_exact_cliff_ledger_succeeds() {
     advance_ledger(&env, 10);
     assert_eq!(env.ledger().sequence(), 110); // sanity-check
 
-    let claimed = client.claim_vested(&recipient, &None).unwrap();
+    let claimed = client.claim_vested(&recipient).unwrap();
     assert_eq!(claimed, 50); // 10 ledgers × 5
     assert_eq!(token_client.balance(&recipient), 50);
 }
@@ -200,10 +236,10 @@ fn m07_zero_claimable_amount_returns_nothing_to_claim() {
 
     // Advance to cliff, claim everything accrued so far.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
 
     // Do NOT advance. Claimable == 0 → must return NothingToClaim.
-    let err = client.claim_vested(&recipient, &None).unwrap_err();
+    let err = client.claim_vested(&recipient).unwrap_err();
     assert_eq!(err, VestingError::NothingToClaim.into());
 }
 
@@ -219,17 +255,17 @@ fn m08_schedule_removed_only_at_end_ledger() {
 
     // Claim at cliff (105) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim 10 ledgers before end (ledger 110) — schedule still active
     advance_ledger(&env, 5);
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
     assert!(client.get_schedule(&recipient).is_some());
 
     // Claim exactly at end_ledger — schedule must be removed
     advance_ledger(&env, 10);
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
     assert!(client.get_schedule(&recipient).is_none());
 }
 
@@ -264,6 +300,9 @@ fn m11_claimable_amount_no_schedule_returns_zero() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
     let nobody = Address::generate(&env);
 
     assert_eq!(client.claimable_amount(&nobody), 0);
@@ -292,6 +331,9 @@ fn m13_is_cliff_passed_no_schedule_returns_false() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
     let nobody = Address::generate(&env);
 
     assert!(!client.is_cliff_passed(&nobody));
@@ -306,6 +348,12 @@ fn m14_cancel_after_partial_claim_uses_last_claimed_ledger() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, token_client) = create_token(&env, &sponsor);
@@ -317,7 +365,7 @@ fn m14_cancel_after_partial_claim_uses_last_claimed_ledger() {
 
     // Claim at cliff (ledger 150) → 500 tokens to recipient
     advance_ledger(&env, 50);
-    let claimed = client.claim_vested(&recipient, &None).unwrap();
+    let claimed = client.claim_vested(&recipient).unwrap();
     assert_eq!(claimed, 500);
 
     // Cancel 20 ledgers later (ledger 170) → earned since last claim: 20×10=200
@@ -337,6 +385,12 @@ fn m15_deposit_equals_rate_times_total_duration() {
     let env = setup_env();
     let cid = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &cid);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let (token, token_client) = create_token(&env, &sponsor);

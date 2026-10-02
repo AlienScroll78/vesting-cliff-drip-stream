@@ -7,6 +7,12 @@ use soroban_sdk::{contracttype, Address, String, Vec};
 
 use crate::error::VestingError;
 
+/// Fixed-point precision multiplier for `rate_per_ledger`.
+///
+/// Rates are stored scaled by this constant to preserve sub-token precision
+/// over long streams. Pass `rate = 10_000_000` for 1 token/ledger.
+pub const RATE_DECIMALS: i128 = 10_000_000;
+
 /// Represents a single fixed-rate vesting schedule stored per recipient.
 ///
 /// Persisted in contract storage keyed by the recipient's `Address`.
@@ -33,7 +39,6 @@ pub struct VestingSchedule {
     /// Total ledgers accumulated across all pause periods.
     pub accumulated_pause_ledgers: u32,
     /// Monotonically increasing mutation counter (starts at 1).
-    /// Field placed last for XDR forward-compatibility.
     pub version: u32,
 }
 
@@ -103,65 +108,34 @@ pub struct MilestoneSchedule {
 }
 
 /// Analytics snapshot for a single vesting stream.
-///
-/// Returned by `VestingDrips::get_stream_info`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StreamInfo {
-    /// Total tokens deposited when the stream was created.
     pub total_deposit: i128,
-    /// Tokens already transferred to the recipient via `claim_vested`.
     pub claimed_so_far: i128,
-    /// Tokens currently available to claim (zero if cliff not yet reached).
     pub claimable_now: i128,
-    /// Tokens that will still drip after the current ledger.
     pub remaining_locked: i128,
-    /// Percentage of the stream that has been claimed, in basis points (0–10 000).
     pub percent_vested_bps: u32,
-    /// `true` if the cliff has been reached at the queried ledger.
     pub cliff_reached: bool,
-    /// `true` if the stream has ended (current ledger >= `end_ledger`).
     pub stream_ended: bool,
 }
 
 /// A single token allocation within a multi-token vesting stream.
-///
-/// Each entry pairs a SAC token address with a per-ledger emission rate.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TokenAllocation {
-    /// SAC-compatible token contract address.
     pub token: Address,
-    /// Tokens of this denomination released per ledger (must be > 0).
     pub rate_per_ledger: i128,
 }
 
 /// Vesting schedule for a stream that vests multiple SAC tokens simultaneously.
-///
-/// Persisted in contract storage under a composite key `(recipient, token)`
-/// — one entry per `(recipient, token)` pair — following Option A from the
-/// multi-token design doc. This keeps entry sizes bounded and TTL management
-/// per-entry.
-///
-/// # Storage key
-/// `DataKey::MultiSchedule(recipient, token)`
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MultiTokenSchedule {
-    /// The allocations (token + rate) vested by this stream.
     pub allocations: Vec<TokenAllocation>,
-
-    /// Ledger sequence at which the stream was created.
     pub start_ledger: u32,
-
-    /// Ledger sequence the recipient must wait for before any claim is valid.
     pub cliff_ledger: u32,
-
-    /// Ledger sequence at which the stream ends (no more accrual after this).
     pub end_ledger: u32,
-
-    /// Tracks the last ledger up to which tokens have been claimed.
-    /// Initialised to `start_ledger` so accrual is calculated correctly on first claim.
     pub last_claimed_ledger: u32,
 }
 
@@ -184,10 +158,20 @@ pub enum DataKey {
     FeeBps,
     /// Instance-level: protocol treasury address.
     Treasury,
-
+    /// Instance-level: whether the contract has been initialized.
+    Initialized,
+    /// Instance-level: reentrancy lock flag.
+    Lock,
+    /// Instance-level: allowed token addresses (Vec<Address>).
+    AllowedTokens,
+    /// Instance-level: allowlist enabled flag.
+    AllowlistEnabled,
+    /// Per-address: recipient allowlist entry.
+    RecipientAllowlist(Address),
+    /// Per-sponsor: list of recipient addresses with active streams.
+    SponsorStreams(Address),
     /// Instance-level configuration: maximum cliff ratio in basis points (default 5000 = 50%).
     ConfigMaxCliffRatio,
-
     /// Instance-level configuration: minimum rate per ledger (default 1).
     ConfigMinRate,
     /// Per-recipient fixed-rate schedule keyed by its stream ID.
@@ -197,23 +181,6 @@ pub enum DataKey {
 }
 
 /// Human-readable status of a vesting stream.
-///
-/// Returned by `stream_status` (typed enum view, issue #583) and by the
-/// legacy `get_status` view.
-///
-/// The `NotFound` variant indicates no schedule exists for the queried recipient,
-/// allowing callers to avoid a separate existence check.
-///
-/// # Badge colour mapping
-/// | Variant      | Colour | Hex       | ARIA label      |
-/// |--------------|--------|-----------|-----------------|
-/// | PreCliff     | Amber  | `#F59E0B` | "Pre-cliff"     |
-/// | Active       | Blue   | `#3B82F6` | "Active"        |
-/// | Expired      | Green  | `#22C55E` | "Expired"       |
-/// | Cancelled    | Red    | `#EF4444` | "Cancelled"     |
-/// | Paused       | Yellow | `#EAB308` | "Paused"        |
-/// | Drained      | Purple | `#A855F7` | "Drained"       |
-/// | NotFound     | Grey   | `#6B7280` | "Not found"     |
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(missing_docs)]

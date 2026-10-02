@@ -1,9 +1,13 @@
 import express, { type Request, type Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { validateAddress } from './validation.js';
+import { RecipientParamsSchema } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
+import { validate } from './middleware/validate.js';
+import { sponsorStreamsRouter } from './routes/streams.js';
+import { adminRouter } from './admin/index.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { docsRouter } from './routes/docs.js';
 
 const app = express();
 
@@ -32,8 +36,13 @@ app.get(
   createScheduleController(),
 );
 
+app.use('/api/streams', sponsorStreamsRouter);
+
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
+
+// Swagger UI — served at /api/docs (no auth required)
+app.use('/api/docs', docsRouter);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {

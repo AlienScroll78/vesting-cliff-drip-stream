@@ -59,17 +59,10 @@ fn test_claim_without_stream_id_claims_all_tokens() {
 #[test]
 fn test_partial_claim_exact_amount() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, token_client) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let (token_id, token_client) =
+        create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     // Jump to cliff + 50 ledgers (1000 tokens accrued)
     advance_ledger(&env, 100);

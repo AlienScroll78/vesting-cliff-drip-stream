@@ -25,6 +25,7 @@ import { requireAdminAuth } from "./auth.js";
 import { streamsRouter } from "./streams.js";
 import { indexerRouter } from "./indexer.js";
 import { webhooksRouter } from "./webhooks.js";
+import { auditRouter } from "./audit.js";
 
 export const adminRouter = Router();
 
@@ -35,3 +36,5 @@ adminRouter.use(requireAdminAuth);
 adminRouter.use("/streams", streamsRouter);
 adminRouter.use("/indexer", indexerRouter);
 adminRouter.use("/webhooks", webhooksRouter);
+// GET /admin/audit-log — paginated audit log for compliance and governance
+adminRouter.use("/audit-log", auditRouter);

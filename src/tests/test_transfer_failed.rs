@@ -34,6 +34,12 @@ fn test_create_transfer_failed_no_schedule_written() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -65,6 +71,12 @@ fn test_claim_transfer_failed_schedule_not_mutated() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -85,7 +97,7 @@ fn test_claim_transfer_failed_schedule_not_mutated() {
     // Freeze the recipient so the outbound transfer will be rejected.
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.claim_vested(&recipient, &None).unwrap_err();
+    let err = client.claim_vested(&recipient).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must be untouched — last_claimed_ledger not advanced.
@@ -104,6 +116,12 @@ fn test_claim_final_transfer_failed_schedule_preserved() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -120,7 +138,7 @@ fn test_claim_final_transfer_failed_schedule_preserved() {
 
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.claim_vested(&recipient, &None).unwrap_err();
+    let err = client.claim_vested(&recipient).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must still exist — not removed on transfer failure.
@@ -139,6 +157,12 @@ fn test_cancel_recipient_frozen_schedule_not_removed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -173,6 +197,12 @@ fn test_cancel_before_cliff_sponsor_frozen_schedule_not_removed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);

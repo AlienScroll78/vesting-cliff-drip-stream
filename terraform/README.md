@@ -23,15 +23,31 @@ infrastructure required by the vesting application.
     └────────────────┘  └────────────┘  └─────────────────┘
 ```
 
+## Module Dependency Diagram
+
+```mermaid
+flowchart TD
+    network["modules/network\nVPC · Subnets · NAT Gateways"]
+    compute["modules/compute\nECS Fargate · ALB · IAM"]
+    data["modules/data\nRDS · ElastiCache · KMS · SNS"]
+    dns["modules/dns\nRoute53 Zone · DNS Records"]
+
+    network --> compute
+    network --> data
+    compute --> dns
+```
+
+`network` must be applied first — `compute` and `data` both consume its VPC and subnet outputs. `dns` requires the ALB DNS name and zone ID from `compute`.
+
 ## Modules
 
-| Module  | Description | Resources |
-|---------|-------------|-----------|
-| `network` | VPC, subnets, NAT gateways, route tables, internet gateway | 10+ |
-| `compute` | ECS cluster, Fargate task definition, service, ALB, IAM | 9 |
-| `data` | RDS PostgreSQL, ElastiCache Redis, KMS, SNS backup alerts | 10+ |
-| `dns` | Route53 hosted zone, A/CNAME records for API and app | 3+ |
-| `secrets` | AWS Secrets Manager secrets, rotation Lambda, KMS, CloudTrail audit | 25+ |
+| Module | Description | Resources | README |
+|--------|-------------|-----------|--------|
+| [`network`](modules/network/README.md) | VPC, subnets, NAT gateways, route tables, internet gateway | 10+ | [→](modules/network/README.md) |
+| [`compute`](modules/compute/README.md) | ECS cluster, Fargate task definition, service, ALB, IAM | 8 | [→](modules/compute/README.md) |
+| [`data`](modules/data/README.md) | RDS PostgreSQL, ElastiCache Redis, KMS, SNS backup alerts | 10+ | [→](modules/data/README.md) |
+| [`dns`](modules/dns/README.md) | Route53 hosted zone, A/CNAME records for API and app | 3+ | [→](modules/dns/README.md) |
+| `secrets` | AWS Secrets Manager secrets, rotation Lambda, KMS, CloudTrail audit | 25+ | — |
 
 ## Environments
 
