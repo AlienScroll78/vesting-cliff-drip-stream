@@ -121,6 +121,38 @@ test-integration: build
 	docker compose -f docker-compose.e2e.yml down; \
 	exit $$status
 
+## Run full stream lifecycle integration tests against a local Stellar node (issue #779).
+## Starts a stellar/quickstart:testing node, deploys the contract, funds accounts,
+## runs all 5 lifecycle scenarios, then tears down.
+## Requires: Docker, Stellar CLI, Python 3.11+, Rust wasm32 target.
+integration-test: build
+	@echo "==> Starting local Stellar quickstart node..."
+	docker compose -f docker-compose.integration.yml up -d
+	@echo "==> Waiting for node to be ready..."
+	@for i in $$(seq 1 60); do \
+		curl -sf http://localhost:8000 > /dev/null 2>&1 && echo "  Node ready." && break; \
+		echo "  Attempt $$i/60..."; sleep 5; \
+	done
+	@echo "==> Configuring Stellar CLI network..."
+	stellar network add local \
+		--rpc-url http://localhost:8000/soroban/rpc \
+		--network-passphrase "Standalone Network ; February 2017" \
+		2>/dev/null || true
+	@echo "==> Funding test accounts..."
+	source scripts/fund_accounts.sh
+	@echo "==> Deploying contract..."
+	$(eval VESTING_CONTRACT := $(shell bash scripts/deploy_contract.sh))
+	@echo "  Contract: $(VESTING_CONTRACT)"
+	@echo "==> Running lifecycle integration tests..."
+	VESTING_CONTRACT=$(VESTING_CONTRACT) \
+	SOROBAN_RPC_URL=http://localhost:8000/soroban/rpc \
+	HORIZON_URL=http://localhost:8000 \
+	STELLAR_NETWORK=local \
+	python3 tests/integration/test_lifecycle.py; \
+	STATUS=$$?; \
+	docker compose -f docker-compose.integration.yml down; \
+	exit $$STATUS
+
 ## Run k6 backend load tests (requires a running backend on localhost:3001)
 ## See tests/load/backend_scenarios.js for scenario description.
 test-load:
