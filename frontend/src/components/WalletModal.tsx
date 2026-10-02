@@ -212,6 +212,7 @@ export function WalletModal({
     <div
       style={styles.backdrop}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      aria-hidden="true"
     >
       <div
         ref={dialogRef}
@@ -220,6 +221,7 @@ export function WalletModal({
         aria-labelledby="wallet-modal-title"
         data-testid="wallet-modal"
         style={styles.modal}
+        aria-hidden="false"
       >
         {/* Header */}
         <div style={styles.header}>

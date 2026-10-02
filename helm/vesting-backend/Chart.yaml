@@ -1,0 +1,21 @@
+apiVersion: v2
+name: vesting-backend
+description: >
+  Deploys the Soroban vesting cliff-drip stream backend — a Node.js/Express API
+  server that indexes on-chain vesting events and exposes REST + WebSocket
+  endpoints for the frontend.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - stellar
+  - soroban
+  - vesting
+  - blockchain
+home: https://github.com/your-org/vesting-cliff-drip-stream
+sources:
+  - https://github.com/your-org/vesting-cliff-drip-stream
+maintainers:
+  - name: your-org
+    url: https://github.com/your-org

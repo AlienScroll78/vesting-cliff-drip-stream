@@ -1,0 +1,68 @@
+# Default deny-all NetworkPolicies
+#
+# These policies establish a zero-trust baseline: all ingress and egress is
+# blocked for every pod in the namespace unless an explicit allow policy below
+# selects that pod.  Apply these first before any allow rules.
+#
+# CNI requirement: Cilium or Calico (both support full NetworkPolicy including
+# egress).  Vanilla kubenet / flannel only partially supports egress rules.
+#
+# Usage:
+#   kubectl apply -f k8s/network-policies/00-default-deny.yaml
+#   # or via kustomize:
+#   kubectl apply -k k8s/network-policies/
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: baseline
+spec:
+  # Empty podSelector matches ALL pods in the namespace
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  # No ingress rules → all inbound traffic denied
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: baseline
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  # No egress rules → all outbound traffic denied
+  #
+  # NOTE: DNS (UDP/TCP 53) must be explicitly allowed per-workload, or you can
+  # add a cluster-wide allow-dns policy.  The per-workload policies in this
+  # directory each include a DNS egress rule so pods can resolve service names.
+---
+# Allow all pods to reach kube-dns so name resolution works.
+# Without this, even pods with explicit allow rules cannot connect because
+# they cannot resolve hostnames.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: baseline
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

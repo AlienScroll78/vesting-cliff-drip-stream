@@ -1,0 +1,201 @@
+/* ==========================================================================
+   Design Tokens — Vesting Cliff Drip Stream
+   All values defined here; components consume these variables exclusively.
+   ========================================================================== */
+
+:root {
+  /* ── Colour palette (10-shade scales) ──────────────────────────────────
+   * Semantic aliases below (--color-brand-primary, --color-success, etc.)
+   * point at the shade that matches the previous single-value tokens, so
+   * existing consumers are unaffected. Prefer the shade tokens directly
+   * (--color-primary-500, --color-neutral-200, …) for new work that needs
+   * a lighter/darker step than the semantic default.
+   */
+  --color-primary-50:    #F5F3FF;
+  --color-primary-100:   #EDE9FE;
+  --color-primary-200:   #DDD6FE;
+  --color-primary-300:   #C4B5FD;
+  --color-primary-400:   #A78BFA;
+  --color-primary-500:   #8B5CF6;
+  --color-primary-600:   #7C3AED; /* violet-600 */
+  --color-primary-700:   #6D28D9;
+  --color-primary-800:   #5B21B6;
+  --color-primary-900:   #4C1D95;
+
+  --color-secondary-50:  #EEF2FF;
+  --color-secondary-100: #E0E7FF;
+  --color-secondary-200: #C7D2FE;
+  --color-secondary-300: #A5B4FC;
+  --color-secondary-400: #818CF8;
+  --color-secondary-500: #6366F1;
+  --color-secondary-600: #4F46E5; /* indigo-600 */
+  --color-secondary-700: #4338CA;
+  --color-secondary-800: #3730A3;
+  --color-secondary-900: #312E81;
+
+  --color-success-50:  #ECFDF5;
+  --color-success-100: #D1FAE5;
+  --color-success-200: #A7F3D0;
+  --color-success-300: #6EE7B7;
+  --color-success-400: #34D399;
+  --color-success-500: #10B981; /* emerald-500 */
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065F46;
+  --color-success-900: #064E3B;
+
+  --color-warning-50:  #FFFBEB;
+  --color-warning-100: #FEF3C7;
+  --color-warning-200: #FDE68A;
+  --color-warning-300: #FCD34D;
+  --color-warning-400: #FBBF24;
+  --color-warning-500: #F59E0B; /* amber-500 */
+  --color-warning-600: #D97706;
+  --color-warning-700: #B45309;
+  --color-warning-800: #92400E;
+  --color-warning-900: #78350F;
+
+  --color-error-50:  #FEF2F2;
+  --color-error-100: #FEE2E2;
+  --color-error-200: #FECACA;
+  --color-error-300: #FCA5A5;
+  --color-error-400: #F87171;
+  --color-error-500: #EF4444; /* red-500 */
+  --color-error-600: #DC2626;
+  --color-error-700: #B91C1C;
+  --color-error-800: #991B1B;
+  --color-error-900: #7F1D1D;
+
+  --color-neutral-50:  #F8FAFC;
+  --color-neutral-100: #F1F5F9;
+  --color-neutral-200: #E2E8F0;
+  --color-neutral-300: #CBD5E1;
+  --color-neutral-400: #94A3B8;
+  --color-neutral-500: #64748B;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1E293B;
+  --color-neutral-900: #0F172A;
+
+  /* ── Semantic aliases (dark theme is the default palette) ─────────────── */
+  --color-brand-primary:    var(--color-primary-600);
+  --color-brand-secondary:  var(--color-secondary-600);
+  --color-accent:           #06B6D4; /* cyan-500   */
+
+  --color-success:          var(--color-success-500);
+  --color-warning:          var(--color-warning-500);
+  --color-danger:           var(--color-error-500);
+
+  --color-bg-base:          var(--color-neutral-900);
+  --color-bg-surface:       var(--color-neutral-800);
+  --color-bg-elevated:      var(--color-neutral-700);
+
+  --color-text-primary:     var(--color-neutral-50);
+  --color-text-secondary:   var(--color-neutral-400);
+  --color-text-disabled:    var(--color-neutral-600);
+
+  --color-border:           var(--color-neutral-700);
+  --color-border-focus:     var(--color-primary-600); /* brand-primary */
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  /*
+   * Font families — system stack (body) and monospace (addresses/numbers).
+   * Full fluid type scale is in tokens/typography.css (issue #384).
+   * Import typography.css AFTER this file to have access to all tokens.
+   */
+  --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+
+  /*
+   * Static fallback sizes — kept for backwards compatibility with any
+   * component that has not yet migrated to the fluid scale tokens.
+   * Prefer --font-size-fluid-* from typography.css for all new work.
+   */
+  --font-size-xs:   0.6875rem; /*  11px — matches fluid-xs min */
+  --font-size-sm:   0.8125rem; /*  13px — matches fluid-sm min */
+  --font-size-base: 1rem;      /*  16px — matches fluid-base min */
+  --font-size-lg:   1.125rem;  /*  18px — matches fluid-lg min  */
+  --font-size-xl:   1.25rem;   /*  20px — matches fluid-xl min  */
+  --font-size-2xl:  1.5rem;    /*  24px — matches fluid-2xl min */
+  --font-size-3xl:  1.875rem;  /*  30px — matches fluid-3xl min */
+
+  /* Aliases to fluid scale — use these in all components (issue #384) */
+  --font-size-body:     clamp(1rem, 0.9292rem + 0.3542vw, 1.125rem);   /* 16→18px */
+  --font-size-body-lg:  clamp(1.125rem, 1.0542rem + 0.3542vw, 1.25rem); /* 18→20px */
+  --font-size-label:    clamp(0.8125rem, 0.7833rem + 0.1458vw, 0.875rem); /* 13→14px */
+  --font-size-caption:  clamp(0.6875rem, 0.6583rem + 0.1458vw, 0.75rem);  /* 11→12px */
+
+  --font-weight-normal:    400;
+  --font-weight-medium:    500;
+  --font-weight-semibold:  600;
+  --font-weight-bold:      700;
+  --font-weight-extrabold: 800;
+
+  --line-height-none:    1;
+  --line-height-tight:   1.25;
+  --line-height-snug:    1.375;
+  --line-height-base:    1.6;   /* updated: 1.5 → 1.6 per issue #384 */
+  --line-height-loose:   1.75;
+
+  /* Maximum line length for body text — issue #384 */
+  --measure-body:    72ch;
+  --measure-narrow:  45ch;
+  --measure-wide:    90ch;
+
+  /* Numeric rendering for amounts, addresses, ledger numbers */
+  --font-variant-numeric: tabular-nums;
+
+  /* ── Spacing scale (4-point grid) ────────────────────────────────────── */
+  --space-1:  0.25rem;  /*  4px */
+  --space-2:  0.5rem;   /*  8px */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-5:  1.25rem;  /* 20px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ── Border radius ───────────────────────────────────────────────────── */
+  --radius-none: 0;
+  --radius-sm:   0.25rem;
+  --radius-base: 0.5rem;
+  --radius-lg:   0.75rem;
+  --radius-full: 9999px;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms ease;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────────
+ * Opt in with data-theme="light" on <html> or any ancestor element (see
+ * frontend/src/hooks/useDarkMode.ts for the existing toggle this maps to).
+ * Shade scales (--color-primary-*, --color-neutral-*, …) are theme-invariant;
+ * only the semantic bg/text/border aliases and shadow opacities flip.
+ */
+[data-theme='light'] {
+  --color-bg-base:          var(--color-neutral-50);
+  --color-bg-surface:       #FFFFFF;
+  --color-bg-elevated:      var(--color-neutral-100);
+
+  --color-text-primary:     var(--color-neutral-900);
+  --color-text-secondary:   var(--color-neutral-600);
+  --color-text-disabled:    var(--color-neutral-400);
+
+  --color-border:           var(--color-neutral-200);
+  --color-border-focus:     var(--color-primary-600);
+
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.06);
+  --shadow-xl: 0 20px 25px -5px rgb(15 23 42 / 0.12), 0 8px 10px -6px rgb(15 23 42 / 0.08);
+}

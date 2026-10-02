@@ -1,12 +1,22 @@
 # Vesting Cliff Drip Stream
 
+[![Coverage](https://img.shields.io/badge/coverage-90%25-green?logo=rust)](docs/coverage/html/index.html)
+
 A production-ready Soroban smart contract that combines a **time-locked cliff** with **linear token streaming** for long-term contributor retention on the Stellar network.
+
+> Coming from standard Drips? See the [comparison guide](docs/comparison.md) for a feature table, cancel behaviour details, and migration instructions.
+>
+> Setting up a local development environment? See the [Developer Onboarding Guide](docs/developer-onboarding.md) for step-by-step instructions.
+>
+> Have a question? Check the [FAQ](docs/faq.md) for common answers about stream lifecycle, claiming, token support, and fees.
 
 ---
 
 ## Concept
 
-Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **cliff period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
+Standard Drips streams begin releasing tokens immediately. This contract adds a mandatory **[cliff](docs/glossary.md#cliff) period** before any tokens can be claimed, ensuring contributors remain aligned with the project before unlocking value.
+
+For the formal lifecycle model, transition table, and error-to-state mapping, see [docs/flows.md](docs/flows.md).
 
 ```
 Token Flow
@@ -17,10 +27,10 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
                │                 │                              │
 ```
 
-1. Sponsor deposits the **full allocation** upfront into the contract vault.
+1. [Sponsor](docs/glossary.md#sponsor) deposits the **full allocation** upfront into the contract vault.
 2. Recipient cannot claim anything until `cliff_ledger` is reached.
 3. At the cliff, all tokens accrued since `start_ledger` are **released instantly**.
-4. Remaining tokens continue to **drip linearly per ledger** until `end_ledger`.
+4. Remaining tokens continue to **drip linearly per [ledger](docs/glossary.md#ledger)** until `end_ledger`.
 
 ---
 
@@ -29,11 +39,16 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
 ```
 .
 ├── Cargo.toml                     # Package manifest & dependencies
-├── Makefile                       # Build / test / lint helpers
+├── Makefile                       # Build / test / lint / mutants helpers
 ├── README.md
 ├── .cargo/
 │   └── config.toml                # WASM build target
+├── .cargo-mutants.toml            # Mutation testing exclusions & config
 ├── .gitignore
+├── docs/
+│   ├── architecture.md            # Full-stack system architecture & Mermaid diagrams
+│   └── mutation/
+│       └── report.md              # Mutation testing results
 ├── scripts/
 │   ├── deploy.sh                  # Build + optimize + deploy to testnet
 │   ├── invoke_create.sh           # CLI helper: create_vesting_stream
@@ -52,8 +67,62 @@ Tokens:        │   [locked]      │  ← instant catch-up claim → │ ← l
         ├── test_claim.rs          # Claim / vesting logic tests
         ├── test_cancel.rs         # Cancellation & refund tests
         ├── test_views.rs          # Read-only view function tests
-        └── test_edge_cases.rs     # Boundary & integration scenarios
+        ├── test_edge_cases.rs     # Boundary & integration scenarios
+        ├── test_clawback.rs       # Clawback compliance tests (#317)
+        ├── test_drain.rs          # Drain expired stream tests (#316)
+        └── test_min_deposit.rs    # Minimum deposit validation tests (#314)
 ```
+
+
+## Architecture Overview
+
+A comprehensive full-stack architecture diagram, data flow sequences (creation, claim, cancel), backend service component breakdowns, and persistent storage layout diagrams are documented in [`docs/architecture.md`](docs/architecture.md).
+
+> For the full event schema with field types, topic discriminators, and XDR/JSON examples for indexers, see [docs/events.md](docs/events.md).
+
+```mermaid
+flowchart TD
+    UI["Web Application (UI)"] -->|"Simulate & Sign"| Wallet["Stellar Wallet"]
+    Wallet -->|"Submit Transaction"| RPC["Soroban RPC Node"]
+    RPC -->|"Execute Host Call"| Contract["VestingDrips Contract"]
+    Indexer["Backend Event Indexer"] -->|"Poll Events"| Horizon["Horizon API"]
+    Indexer -->|"Persist Activity"| DB[("PostgreSQL DB")]
+    UI -->|"Query Indexed Data"| API["Backend API Server"]
+    API --> DB
+```
+
+## Architecture Decision Records
+
+Key design decisions (storage layout, rate type, cliff math, error codes, TTL strategy) are documented in [`docs/adr/`](docs/adr/README.md).
+
+
+## Security
+
+For information about reporting vulnerabilities and our security policy, please see [SECURITY.md](SECURITY.md).
+
+## Infrastructure Operations
+
+Terraform-managed AWS infrastructure (ECS, RDS, VPC, IAM). Configuration lives in [`terraform/`](terraform/).
+
+### Drift Detection
+
+A [scheduled GitHub Actions workflow](.github/workflows/drift-detection.yml) runs `terraform plan` daily at **02:00 UTC** against production state. If the plan detects any changes (exit code 2), it:
+
+1. Opens a GitHub issue labelled `infrastructure` + `drift` with the full plan output.
+2. Sends a Slack alert to `#ops`.
+
+### Operations Runbooks
+
+| Runbook | Purpose |
+|---------|---------|
+| [Drift Reconciliation](docs/runbooks/drift-reconciliation.md) | How to evaluate, approve, or reject detected drift |
+| [Emergency Override](docs/runbooks/emergency-override.md) | Manual infrastructure changes with required post-hoc Terraform update |
+| [RDS Restore](docs/runbooks/rds-restore.md) | Database snapshot restore procedure |
+| [Backup Restore Verification](docs/runbooks/backup-restore-verification.md) | Weekly automated proof that backups restore; run one on demand |
+| [Disaster Recovery](docs/runbooks/disaster-recovery.md) | Full system recovery scenarios |
+| [Backfill Stream Events](docs/runbooks/backfill-stream-events.md) | Replay Horizon events into `stream_events` after indexer downtime or decoder fix |
+
+See the full [runbooks index](docs/runbooks/README.md) for all operational procedures.
 
 ---
 
@@ -70,16 +139,25 @@ pub fn create_vesting_stream(
     rate: i128,           // tokens per ledger (> 0)
     cliff_duration: u32,  // ledgers until cliff
     total_duration: u32,  // total stream length (> cliff_duration)
-) -> Result<(), VestingError>
+) -> Result<u32, VestingError> // newly allocated stream_id
 ```
+
+Stream IDs start at `0` for new recipients and increase per recipient. Existing deployments read their legacy single schedule as stream ID `0`; newly created streams receive subsequent IDs. Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
+
+`cliff_duration` must be at least `1`; a zero-length cliff is rejected with
+`InvalidCliffDuration` (code 12) because it provides no lockup guarantee.
 
 ### `claim_vested`
 
 ```rust
-pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError>
+pub fn claim_vested(
+    env: Env,
+    recipient: Address,
+    stream_id: Option<u32>, // None claims all active streams
+) -> Result<i128, VestingError>
 ```
 
-Returns the amount transferred. Fails with `CliffNotReached` before the cliff.
+Returns the total amount transferred across the selected stream(s). Streams use their own token; pass `Some(stream_id)` to claim one stream or `None` to claim all claimable streams.
 
 ### `cancel_stream`
 
@@ -88,18 +166,61 @@ pub fn cancel_stream(
     env: Env,
     sponsor: Address,
     recipient: Address,
+    stream_id: u32,
 ) -> Result<(), VestingError>
 ```
 
 Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens; the sponsor receives the remainder. If the cliff has not passed, the full deposit is refunded to the sponsor.
+
+### `clawback_stream`
+
+```rust
+pub fn clawback_stream(
+    env: Env,
+    sponsor: Address,    // original stream funder; must sign
+    recipient: Address,
+    stream_id: u32,
+    reason: String,      // compliance reason (max 256 chars)
+) -> Result<(), VestingError>
+```
+
+Compliance clawback: the original sponsor recovers **all remaining tokens** in the vault, bypassing cliff state. Only available on tokens that support the SAC clawback flag. Emits `StreamClawedBack` event with the reason string.
+
+### `drain_expired_stream`
+
+```rust
+pub fn drain_expired_stream(
+    env: Env,
+    caller: Address,     // any address; no auth required
+    recipient: Address,
+) -> Result<(), VestingError>
+```
+
+Permissionless cleanup of a fully expired stream. Available to any caller after `end_ledger + 6,307,200` ledgers (~1 year) have elapsed. Transfers remaining tokens to the original sponsor. Emits `StreamDrained` event.
+
+### `set_min_deposit`
+
+```rust
+pub fn set_min_deposit(
+    env: Env,
+    admin: Address,     // must sign
+    min_deposit: i128,  // new minimum total deposit (must be > 0)
+) -> Result<(), VestingError>
+```
+
+Updates the minimum total deposit threshold in instance storage. Default is 100 tokens.
 
 ### View functions
 
 | Function | Returns |
 |---|---|
 | `get_schedule(recipient)` | `Option<VestingSchedule>` |
+| `get_stream_ids(recipient)` | `Vec<u32>` — active stream IDs in ascending order |
+| `get_schedule_by_id(recipient, stream_id)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
+| `get_claimable_batch(recipients)` | `Vec<(Address, i128)>` — preserves input order; unknown recipients return `0` |
 | `is_cliff_passed(recipient)` | `bool` |
+| `get_min_deposit()` | `i128` — current minimum deposit threshold |
 
 ---
 
@@ -110,10 +231,31 @@ Cancels the stream. If the cliff has passed, the recipient keeps accrued tokens;
 | 1 | `ScheduleNotFound` | No active schedule for the recipient |
 | 2 | `CliffNotReached` | Ledger is still before `cliff_ledger` |
 | 3 | `InvalidDuration` | `total_duration` ≤ `cliff_duration` |
-| 4 | `InvalidRate` | `rate` is zero or negative |
+| 4 | `InvalidRate` | `rate ≤ 0` (checked before deposit arithmetic); or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
-| 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
+| 6 | `ScheduleAlreadyExists` | A conflicting schedule already exists |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
+| 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
+| 9 | `TransferFailed` | Token transfer failed |
+| 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
+| 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
+| 12 | `InvalidCliffDuration` | `cliff_duration` is zero; a cliff must have positive length |
+| 13 | `AlreadyInitialized` | `initialize` has already been called |
+| 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
+| 15 | `StreamPaused` | Claim attempted on a paused stream |
+| 16 | `BatchTooLarge` | Batch size exceeds the maximum of 20 |
+| 17 | `RateTooLow` | `rate > 0` but `rate × total_duration < min_deposit` (total deposit is below the configured floor) |
+| 18 | `NotInitialized` | `initialize` has not yet been called |
+| 19 | `InvalidSegments` | Variable-rate segments are invalid (empty, out-of-order, or bad rate) |
+| 20 | `MetadataTooLong` | `metadata` exceeds 256 UTF-8 bytes |
+| 21 | `Unauthorized` | Caller is not the contract admin or original sponsor |
+| 22 | `DepositBelowMinimum` | Overflow check passed but `rate × total_duration < min_deposit`; total deposit is below the configured minimum |
+| 23 | `StreamAlreadyPaused` | Stream is already paused |
+| 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
+| 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
+| 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 27 | `InvalidToken` | `token` is not a valid SAC; the `try_balance` probe failed |
+| 27 | `InvalidToken` | Token address is not a valid SAC contract |
 
 ---
 
@@ -140,6 +282,9 @@ make build
 make test
 ```
 
+CI also runs the contract test suite through Soroban's WASM runner so the
+contract is exercised in the same target it is deployed to.
+
 ### Deploy to Testnet
 
 ```bash
@@ -165,14 +310,31 @@ export TOTAL_DURATION=172800  # ~10 days
 
 ## Security Considerations
 
-- **Auth**: Both `create_vesting_stream` (sponsor) and `claim_vested` / `cancel_stream` (respective callers) use `require_auth()`.
-- **Overflow protection**: All arithmetic uses `checked_*` operations, returning `DepositOverflow` on failure.
-- **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
-- **TTL management**: Persistent storage entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
+- **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
+- **Same-address guard**: `create_vesting_stream` rejects calls where `sponsor == recipient`, returning `InvalidRecipient` (error 11) immediately before any token transfer. This prevents a sponsor from vesting tokens to themselves and bypassing the cliff lock.
+- **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
+- **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
+- **Multiple streams**: Each recipient can have concurrent streams, identified by an auto-incremented `stream_id`.
+- **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 
 ---
 
+## SBOM & License Compliance
+
+A Software Bill of Materials (SPDX 2.3 JSON) is generated for every release and attached as `sbom.spdx.json`. License scanning runs on every pull request and blocks merges if a dependency carries a copyleft or unapproved license.
+
+See [docs/sbom.md](docs/sbom.md) for the full policy, allowed license list, and instructions for adding new dependencies.
+
+## Changelog
+
+- [CHANGELOG.md](CHANGELOG.md) — Project-level changes and release history.
+- [API Changelog](docs/api-changelog.md) — Contract and backend API changes for integrators.
+
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md).

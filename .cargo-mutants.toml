@@ -1,0 +1,26 @@
+# cargo-mutants configuration
+# https://mutants.rs/configuration.html
+#
+# Run: make mutants
+# Or:  cargo mutants --features testutils -F "src/contract.rs" -F "src/storage.rs"
+
+# Only mutate the two files under test
+examine_globs = ["src/contract.rs", "src/storage.rs"]
+
+# Pass the testutils feature so the test harness compiles
+additional_cargo_args = ["--features", "testutils"]
+
+# Exclude TTL/bump-only functions — they have no observable state return value
+# and therefore produce inherently unkillable mutants.
+exclude_globs = []
+exclude_re = [
+    # extend_ttl calls are fire-and-forget; surviving mutants are acceptable
+    "extend_ttl",
+]
+
+# Timeout per mutant test run (seconds). Soroban test suite is fast (<5s).
+timeout_multiplier = 3.0
+minimum_test_timeout = 30
+
+# Emit a JSON summary for the CI report
+output = "mutants.out"

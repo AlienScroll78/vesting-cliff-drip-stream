@@ -10,6 +10,10 @@
   --color-border: #e5e7eb;
   --color-text: #111827;
   --radius: 0.5rem;
+  /* ── Issue #766: semantic color tokens (light mode defaults) ── */
+  --bg-primary: #ffffff;
+  --text-primary: #1a1a1a;
+  --accent: #6c47ff;
 }
 
 /* ── Dark mode (class strategy — toggled via useDarkMode hook) ── */
@@ -23,10 +27,41 @@
   --color-surface: #1e293b;
   --color-border: #334155;
   --color-text: #f1f5f9;       /* slate-100 — 15.8:1 on #0f172a */
+  /* ── Issue #766: semantic color tokens (dark mode) ── */
+  --bg-primary: #0f0f0f;
+  --text-primary: #f0f0f0;
+  --accent: #9d7fff;
 }
 
 .dark body {
   color-scheme: dark;
+}
+
+/* ── Issue #766: data-theme attribute strategy (parallel to .dark class) ──
+   Mirrors the .dark overrides above so both selectors work for SSR hydration
+   and chart/timeline components that target data-theme directly. */
+[data-theme='dark'] {
+  --color-active:    #60a5fa;
+  --color-pre-cliff: #fbbf24;
+  --color-completed: #34d399;
+  --color-cancelled: #f87171;
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #f1f5f9;
+  --bg-primary: #0f0f0f;
+  --text-primary: #f0f0f0;
+  --accent: #9d7fff;
+}
+
+[data-theme='dark'] body {
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --text-primary: #1a1a1a;
+  --accent: #6c47ff;
 }
 
 /* ── Badge dark overrides (ensure WCAG AA background contrast) ── */

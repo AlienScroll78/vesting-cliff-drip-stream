@@ -1,0 +1,31 @@
+# syft configuration for vesting-cliff-drip-stream
+# https://github.com/anchore/syft#configuration
+
+# Output format: spdx-json is set per invocation in the workflow
+# This file controls which catalogers are active and what to exclude.
+
+# Exclude generated/build artifacts from the SBOM
+exclude:
+  - "target/**"
+  - "frontend/.next/**"
+  - "frontend/dist/**"
+  - "node_modules/.cache/**"
+  - "**/node_modules/.package-lock.json"
+
+# File metadata inclusion
+file-metadata:
+  cataloger:
+    enabled: false
+
+# Limit package catalogers to what is relevant for this project.
+# The Rust and Node catalogers are enabled; docker/gem/python etc. are not needed.
+catalogers:
+  - "cargo-auditable-binary-cataloger"
+  - "cargo-lock-cataloger"
+  - "javascript-lock-dist-cataloger"
+  - "javascript-package-cataloger"
+  - "node-modules-cataloger"
+
+# SPDX-specific output settings
+output:
+  - "spdx-json"

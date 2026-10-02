@@ -1,0 +1,92 @@
+.heroBanner {
+  padding: 4rem 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner {
+    padding: 2rem;
+  }
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.features {
+  padding: 3rem 0;
+}
+
+.feature {
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.featureEmoji {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.tokenFlow {
+  background-color: var(--ifm-color-emphasis-100);
+  padding: 3rem 0;
+}
+
+.tokenFlow h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.asciiDiagram {
+  background-color: var(--ifm-code-background);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  padding: 1.25rem 1.5rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  overflow-x: auto;
+  white-space: pre;
+  margin-bottom: 1.5rem;
+}
+
+.flowSteps {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.flowSteps li {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.quickLinks {
+  padding: 3rem 0;
+  background-color: var(--ifm-background-surface-color);
+}
+
+.quickLinkCard {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+  padding: 1.5rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.quickLinkCard h3 {
+  margin-bottom: 0;
+}
+
+.quickLinkCard p {
+  flex: 1;
+  margin-bottom: 0;
+}

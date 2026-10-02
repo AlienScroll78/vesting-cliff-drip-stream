@@ -1,0 +1,56 @@
+# docker-compose.yml — local dev environment for vesting-cliff-drip-stream
+# Issue #27: includes PostgreSQL for the event indexer.
+#
+# Usage:
+#   docker compose up -d
+#   DATABASE_URL=postgres://vesting:vesting@localhost:5432/vesting npm run dev
+#
+# The `backend` service is optional — remove it if you prefer running the
+# server with `npm run dev` directly.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vesting
+      POSTGRES_PASSWORD: vesting
+      POSTGRES_DB: vesting
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vesting -d vesting"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      DATABASE_URL: postgres://vesting:vesting@postgres:5432/vesting
+      HORIZON_URL: ${HORIZON_URL:-https://horizon-testnet.stellar.org}
+      NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
+      CONTRACT_ID: ${CONTRACT_ID:-}
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+volumes:
+  postgres_data:

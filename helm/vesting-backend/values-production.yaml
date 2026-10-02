@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# vesting-backend — Production overrides
+# ─────────────────────────────────────────────────────────────────────────────
+
+replicaCount: 3
+appPort: 3001
+
+image:
+  tag: "1.0.0"
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  host: api.vesting.example.com
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "100r/s"
+  tls:
+    enabled: true
+    secretName: vesting-api-tls
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+externalSecret:
+  enabled: true
+  secretStoreRef:
+    name: aws-secretsmanager
+    kind: ClusterSecretStore
+  remoteSecrets:
+    DATABASE_URL:
+      remoteKey: vesting/production/app-secrets
+      property: database_url
+    REDIS_URL:
+      remoteKey: vesting/production/app-secrets
+      property: redis_url
+    ADMIN_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: admin_api_key
+    SPONSOR_SECRET_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: sponsor_secret_key
+    JWT_SECRET:
+      remoteKey: vesting/production/app-secrets
+      property: jwt_secret
+    HORIZON_API_KEY:
+      remoteKey: vesting/production/app-secrets
+      property: horizon_api_key
+
+config:
+  horizonUrl: "https://horizon.stellar.org"
+  networkPassphrase: "Public Global Stellar Network ; September 2015"
+  sorobanRpcUrl: "https://soroban.stellar.org"
+  logLevel: "info"
+  contractId: ""
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+    path: /metrics
+    interval: 30s
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/vesting-backend
+
+canary:
+  enabled: false
+
+eventWorker:
+  enabled: true
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70

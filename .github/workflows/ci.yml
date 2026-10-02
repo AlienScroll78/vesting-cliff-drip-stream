@@ -1,0 +1,244 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vesting_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vesting_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vesting_test
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Apply database migrations
+        run: npm run migrate
+      - name: Run backend tests
+        run: npm test
+
+  # ── lint ────────────────────────────────────────────────────────────────────
+  # Required status check: "lint"
+  # Runs cargo fmt and clippy. Both must be clean.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        # Exclude db-tests: it targets the host, not WASM.
+        run: cargo clippy --all-targets --all-features --exclude db-tests -- -D warnings
+
+      - name: Setup Node for JSON log lint
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend logger dependencies
+        run: npm install --prefix backend --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+
+      - name: Validate structured log JSON
+        working-directory: backend
+        run: node scripts/validate-structured-logs.mjs
+
+  # ── contract-test ───────────────────────────────────────────────────────────
+  # Required status check: "contract-test"
+  # Runs the full Soroban test suite with testutils enabled.
+  contract-test:
+    name: contract-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run contract tests
+        run: cargo test --features testutils
+
+  # ── proptest ────────────────────────────────────────────────────────────────
+  # Required status check: "proptest"
+  # Runs property-based tests for claimable_amount invariants (#778).
+  # Each of the 5 properties executes 10 000 cases.
+  proptest:
+    name: proptest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run property-based tests
+        run: cargo test --features testutils test_properties
+        env:
+          PROPTEST_CASES: "10000"
+
+  # ── build ───────────────────────────────────────────────────────────────────
+  # Required status check: "build"
+  # Compiles to wasm32 (the production target) and generates rustdoc.
+  build:
+    name: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release --exclude db-tests
+
+      - name: Docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --exclude db-tests
+
+  db-tests:
+    name: db-tests (PostgreSQL integration)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # The workspace .cargo/config.toml defaults to wasm32; we must
+          # install the native target so the --target flag below is accepted.
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-db-${{ hashFiles('db-tests/Cargo.toml', 'Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-db-
+
+      # testcontainers-rs uses the Docker socket — Docker is pre-installed on
+      # ubuntu-latest GitHub-hosted runners, no extra setup required.
+      - name: Run DB integration tests
+        # Pass --target explicitly to override the workspace wasm32 default.
+        run: >
+          cargo test
+          -p db-tests
+          --target x86_64-unknown-linux-gnu
+          --no-fail-fast
+        timeout-minutes: 10
+
+  # ── typecheck ───────────────────────────────────────────────────────────────
+  # Required status check: "typecheck"
+  # TypeScript type-check for the frontend.
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck

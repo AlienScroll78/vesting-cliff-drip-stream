@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { recipientSchema } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData

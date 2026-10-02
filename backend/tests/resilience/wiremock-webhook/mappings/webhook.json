@@ -1,0 +1,15 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "POST",
+        "urlPattern": "/webhook"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\"received\":true}",
+        "headers": { "Content-Type": "application/json" }
+      }
+    }
+  ]
+}
