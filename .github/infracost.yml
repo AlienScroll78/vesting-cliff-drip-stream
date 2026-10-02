@@ -1,0 +1,18 @@
+version: 0.1
+
+# Infracost estimates the cost of the Terraform plan on a pull request, using the
+# same working directory as the `plan` job in .github/workflows/terraform.yml so
+# the cost comment and the plan output cannot disagree.
+terraform_path: terraform
+
+# These carry no meaningful cost, or their cost is dominated by invocation
+# volume that Infracost estimates poorly. Leaving them out keeps the PR comment
+# focused on the resources a reviewer can actually change.
+skip_resource:
+  - address_regex: .*aws_dynamodb_table\.terraform_locks.*
+  - address_regex: .*aws_iam_role.*
+  - address_regex: .*aws_iam_policy.*
+  - address_regex: .*aws_iam_role_policy.*
+  - address_regex: .*aws_sns_topic_subscription.*
+  - address_regex: .*aws_cloudtrail.*
+  - address_regex: .*aws_ce_anomaly_monitor.*

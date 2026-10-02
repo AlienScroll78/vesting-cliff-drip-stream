@@ -23,7 +23,6 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
-#[allow(missing_docs)]
 pub enum VestingError {
     // ── Stable public codes (1–26) ────────────────────────────────────────────
 
@@ -52,14 +51,14 @@ pub enum VestingError {
     /// **Code 8** — The stream's `end_ledger` has not yet been reached.
     StreamNotExpired = 8,
 
-    /// **Code 9** — A token transfer call failed.
-    TransferFailed = 9,
+    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    DrainDelayNotExpired = 9,
 
-    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
-    DrainDelayNotExpired = 10,
+    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    InvalidRecipient = 10,
 
-    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
-    InvalidRecipient = 11,
+    /// **Code 11** — A token transfer call failed.
+    TransferFailed = 11,
 
     /// **Code 12** — `cliff_duration` is zero or exceeds the maximum cliff
     /// ratio; a zero-length cliff provides no lockup guarantee.

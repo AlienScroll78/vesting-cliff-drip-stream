@@ -30,7 +30,7 @@ fn test_cliff_at_exactly_80_percent_accepted() {
     let (token_id, _) = setup_token(&env, &sponsor, 100);
 
     // cliff=80, total=100 → 80% ≤ 80% → OK
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &80, &100);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &80, &100, &None);
     assert!(client.get_schedule(&recipient).is_some());
 }
 
@@ -46,7 +46,7 @@ fn test_cliff_at_79_percent_accepted() {
     let (token_id, _) = setup_token(&env, &sponsor, 100);
 
     // cliff=79, total=100 → 79% < 80% → OK
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &79, &100);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &79, &100, &None);
     assert!(client.get_schedule(&recipient).is_some());
 }
 
@@ -63,7 +63,7 @@ fn test_cliff_at_81_percent_rejected() {
 
     // cliff=81, total=100 → 81% > 80% → InvalidCliffRatio
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &81, &100)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &81, &100, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, VestingError::InvalidCliffRatio);
@@ -79,7 +79,7 @@ fn test_cliff_at_99_percent_rejected() {
     let (token_id, _) = setup_token(&env, &sponsor, 100);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &99, &100)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &99, &100, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, VestingError::InvalidCliffRatio);
@@ -95,7 +95,7 @@ fn test_cliff_equal_to_total_rejected_by_invalid_duration() {
     let (token_id, _) = setup_token(&env, &sponsor, 100);
 
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &100, &100)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &100, &100, &None)
         .unwrap_err()
         .unwrap();
     // InvalidDuration is checked before InvalidCliffRatio
@@ -112,7 +112,7 @@ fn test_cliff_boundary_200_total() {
     let (token_id, _) = setup_token(&env, &sponsor, 200);
 
     // 160/200 = 80% → accepted
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &160, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &160, &200, &None);
     assert!(client.get_schedule(&recipient).is_some());
 }
 
@@ -127,7 +127,7 @@ fn test_cliff_just_over_boundary_200_total() {
 
     // 161/200 = 80.5% → rejected
     let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &161, &200)
+        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &161, &200, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, VestingError::InvalidCliffRatio);

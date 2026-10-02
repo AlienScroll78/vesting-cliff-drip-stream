@@ -315,7 +315,7 @@ pub fn create_vesting_stream(
 | `recipient` | `Address` | Beneficiary who will claim tokens | Must differ from `sponsor` |
 | `token` | `Address` | [SAC](../docs/glossary.md#sac-stellar-asset-contract)-compatible token contract | — |
 | `rate` | `i128` | Tokens released per [ledger](../docs/glossary.md#ledger) | Must be > 0 |
-| `cliff_duration` | `u32` | Ledgers from now until [cliff](../docs/glossary.md#cliff) | Must be < `total_duration` |
+| `cliff_duration` | `u32` | Ledgers from now until [cliff](../docs/glossary.md#cliff) | Must be ≥ `1` and < `total_duration`; `0` returns `InvalidCliffDuration` |
 | `total_duration` | `u32` | Total stream length in ledgers | Must be > `cliff_duration` |
 
 #### Derived Values
@@ -1528,6 +1528,7 @@ All errors are returned as `u32` in the XDR `ScError::Contract` envelope. Code 0
 | 24 | `StreamNotPaused` | `resume_stream` | Stream is not currently paused |
 | 25 | `VersionOverflow` | `claim_vested`, `cancel_stream` | Version counter has reached `u32::MAX` |
 | 26 | `ClawbackNotSupported` | `clawback_stream` | Token does not support SAC clawback flag |
+| 27 | `InvalidToken` | `create_vesting_stream` | `token` is not a valid SAC; the `try_balance` probe failed |
 
 ### Safe Deposit Boundary
 
