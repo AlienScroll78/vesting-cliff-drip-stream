@@ -29,6 +29,21 @@ coverage:
 coverage-ci:
 	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
 
+## Enforce a minimum 90% line coverage threshold (issue #785).
+## Generates HTML report in docs/coverage/html/ and LCOV in docs/coverage/lcov.info,
+## then fails the build if line coverage drops below 90%.
+## Excludes test helper files from coverage calculation.
+## Install: cargo install cargo-llvm-cov
+coverage-check:
+	cargo llvm-cov \
+		--features testutils \
+		--html \
+		--output-dir docs/coverage/html \
+		--lcov \
+		--output-path docs/coverage/lcov.info \
+		--ignore-filename-regex 'src/tests/.*' \
+		--fail-under-lines 90
+
 ## Validate the on-chain contract spec (schema) against the expected API.
 ## Requires the WASM to be built first; spec-test depends on `build`.
 spec-test: build
