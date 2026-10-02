@@ -65,11 +65,11 @@ proptest! {
         // Two claims at different ledger offsets.
         let a = adv1.min(total);
         advance_ledger(&env, a);
-        let _ = client.try_claim_vested(&recipient);
+        let _ = client.try_claim_vested(&recipient, &None);
 
         let b = adv2.min(total.saturating_sub(a));
         advance_ledger(&env, b);
-        let _ = client.try_claim_vested(&recipient);
+        let _ = client.try_claim_vested(&recipient, &None);
 
         // total_claimed ≤ total_deposit invariant.
         // Use claimable_amount + what was claimed to check: remaining ≥ 0.
@@ -102,7 +102,7 @@ proptest! {
         let total_deposit = rate.checked_mul(total_duration as i128).unwrap();
         mint_to(&env, &token_id, &sponsor, total_deposit);
 
-        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration);
+        client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff, &total_duration, &None);
 
         let adv = advance_before.min(cliff.saturating_sub(1));
         advance_ledger(&env, adv);
@@ -253,10 +253,10 @@ proptest! {
             .unwrap();
 
         advance_ledger(&env_a, t1);
-        let c_a1 = client_a.claim_vested(&recipient_a).unwrap();
+        let c_a1 = client_a.claim_vested(&recipient_a, &None).unwrap();
 
         advance_ledger(&env_a, t2);
-        let c_a2 = client_a.try_claim_vested(&recipient_a).unwrap_or(Ok(0)).unwrap_or(0);
+        let c_a2 = client_a.try_claim_vested(&recipient_a, &None).unwrap_or(Ok(0)).unwrap_or(0);
 
         // ── Scenario B: single claim at t1+t2 ────────────────────────────────
         let env_b = setup_env();
@@ -272,7 +272,7 @@ proptest! {
             .unwrap();
 
         advance_ledger(&env_b, t1 + t2);
-        let c_b = client_b.claim_vested(&recipient_b).unwrap();
+        let c_b = client_b.claim_vested(&recipient_b, &None).unwrap();
 
         prop_assert_eq!(
             c_a1 + c_a2,
@@ -315,14 +315,14 @@ proptest! {
         // Optionally claim before cancel (only succeeds after cliff).
         let claim_advance = adv.min(total);
         advance_ledger(&env, claim_advance);
-        let recipient_claimed = client.try_claim_vested(&recipient).unwrap_or(Ok(0)).unwrap_or(0);
+        let recipient_claimed = client.try_claim_vested(&recipient, &None).unwrap_or(Ok(0)).unwrap_or(0);
 
         // Check token balances before cancel.
         let sponsor_before   = token_client.balance(&sponsor);
         let recipient_before = token_client.balance(&recipient);
 
         // Cancel the stream.
-        let _ = client.try_cancel_stream(&sponsor, &recipient);
+        let _ = client.try_cancel_stream(&sponsor, &recipient, &0);
 
         let sponsor_after   = token_client.balance(&sponsor);
         let recipient_after = token_client.balance(&recipient);

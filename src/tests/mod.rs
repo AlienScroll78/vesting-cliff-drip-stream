@@ -3,23 +3,49 @@
 pub mod token_helper;
 
 mod test_allowlist;
+mod test_auth;
+mod test_batch;
+mod test_batch_create;
+mod test_benchmarks;
 mod test_cancel;
+mod test_cancel_event;
 mod test_claim;
+mod test_clawback;
+mod test_cliff_ratio;
+mod test_config;
+mod test_coverage;
 mod test_create;
+mod test_drain;
 mod test_dust;
 mod test_edge_cases;
+mod test_error_codes;
 mod test_event_snapshots;
 mod test_events;
 mod test_init;
 mod test_initialize;
+mod test_invalid_token;
+mod test_milestone_stream;
+mod test_min_deposit;
+mod test_multi_token;
+mod test_mutations;
+mod test_pause;
+mod test_pause_resume;
 mod test_properties;
+mod test_recipient_transfer;
+mod test_reentrancy;
+mod test_snapshots;
+mod test_sponsor_streams;
+mod test_storage_mutations;
+mod test_stream_status;
+mod test_stress;
 mod test_total_claimed;
+mod test_transfer_failed;
+mod test_transfer_stream;
+mod test_upgrade;
+mod test_upgrade_event;
 mod test_variable_rate;
 mod test_versioning;
 mod test_views;
-mod test_initialize;
-mod test_sponsor_streams;
-mod test_invalid_token;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
@@ -126,8 +152,15 @@ pub fn create_vesting_stream<'a>(
     // deposit = rate (whole tokens) * total_duration
     let deposit = rate * total_duration as i128;
     let (token_id, token_client) = setup_token(env, sponsor, deposit);
-    client
-        .create_vesting_stream(sponsor, recipient, &token_id, &rate, &cliff_duration, &total_duration, &None);
+    client.create_vesting_stream(
+        sponsor,
+        recipient,
+        &token_id,
+        &rate,
+        &cliff_duration,
+        &total_duration,
+        &None,
+    );
     (token_id, token_client)
 }
 

@@ -83,6 +83,9 @@ fn setup_single_stream_then_strict() -> (
 
     let contract_id = mock_env.register(VestingDrips, ());
     let mock_client = VestingDripsClient::new(&mock_env, &contract_id);
+    let _adm_mock_client = soroban_sdk::Address::generate(&mock_env);
+    let _trs_mock_client = soroban_sdk::Address::generate(&mock_env);
+    mock_client.initialize(&_adm_mock_client, &0u32, &_trs_mock_client);
 
     let sponsor = Address::generate(&mock_env);
     let recipient = Address::generate(&mock_env);
@@ -107,6 +110,9 @@ fn setup_single_stream_then_strict() -> (
 
     // Return a strict client: mock_all_auths() is no longer active.
     let strict_client = VestingDripsClient::new(&mock_env, &contract_id);
+    let _adm_strict_client = soroban_sdk::Address::generate(&mock_env);
+    let _trs_strict_client = soroban_sdk::Address::generate(&mock_env);
+    strict_client.initialize(&_adm_strict_client, &0u32, &_trs_strict_client);
     (mock_env, strict_client, sponsor, recipient, token_id)
 }
 
@@ -137,6 +143,9 @@ fn setup_multi_stream_then_strict() -> (
 
     let contract_id = mock_env.register(VestingDrips, ());
     let mock_client = VestingDripsClient::new(&mock_env, &contract_id);
+    let _adm_mock_client = soroban_sdk::Address::generate(&mock_env);
+    let _trs_mock_client = soroban_sdk::Address::generate(&mock_env);
+    mock_client.initialize(&_adm_mock_client, &0u32, &_trs_mock_client);
 
     let sponsor = Address::generate(&mock_env);
     let recipient = Address::generate(&mock_env);
@@ -169,6 +178,9 @@ fn setup_multi_stream_then_strict() -> (
     });
 
     let strict_client = VestingDripsClient::new(&mock_env, &contract_id);
+    let _adm_strict_client = soroban_sdk::Address::generate(&mock_env);
+    let _trs_strict_client = soroban_sdk::Address::generate(&mock_env);
+    strict_client.initialize(&_adm_strict_client, &0u32, &_trs_strict_client);
     (mock_env, strict_client, sponsor, recipient, token_a, token_b)
 }
 
@@ -184,6 +196,12 @@ fn test_create_stream_attacker_as_third_party_panics() {
     let env = setup_env_strict();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -204,6 +222,9 @@ fn test_create_stream_recipient_as_sponsor_panics() {
     let env = setup_env_strict();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     let real_sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -211,7 +232,7 @@ fn test_create_stream_recipient_as_sponsor_panics() {
     mint_to(&env, &token_id, &real_sponsor, 1_000);
 
     // Calling claim_vested as recipient without auth → panics
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
 }
 
 /// The sponsor cannot claim tokens on behalf of the recipient.
@@ -222,7 +243,7 @@ fn test_claim_vested_sponsor_cannot_claim_as_recipient_panics() {
 
     // Sponsor's auth was only mocked during stream creation (now expired).
     // Claiming as recipient without mocked auth → panics.
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -237,7 +258,7 @@ fn test_cancel_stream_attacker_as_third_party_panics() {
 
     let attacker = Address::generate(&env);
     // attacker's auth is not mocked → panics.
-    client.cancel_stream(&attacker, &recipient).unwrap();
+    client.cancel_stream(&attacker, &recipient, &0).unwrap();
 }
 
 /// The recipient cannot cancel their own stream (only the sponsor can).
@@ -247,5 +268,5 @@ fn test_cancel_stream_recipient_cannot_cancel_panics() {
     let (_env, client, _sponsor, recipient, _token_id) = setup_single_stream_then_strict();
 
     // Claiming as recipient without mocked auth → panics
-    client.claim_vested(&recipient, &None).unwrap();
+    client.claim_vested(&recipient).unwrap();
 }
