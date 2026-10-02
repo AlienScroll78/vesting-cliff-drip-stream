@@ -1,3 +1,5 @@
+import { logger as defaultLogger } from './logger.js';
+
 export class ShutdownManager {
   constructor(options = {}) {
     this.isShuttingDown = false;
@@ -5,6 +7,7 @@ export class ShutdownManager {
     this.timeoutMs = options.timeoutMs ?? 30000;
     this.teardownHandlers = new Map();
     this.processExit = options.processExit ?? process.exit;
+    this.logger = options.logger ?? defaultLogger;
 
     if (options.dbPool) {
       this.registerTeardown('dbPool', async () => {
@@ -65,10 +68,13 @@ export class ShutdownManager {
   async performShutdown(server, signal) {
     if (this.isShuttingDown) return;
     this.isShuttingDown = true;
-    console.log(`Received ${signal}. Initiating graceful shutdown...`);
+    this.logger.info('graceful shutdown started', { signal, timeoutMs: this.timeoutMs });
 
     let forceTimer = setTimeout(() => {
-      console.error(`Graceful shutdown timed out after ${this.timeoutMs}ms. Forcing exit.`);
+      this.logger.error('graceful shutdown timed out, forcing exit', {
+        signal,
+        timeoutMs: this.timeoutMs
+      });
       this.processExit(1);
     }, this.timeoutMs);
 
@@ -84,18 +90,18 @@ export class ShutdownManager {
     // 2. Wait for in-flight requests to complete
     await this.waitForInFlightRequests();
 
-    // 3. Execute teardown handlers (DB, Redis, Event worker)
+    // 3. Execute teardown handlers (DB, Redis, event worker)
     for (const [name, handler] of this.teardownHandlers.entries()) {
       try {
-        console.log(`Executing teardown for: ${name}`);
+        this.logger.info('running teardown', { target: name });
         await handler();
       } catch (err) {
-        console.error(`Error during teardown of ${name}:`, err);
+        this.logger.error('teardown failed', { target: name, err });
       }
     }
 
     clearTimeout(forceTimer);
-    console.log('Graceful shutdown completed successfully.');
+    this.logger.info('graceful shutdown completed');
     this.processExit(0);
   }
 

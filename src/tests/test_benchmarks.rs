@@ -63,6 +63,12 @@ fn bench_create_vesting_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -88,6 +94,12 @@ fn bench_claim_vested_at_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -95,7 +107,7 @@ fn bench_claim_vested_at_cliff() {
     advance_ledger(&env, 50); // exactly at cliff
 
     env.budget().reset_default();
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -111,19 +123,25 @@ fn bench_claim_vested_mid_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
 
     // Clear catch-up accrual first.
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // Measure a clean incremental claim.
     advance_ledger(&env, 50);
 
     env.budget().reset_default();
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -139,6 +157,12 @@ fn bench_cancel_stream_before_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -146,7 +170,7 @@ fn bench_cancel_stream_before_cliff() {
     advance_ledger(&env, 10); // still before cliff
 
     env.budget().reset_default();
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -162,6 +186,12 @@ fn bench_cancel_stream_after_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -169,7 +199,7 @@ fn bench_cancel_stream_after_cliff() {
     advance_ledger(&env, 100); // well past the cliff
 
     env.budget().reset_default();
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let cpu = env.budget().cpu_instruction_cost();
     let mem = env.budget().memory_bytes_cost();
@@ -185,6 +215,12 @@ fn bench_get_schedule() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -206,6 +242,12 @@ fn bench_claimable_amount_before_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -229,6 +271,12 @@ fn bench_claimable_amount_after_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -252,6 +300,12 @@ fn bench_is_cliff_passed() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -276,6 +330,12 @@ fn bench_get_stats() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -298,6 +358,12 @@ fn bench_get_status_pre_cliff() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -323,6 +389,12 @@ fn bench_set_min_deposit() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let admin = Address::generate(&env);
 
     env.budget().reset_default();
@@ -342,6 +414,9 @@ fn bench_get_min_deposit() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     env.budget().reset_default();
     let _ = client.get_min_deposit();
@@ -361,6 +436,12 @@ fn bench_pause_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -384,6 +465,12 @@ fn bench_resume_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     create_stream(&env, &client, &sponsor, &recipient);
@@ -409,6 +496,12 @@ fn bench_transfer_recipient() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let new_recipient = Address::generate(&env);
@@ -431,6 +524,12 @@ fn bench_drain_expired_stream() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+    let _adm = soroban_sdk::Address::generate(&env);
+    let _trs = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm, &0u32, &_trs);
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
     let caller = Address::generate(&env);

@@ -47,23 +47,22 @@
   }
 }
 
-/* Respect reduced-motion: fall back to slow opacity pulse */
+/*
+ * Reduced motion (#823): disable the shimmer entirely.
+ *
+ * A moving gradient is exactly what `prefers-reduced-motion` is meant to avoid,
+ * and a pulsing placeholder can still read as motion to a sensitive user. The
+ * skeleton falls back to a static, flat block — the layout placeholder is the
+ * valuable part, not the animation.
+ */
 @media (prefers-reduced-motion: reduce) {
   .skeleton,
   .skeletonRect,
   .skeletonCircle,
   .skeletonText {
-    animation: skeletonPulse 2s ease-in-out infinite;
+    animation: none;
     background-image: none;
-  }
-
-  @keyframes skeletonPulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.45;
-    }
+    background: #e2e8f0;
   }
 }
 

@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
-    "migrate": "node-pg-migrate up --migration-file-language ts",
-    "migrate:down": "node-pg-migrate down --migration-file-language ts",
-    "migrate:down:all": "node-pg-migrate down --count 999 --migration-file-language ts"
+    "migrate:dry-run": "NODE_OPTIONS='--import=tsx' node-pg-migrate up --dry-run --migration-file-language ts --migrations-table schema_migrations",
+    "migrate": "NODE_OPTIONS='--import=tsx' node-pg-migrate up --migration-file-language ts --migrations-table schema_migrations",
+    "migrate:down": "NODE_OPTIONS='--import=tsx' node-pg-migrate down --migration-file-language ts --migrations-table schema_migrations",
+    "migrate:down:all": "NODE_OPTIONS='--import=tsx' node-pg-migrate down --count 999 --migration-file-language ts --migrations-table schema_migrations"
   },
   "dependencies": {
     "@types/jsonwebtoken": "^9.0.9",
@@ -16,7 +17,9 @@
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "pg": "^8.13.3",
+    "node-pg-migrate": "^7.9.1",
     "prom-client": "15.1.3",
+    "redis": "^4.7.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.2",
     "ws": "^8.18.0",

@@ -1,10 +1,11 @@
 "use client";
 
-import { getErrorInfo } from "@/errorMessages";
+import { useTranslation } from "react-i18next";
+import { getErrorInfo } from "@/lib/errorMessages";
 import { ErrorStateIllustration } from "@/components/ErrorStateIllustration";
 
 interface ContractErrorStateProps {
-  /** VestingError code (1–11). Unknown codes fall back to "unexpected" category. */
+  /** VestingError code (1–26). Unknown codes fall back to "unexpected" category. */
   code: number;
   /** Called when the user clicks "Try Again". Only shown for retryable errors. */
   onRetry?: () => void;
@@ -28,10 +29,17 @@ export function ContractErrorState({
   onRetry,
   className,
 }: ContractErrorStateProps) {
+  const { t } = useTranslation();
   const info = getErrorInfo(code);
   const isNetwork = info.category === "network";
   const isUnexpected = info.category === "unexpected";
   const showRetry = info.retryable && onRetry;
+
+  // Look copy up by i18n key, falling back to the English string in the map so
+  // a missing translation still renders readable text (#821).
+  const title = t(`${info.i18nKey}.title`, info.title);
+  const explanation = t(`${info.i18nKey}.explanation`, info.explanation);
+  const action = t(`${info.i18nKey}.action`, info.action);
 
   return (
     <div
@@ -47,9 +55,9 @@ export function ContractErrorState({
 
       {/* Text */}
       <div style={styles.textBlock}>
-        <h2 style={styles.title}>{info.title}</h2>
-        <p style={styles.explanation}>{info.explanation}</p>
-        <p style={styles.action}>{info.action}</p>
+        <h2 style={styles.title}>{title}</h2>
+        <p style={styles.explanation}>{explanation}</p>
+        <p style={styles.action}>{action}</p>
       </div>
 
       {/* Actions */}
@@ -64,7 +72,7 @@ export function ContractErrorState({
               ...(isNetwork ? styles.networkBtn : {}),
             }}
           >
-            {isNetwork ? "Try Again" : "Retry"}
+            {isNetwork ? t("errors.tryAgain", "Try Again") : t("errors.retry", "Retry")}
           </button>
         )}
 
@@ -85,9 +93,9 @@ export function ContractErrorState({
           <a
             href={info.faqUrl}
             style={styles.faqLink}
-            aria-label={`Learn more: ${info.title}`}
+            aria-label={`${t("errors.learnMore", "Learn more")}: ${title}`}
           >
-            Learn more
+            {t("errors.learnMore", "Learn more")}
           </a>
         )}
       </div>

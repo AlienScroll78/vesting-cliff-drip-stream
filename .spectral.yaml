@@ -1,0 +1,32 @@
+extends:
+  - spectral:oas
+
+rules:
+  # ── Required info fields ───────────────────────────────────────────────────
+  info-contact: warn
+  info-description: warn
+
+  # ── Operations must have operationIds ─────────────────────────────────────
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-operationId-valid-in-url: warn
+
+  # ── Tags ──────────────────────────────────────────────────────────────────
+  operation-tags: warn
+  openapi-tags: warn
+  openapi-tags-alphabetical: off
+
+  # ── Responses ─────────────────────────────────────────────────────────────
+  operation-success-response: error
+  oas3-valid-media-example: error
+
+  # ── Descriptions ──────────────────────────────────────────────────────────
+  operation-description: warn
+  tag-description: warn
+
+  # ── Parameters ────────────────────────────────────────────────────────────
+  oas3-parameter-description: warn
+  no-$ref-siblings: error
+
+  # ── Security ──────────────────────────────────────────────────────────────
+  oas3-schema: error

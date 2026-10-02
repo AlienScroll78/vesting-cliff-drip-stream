@@ -7,11 +7,11 @@ import './App.css'
 // #123 — field tooltips
 import { Tooltip } from './Tooltip'
 // #122 — error message map
-import { getErrorInfo } from './errorMessages'
+import { getErrorInfo } from './lib/errorMessages'
 // #121 — Framer Motion animations
 import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animations'
-// #120 — onboarding tour
-import { useOnboardingTour } from './useOnboardingTour'
+// #120 — onboarding tour (state lives in useOnboardingTour)
+import { OnboardingTour } from './components/OnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
 
@@ -37,14 +37,15 @@ function App() {
   // demo: simulate an error code returned from the contract
   const [errorCode, setErrorCode] = useState<number | null>(null)
 
-  // #120 — start tour for first-time users
-  useOnboardingTour()
+  // #120 — the onboarding tour is rendered by <OnboardingTour /> below
 
   const errorInfo = errorCode != null ? getErrorInfo(errorCode) : null
 
   return (
     // #121 — page fade-in on mount
     <PageTransition>
+      {/* #820 — first-time-user onboarding tour */}
+      <OnboardingTour />
       <section id="center">
         <div className="hero">
           <img src={heroImg} className="base" width="170" height="179" alt="" />
@@ -147,10 +148,10 @@ function App() {
           </div>
         )}
 
-        {/* tour anchor for wallet */}
+        {/* #820 — tour anchors: wallet, claim, and timeline targets */}
         <div data-tour="wallet" style={{ marginTop: '8px', opacity: 0, height: 1 }} aria-hidden="true" />
-        {/* tour anchor for create stream */}
-        <div data-tour="create-stream" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
+        <div data-tour="timeline" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
+        <div data-tour="claimable" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
 
         {/* #125 — create stream wizard trigger */}
         <button
