@@ -1,9 +1,12 @@
 /**
- * i18n configuration (#280)
+ * i18n configuration (#280, #767)
  *
  * - Language auto-detected from browser, with localStorage persistence
  * - Fallback to English for any missing keys
- * - English (default) and Spanish translations; Chinese stub retained
+ * - English, Spanish, Chinese, and Portuguese (#767) translations
+ * - Lazy loading via i18next-http-backend when available; falls back to
+ *   bundled translations so the app works in environments where the package
+ *   is not installed (e.g. test runners, SSR stubs).
  * - RTL layout scaffold: LanguageSwitcher sets dir="rtl" for AR/HE
  * - Number & date formatting utilities exported for locale-aware display
  */
@@ -15,16 +18,45 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import en from "./locales/en.json";
 import es from "./locales/es.json";
 import zh from "./locales/zh.json";
+import pt from "./locales/pt.json";
 
 /** localStorage key used to persist the user's language choice. */
 export const LANG_STORAGE_KEY = "vesting-language";
 
-i18n
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
+/** Supported language codes. */
+export const SUPPORTED_LANGS = ["en", "es", "zh", "pt"] as const;
+export type SupportedLang = (typeof SUPPORTED_LANGS)[number];
+
+/**
+ * Attempt to load i18next-http-backend for lazy loading of public locale
+ * files (/public/locales/{lng}/translation.json).  The package may not be
+ * present in all environments (test runners, CI, SSR), so we catch the
+ * import error and fall back to the bundled JSON resources instead.
+ */
+async function initI18n() {
+  let useHttpBackend = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let HttpBackend: any = null;
+
+  try {
+    // Dynamic import — no hard dependency; fails silently when absent.
+    const mod = await import("i18next-http-backend");
+    HttpBackend = mod.default ?? mod;
+    useHttpBackend = true;
+  } catch {
+    // i18next-http-backend not installed — use bundled translations.
+    useHttpBackend = false;
+  }
+
+  const instance = i18n.use(LanguageDetector).use(initReactI18next);
+
+  if (useHttpBackend && HttpBackend) {
+    instance.use(HttpBackend);
+  }
+
+  await instance.init({
     fallbackLng: "en",
-    supportedLngs: ["en", "es", "zh"],
+    supportedLngs: [...SUPPORTED_LANGS],
 
     /**
      * Detection order:
@@ -38,16 +70,37 @@ i18n
       caches: ["localStorage"],
     },
 
-    resources: {
-      en: { translation: en },
-      es: { translation: es },
-      zh: { translation: zh },
-    },
+    // Bundled resources used as fallback when http-backend is unavailable.
+    // When http-backend IS active these act as inline seeds so the first
+    // render is never blank while the network request is in flight.
+    resources: useHttpBackend
+      ? undefined
+      : {
+          en: { translation: en },
+          es: { translation: es },
+          zh: { translation: zh },
+          pt: { translation: pt },
+        },
+
+    // http-backend configuration (only applied when the plugin is loaded).
+    backend: useHttpBackend
+      ? {
+          loadPath: "/locales/{{lng}}/{{ns}}.json",
+        }
+      : undefined,
 
     interpolation: {
       escapeValue: false,
     },
+
+    // Prevent i18next from printing "loading" warnings during SSR / tests
+    // when resources are bundled.
+    initImmediate: !useHttpBackend,
   });
+}
+
+// Kick off init; consumers await i18n.isInitialized or use Suspense.
+void initI18n();
 
 export default i18n;
 

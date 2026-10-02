@@ -27,10 +27,10 @@ resource "aws_sns_topic_subscription" "backup_failure_email" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier        = "${var.environment}-vesting-db"
-  engine            = "postgres"
-  engine_version    = "15"
-  instance_class    = "db.t3.micro"
+  identifier                      = "${var.environment}-vesting-db"
+  engine                          = "postgres"
+  engine_version                  = "15"
+  instance_class                  = var.db_instance_class
   allocated_storage = 20
   db_name           = "vesting"
   username          = "vesting"

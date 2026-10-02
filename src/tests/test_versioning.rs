@@ -54,7 +54,7 @@ fn test_version_increments_on_claim() {
 
     // Advance past cliff.
     advance_ledger(&env, 60);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.version, 2, "version must be 2 after one claim");
@@ -75,10 +75,10 @@ fn test_version_increments_on_each_claim() {
         .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None);
 
     advance_ledger(&env, 60); // past cliff
-    client.claim_vested(&recipient); // version → 2
+    client.claim_vested(&recipient, &None); // version → 2
 
     advance_ledger(&env, 20);
-    client.claim_vested(&recipient); // version → 3
+    client.claim_vested(&recipient, &None); // version → 3
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.version, 3, "version must be 3 after two claims");
@@ -108,7 +108,7 @@ fn test_version_overflow_returns_error() {
 
     // Attempting to claim should now return VersionOverflow.
     advance_ledger(&env, 60); // past cliff
-    let err = client.try_claim_vested(&recipient).unwrap_err().unwrap();
+    let err = client.try_claim_vested(&recipient, &None).unwrap_err().unwrap();
     assert_eq!(
         err,
         VestingError::VersionOverflow,

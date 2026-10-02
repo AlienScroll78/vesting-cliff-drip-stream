@@ -1,5 +1,5 @@
 import { useCallback, useReducer } from "react";
-import { getErrorInfo } from "@/errorMessages";
+import { getErrorMessage } from "@/lib/errorMessages";
 
 // ── State machine ────────────────────────────────────────────────────────────
 
@@ -79,8 +79,8 @@ export function buildErrorMessage(err: unknown): { message: string; code: number
   const code = parseContractErrorCode(err);
 
   if (code !== null) {
-    const info = getErrorInfo(code);
-    return { message: `${info.title}: ${info.explanation} ${info.action}`, code };
+    // Map through the friendly copy table — never surface the raw code (#821).
+    return { message: getErrorMessage(code), code };
   }
 
   const raw = err instanceof Error ? err.message : String(err);
@@ -93,7 +93,29 @@ export function buildErrorMessage(err: unknown): { message: string; code: number
     return { message: "Network error — please check your connection and try again.", code: null };
   }
 
-  return { message: raw || "An unexpected error occurred. Please try again.", code: null };
+  return { message: sanitizeRawMessage(raw), code: null };
+}
+
+/**
+ * Last-resort copy for a non-contract error.
+ *
+ * Raw SDK/RPC strings can contain technical noise (error codes, function names,
+ * stack fragments). Anything that doesn't look like plain prose is replaced with
+ * a generic actionable message so no raw technical text reaches the UI (#821).
+ */
+function sanitizeRawMessage(raw: string): string {
+  const generic = "Something unexpected happened. Please try again in a moment.";
+  if (!raw) return generic;
+
+  // Reject anything carrying an error code, contract identifier, or hex blob.
+  const looksTechnical =
+    /Error:\s*[A-Za-z]/.test(raw) ||
+    /\b[A-Z][a-z]+Error\b/.test(raw) ||
+    /\b(0x[0-9a-fA-F]{8,}|[A-Z]{1,3}[0-9A-Z]{20,})\b/.test(raw) ||
+    /\b[a-z_]+\([a-z_,\s]*\)\b/.test(raw) ||
+    raw.length > 200;
+
+  return looksTechnical ? generic : raw;
 }
 
 // ── Horizon submit with 504 retry ─────────────────────────────────────────────

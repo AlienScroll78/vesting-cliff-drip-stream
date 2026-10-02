@@ -1,6 +1,7 @@
 "use client";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
+import { AnalyticsSummarySkeleton } from "./Skeletons";
 import styles from "./AggregateStats.module.css";
 
 interface AggregateStatsProps {
@@ -22,11 +23,12 @@ export function AggregateStats({ streams, isLoading = false }: AggregateStatsPro
   const totalClaimable = streams.reduce((sum, s) => sum + s.claimableAmount, 0);
 
   if (isLoading) {
+    // #823 — card-shaped placeholders that match the real stat cards' heights.
     return (
       <div className={styles.container}>
-        <div className={styles.skeleton} aria-hidden="true" />
-        <div className={styles.skeleton} aria-hidden="true" />
-        <div className={styles.skeleton} aria-hidden="true" />
+        <div style={{ width: "100%" }}>
+          <AnalyticsSummarySkeleton cards={3} showChart={false} />
+        </div>
       </div>
     );
   }

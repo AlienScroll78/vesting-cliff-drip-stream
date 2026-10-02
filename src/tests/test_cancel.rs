@@ -26,7 +26,7 @@ fn test_cancel_before_cliff_full_refund() {
     let tc = token_client(&env, &token_id);
 
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     // Full deposit refunded: 200 * 10 = 2000
     assert_eq!(tc.balance(&sponsor), 2_000);
@@ -44,7 +44,7 @@ fn test_cancel_after_cliff_splits_tokens() {
     // At ledger 200 (start=100, cliff=150): earned = 100 ledgers * 10 = 1000
     // remaining = 100 ledgers * 10 = 1000
     advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(tc.balance(&recipient), 1_000);
     assert_eq!(tc.balance(&sponsor), 1_000);
@@ -57,7 +57,7 @@ fn test_cancel_nonexistent_stream_fails() {
     let (_contract_id, client) = register_contract(&env);
     let (sponsor, recipient) = generate_addresses(&env);
 
-    let err = client.try_cancel_stream(&sponsor, &recipient).unwrap_err().unwrap();
+    let err = client.try_cancel_stream(&sponsor, &recipient, &0).unwrap_err().unwrap();
     assert_eq!(err, VestingError::ScheduleNotFound);
 }
 
@@ -70,7 +70,7 @@ fn test_cancel_one_ledger_before_cliff_full_refund() {
 
     // ledger 149 < cliff_ledger 150
     advance_ledger(&env, 49);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(tc.balance(&sponsor), 2_000);
     assert_eq!(tc.balance(&recipient), 0);
@@ -86,7 +86,7 @@ fn test_cancel_exactly_at_cliff_splits_tokens() {
 
     // At cliff_ledger 150: earned = 50 * 10 = 500
     advance_ledger(&env, 50);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(tc.balance(&recipient), 500);
     assert_eq!(tc.balance(&sponsor), 1_500);
@@ -102,9 +102,28 @@ fn test_cancel_one_ledger_after_cliff_splits_tokens() {
 
     // At ledger 151: earned = 51 * 10 = 510
     advance_ledger(&env, 51);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(tc.balance(&recipient), 510);
     assert_eq!(tc.balance(&sponsor), 1_490);
     assert!(client.get_schedule(&recipient).is_none());
+}
+
+#[test]
+fn test_cancel_stream_id_leaves_other_stream_active() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor_a, recipient) = generate_addresses(&env);
+    let sponsor_b = Address::generate(&env);
+    let (token_a, _) = create_vesting_stream(&env, &client, &sponsor_a, &recipient, 10, 50, 200);
+    let (token_b, _) = create_vesting_stream(&env, &client, &sponsor_b, &recipient, 20, 50, 200);
+
+    client.cancel_stream(&sponsor_a, &recipient, &0);
+
+    assert!(client.get_schedule_by_id(&recipient, &0).is_none());
+    assert_eq!(client.get_schedule_by_id(&recipient, &1).unwrap().token, token_b);
+    assert_eq!(
+        soroban_sdk::token::TokenClient::new(&env, &token_a).balance(&sponsor_a),
+        2_000
+    );
 }
