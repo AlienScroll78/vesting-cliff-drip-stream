@@ -7,6 +7,7 @@ import { sponsorStreamsRouter } from './routes/streams.js';
 import { adminRouter } from './admin/index.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { docsRouter } from './routes/docs.js';
 
 const app = express();
 
@@ -39,6 +40,9 @@ app.use('/api/streams', sponsorStreamsRouter);
 
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
+
+// Swagger UI — served at /api/docs (no auth required)
+app.use('/api/docs', docsRouter);
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof Error) {
