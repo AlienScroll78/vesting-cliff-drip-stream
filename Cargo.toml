@@ -1,7 +1,12 @@
+[workspace]
+members = [".", "db-tests"]
+resolver = "2"
+
 [package]
 name = "vesting-cliff-drip-stream"
 version = "1.0.0"
 edition = "2021"
+rust-version = "1.84"
 description = "A time-locked cliff vesting contract built on Soroban for long-term contributor retention"
 license = "MIT"
 repository = "https://github.com/your-org/vesting-cliff-drip-stream"
@@ -12,6 +17,7 @@ doctest = false
 
 [features]
 testutils = ["soroban-sdk/testutils"]
+contract-spec-tests = []
 
 [dependencies]
 soroban-sdk = { version = "22.0.0", features = [] }
@@ -22,6 +28,9 @@ soroban-token-sdk = { version = "22.0.0" }
 proptest = "=1.0.0"
 stellar-xdr = { version = "22.1.0", features = ["curr"] }
 wasmparser = "=0.116.1"
+ed25519-dalek = "<3"
+insta = { version = "1.41.1", features = ["json"] }
+serde_json = "1.0"
 
 [profile.release]
 opt-level = "z"

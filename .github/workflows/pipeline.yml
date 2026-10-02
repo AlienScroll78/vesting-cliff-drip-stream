@@ -1,550 +1,773 @@
-# ──────────────────────────────────────────────────────────────────────────────
-# pipeline.yml – Unified multi-environment CI/CD pipeline
-#
-# Pipeline status badges:
-#   [![Pipeline](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/pipeline.yml)
-#   [![CI](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml/badge.svg)](https://github.com/AlienScroll78/vesting-cliff-drip-stream/actions/workflows/ci.yml)
-#
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  Scenario A – Pull Request                                               │
-# │    lint → unit-tests → build → contract-tests                            │
-# │                       build → wasm-size-check                            │
-# │    frontend-lint                                                          │
-# │                                                                           │
-# │  Scenario B – Push to main                                               │
-# │    (all PR jobs) + e2e-tests → staging-deploy                            │
-# │                                                                           │
-# │  Scenario C – Release tag (v*)                                           │
-# │    (all PR + main jobs) + production-deploy (manual approval gate)       │
-# │    + release-wasm-attach + slack-notify                                  │
-# └─────────────────────────────────────────────────────────────────────────┘
-#
-# Required secrets:
-#   SLACK_WEBHOOK_URL   – Incoming webhook for failure + success notifications
-#   GH_TOKEN            – Fine-grained PAT (Actions-variable write scope)
-#   STELLAR_SECRET_KEY  – Testnet deployer key (staging)
-#   KUBECONFIG_STAGING  – base64-encoded kubeconfig for the staging cluster
-#   KUBECONFIG_PROD     – base64-encoded kubeconfig for the production cluster
-#
-# Required environments (Settings → Environments):
-#   staging    – no approval gate; used by staging-deploy
-#   production – required reviewers configured; used by production-deploy
-# ──────────────────────────────────────────────────────────────────────────────
 name: Pipeline
 
 on:
   pull_request:
-
   push:
-    branches: [main]
+    branches:
+      - main
     tags:
       - "v*"
+  workflow_dispatch:
 
-# Cancel in-flight runs for the same PR / branch so old runs don't race.
-# Release tag pushes are not cancelled (group is unique per tag).
+permissions:
+  contents: read
+
 concurrency:
-  group: pipeline-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  group: pipeline-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
-  WASM_PATH: target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm
   WASM_SIZE_LIMIT_KB: 100
-
-# ── Permissions ───────────────────────────────────────────────────────────────
-permissions:
-  contents: write       # upload release assets
-  pull-requests: write  # post PR comments
-  actions: write        # workflow_dispatch / repository_dispatch
-  id-token: write       # OIDC for cloud auth (production deploy)
-
-# =============================================================================
-# SCENARIO A – PR JOBS (run on every trigger)
-# =============================================================================
+  OPTIMIZED_WASM: target/vesting_cliff_drip_stream.optimized.wasm
+  CONTRACT_ARTIFACT: contract-${{ github.sha }}
+  TERRAFORM_PLAN_ARTIFACT: terraform-plan-${{ github.sha }}
 
 jobs:
-  # ── lint ────────────────────────────────────────────────────────────────────
-  lint:
-    name: Lint (fmt + clippy)
+  rust-lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust stable (with fmt + clippy)
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-
-      - name: Cache cargo
+      - name: Cache Rust toolchain artifacts
+        id: cargo-cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-lint-
-
+          key: ${{ runner.os }}-rust-lint-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-lint-
+            ${{ runner.os }}-rust-
+      - name: Record cache result
+        run: |
+          echo "### Rust cache: ${{ steps.cargo-cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Check formatting
         run: cargo fmt --all -- --check
-
-      - name: Clippy (deny warnings)
+      - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # ── unit-tests ──────────────────────────────────────────────────────────────
-  unit-tests:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-test-
-
-      - name: Run unit tests with testutils
-        run: cargo test --features testutils
-
-  # ── build ───────────────────────────────────────────────────────────────────
-  build:
-    name: Build (WASM + frontend)
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    outputs:
-      wasm-artifact: wasm-${{ github.run_id }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-
-
-      - name: Build WASM
-        run: cargo build --target wasm32-unknown-unknown --release
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci --legacy-peer-deps
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: Upload WASM artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-${{ github.run_id }}
-          path: ${{ env.WASM_PATH }}
-          retention-days: 7
-
-  # ── contract-tests ──────────────────────────────────────────────────────────
-  contract-tests:
-    name: Contract spec tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    timeout-minutes: 12
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-
-
-      # Download the pre-built WASM so the contract_spec test can find it
-      # without re-running the full WASM build.
-      - name: Download WASM artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.run_id }}
-          path: target/wasm32-unknown-unknown/release/
-
-      - name: Run contract spec tests
-        run: cargo test --test contract_spec
-
-  # ── wasm-size-check ─────────────────────────────────────────────────────────
-  wasm-size-check:
-    name: WASM size check
-    runs-on: ubuntu-latest
-    needs: [build]
-    timeout-minutes: 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download WASM artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.run_id }}
-          path: wasm-artifact/
-
-      - name: Check WASM size and report
-        id: size
-        run: |
-          WASM_FILE=$(find wasm-artifact/ -name "*.wasm" | head -1)
-          SIZE_BYTES=$(stat -c%s "$WASM_FILE")
-          SIZE_KB=$(echo "scale=2; $SIZE_BYTES / 1024" | bc)
-          LIMIT_BYTES=$(( ${{ env.WASM_SIZE_LIMIT_KB }} * 1024 ))
-
-          echo "wasm_size_kb=${SIZE_KB}" >> "$GITHUB_OUTPUT"
-          echo "wasm_size_bytes=${SIZE_BYTES}" >> "$GITHUB_OUTPUT"
-
-          echo "### 📦 WASM Size Report"
-          echo "File : $WASM_FILE"
-          echo "Size : ${SIZE_KB} KB (${SIZE_BYTES} bytes)"
-          echo "Limit: ${{ env.WASM_SIZE_LIMIT_KB }} KB"
-
-          if [[ "$SIZE_BYTES" -gt "$LIMIT_BYTES" ]]; then
-            echo "❌ WASM exceeds ${WASM_SIZE_LIMIT_KB} KB limit!"
-            echo "size_ok=false" >> "$GITHUB_OUTPUT"
-            exit 1
-          else
-            echo "✅ WASM is within the ${WASM_SIZE_LIMIT_KB} KB limit."
-            echo "size_ok=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Post size as a PR comment (only on pull_request events)
-      - name: Post WASM size comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sizeKb  = '${{ steps.size.outputs.wasm_size_kb }}';
-            const sizeOk  = '${{ steps.size.outputs.size_ok }}' === 'true';
-            const limitKb = '${{ env.WASM_SIZE_LIMIT_KB }}';
-            const icon    = sizeOk ? '✅' : '❌';
-            const status  = sizeOk ? 'within limit' : '**EXCEEDS LIMIT**';
-
-            const body = `## ${icon} WASM Size Check\n\n` +
-              `| Metric | Value |\n|---|---|\n` +
-              `| Size   | **${sizeKb} KB** |\n` +
-              `| Limit  | ${limitKb} KB |\n` +
-              `| Status | ${status} |\n\n` +
-              (sizeOk ? '' : `> ⚠️ The compiled WASM exceeds the ${limitKb} KB budget. ` +
-                `Please optimise the contract before merging.\n`);
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c =>
-              c.user.login === 'github-actions[bot]' &&
-              c.body.includes('WASM Size Check')
-            );
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-  # ── frontend-lint ────────────────────────────────────────────────────────────
   frontend-lint:
-    name: Frontend lint (typecheck)
+    name: Frontend lint
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 9
     defaults:
       run:
         working-directory: frontend
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node 20
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci --legacy-peer-deps
-
-      - name: Typecheck
+      - name: Run frontend linter
+        run: npm run lint
+      - name: Run frontend typecheck
         run: npm run typecheck
 
-# =============================================================================
-# SCENARIO B – MERGE TO MAIN  (push to main only)
-# =============================================================================
-
-  # ── e2e-tests ────────────────────────────────────────────────────────────────
-  e2e-tests:
-    name: Playwright E2E tests
+  backend-lint:
+    name: Backend lint
     runs-on: ubuntu-latest
-    needs: [lint, unit-tests, build, contract-tests, wasm-size-check, frontend-lint]
-    # Only run on pushes to main (not on PRs or tag pushes)
-    if: >
-      github.event_name == 'push' &&
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    timeout-minutes: 20
-
+    timeout-minutes: 9
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node 20
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
         run: npm ci --legacy-peer-deps
+      - name: Run backend tests
+        run: npm test
+      - name: Typecheck backend
+        run: npx tsc --noEmit
 
-      - name: Install Playwright browsers
-        working-directory: frontend
-        run: npx playwright install chromium --with-deps
-
-      - name: Run Playwright E2E tests
-        working-directory: frontend
-        run: npx playwright test
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-${{ github.run_id }}
-          path: frontend/playwright-report/
-          retention-days: 14
-
-  # ── staging-deploy ───────────────────────────────────────────────────────────
-  staging-deploy:
-    name: Deploy to staging
+  contract-tests:
+    name: Contract tests (${{ matrix.toolchain }})
     runs-on: ubuntu-latest
-    needs: [e2e-tests]
-    # Only deploy on pushes to main (not on tag pushes — those go via production)
-    if: >
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
-    environment: staging
     timeout-minutes: 15
-
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain:
+          - stable
+          - 1.84.0
     steps:
       - uses: actions/checkout@v4
-
-      # Trigger the dedicated staging.yml via repository_dispatch so staging
-      # logic stays in a single place. The staging workflow listens on push to
-      # main, but using repository_dispatch here makes it explicit and allows
-      # the pipeline to track the deploy as a downstream dependency.
-      - name: Trigger staging deployment workflow
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run staging.yml \
-            --repo "${{ github.repository }}" \
-            --ref main
-
-      - name: Report staging trigger
-        run: |
-          echo "✅ Staging deployment triggered via staging.yml"
-          echo "Monitor at: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/staging.yml"
-
-# =============================================================================
-# SCENARIO C – RELEASE TAG  (push tags v*)
-# =============================================================================
-
-  # ── production-deploy ────────────────────────────────────────────────────────
-  production-deploy:
-    name: Deploy to production
-    runs-on: ubuntu-latest
-    needs: [e2e-tests]
-    # Only run on semver tag pushes
-    if: >
-      github.event_name == 'push' &&
-      startsWith(github.ref, 'refs/tags/v')
-    environment: production   # <── manual approval gate configured here
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust ${{ matrix.toolchain }}
+        uses: dtolnay/rust-toolchain@master
         with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
+          toolchain: ${{ matrix.toolchain }}
+      - name: Cache Rust toolchain artifacts
+        id: cargo-cache
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-
-
-      - name: Build WASM (release)
-        run: cargo build --target wasm32-unknown-unknown --release
-
-      - name: Compute checksums
+          key: ${{ runner.os }}-rust-tests-${{ matrix.toolchain }}-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-tests-${{ matrix.toolchain }}-
+            ${{ runner.os }}-rust-tests-
+      - name: Record cache result
         run: |
-          sha256sum "${{ env.WASM_PATH }}" > target/wasm32-unknown-unknown/release/SHA256SUMS.txt
-          cat target/wasm32-unknown-unknown/release/SHA256SUMS.txt
+          echo "### Contract cache (${{ matrix.toolchain }}): ${{ steps.cargo-cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Run contract tests
+        run: cargo test --features testutils
 
-      - name: Attach WASM to GitHub Release
-        uses: softprops/action-gh-release@v2
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust toolchain artifacts
+        id: cargo-cache
+        uses: actions/cache@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            ${{ env.WASM_PATH }}
-            target/wasm32-unknown-unknown/release/SHA256SUMS.txt
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-rust-coverage-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-coverage-
+            ${{ runner.os }}-rust-
+      - name: Record cache result
+        run: |
+          echo "### Coverage cache: ${{ steps.cargo-cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Enforce coverage thresholds
+        run: cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: lcov.info
+          if-no-files-found: error
+          retention-days: 7
 
+  wasm-size-check:
+    name: WASM size
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Cache Rust toolchain artifacts
+        id: cargo-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-rust-wasm-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-wasm-
+            ${{ runner.os }}-rust-
+      - name: Record cache result
+        run: |
+          echo "### WASM cache: ${{ steps.cargo-cache.outputs.cache-hit }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build optimized WASM
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          stellar contract optimize \
+            --wasm target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm \
+            --wasm-out "$OPTIMIZED_WASM"
+      - name: Enforce WASM size limit
+        run: |
+          size_bytes=$(stat -c%s "$OPTIMIZED_WASM")
+          limit_bytes=$((WASM_SIZE_LIMIT_KB * 1024))
+          size_kb=$(awk -v bytes="$size_bytes" 'BEGIN { printf "%.2f", bytes / 1024 }')
+          {
+            echo "### WASM size"
+            echo "| Metric | Value |"
+            echo "|---|---:|"
+            echo "| Size | ${size_kb} KB |"
+            echo "| Limit | ${WASM_SIZE_LIMIT_KB} KB |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$size_bytes" -le "$limit_bytes"
+
+  security-scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Rust dependencies
+        run: cargo audit --deny warnings --config audit.toml
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high --omit=dev
+      - name: Audit backend dependencies
+        working-directory: backend
+        run: npm audit --audit-level=high --omit=dev
+      - name: Scan repository configuration
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  frontend-tests:
+    name: Frontend unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Run frontend tests
+        run: npm test
+
+  pr-gate:
+    name: PR gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: always()
+    needs:
+      - rust-lint
+      - frontend-lint
+      - backend-lint
+      - contract-tests
+      - coverage
+      - wasm-size-check
+      - security-scan
+      - frontend-tests
+    steps:
+      - name: Verify required checks
+        env:
+          RUST_LINT: ${{ needs.rust-lint.result }}
+          FRONTEND_LINT: ${{ needs.frontend-lint.result }}
+          BACKEND_LINT: ${{ needs.backend-lint.result }}
+          CONTRACT_TESTS: ${{ needs.contract-tests.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+          WASM_SIZE: ${{ needs.wasm-size-check.result }}
+          SECURITY: ${{ needs.security-scan.result }}
+          FRONTEND_TESTS: ${{ needs.frontend-tests.result }}
+        run: |
+          {
+            echo "### Pull request gate"
+            echo "- Rust lint: $RUST_LINT"
+            echo "- Frontend lint: $FRONTEND_LINT"
+            echo "- Backend lint: $BACKEND_LINT"
+            echo "- Contract tests: $CONTRACT_TESTS"
+            echo "- Coverage: $COVERAGE"
+            echo "- WASM size: $WASM_SIZE"
+            echo "- Security: $SECURITY"
+            echo "- Frontend tests: $FRONTEND_TESTS"
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$RUST_LINT" = success
+          test "$FRONTEND_LINT" = success
+          test "$BACKEND_LINT" = success
+          test "$CONTRACT_TESTS" = success
+          test "$COVERAGE" = success
+          test "$WASM_SIZE" = success
+          test "$SECURITY" = success
+          test "$FRONTEND_TESTS" = success
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: pr-gate
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Cache Rust toolchain artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-rust-build-${{ hashFiles('Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-build-
+            ${{ runner.os }}-rust-
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build and optimize contract
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+          stellar contract optimize \
+            --wasm target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm \
+            --wasm-out "$OPTIMIZED_WASM"
+          sha256sum "$OPTIMIZED_WASM" > "$(dirname "$OPTIMIZED_WASM")/SHA256SUMS.txt"
+      - name: Setup frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci --legacy-peer-deps
+          npm run build
+      - name: Setup backend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Typecheck backend
+        working-directory: backend
+        run: |
+          npm ci --legacy-peer-deps
+          npx tsc --noEmit
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build contract image with persistent cache
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          tags: vesting-contract:${{ github.sha }}
+          cache-from: type=gha,scope=contract-image
+          cache-to: type=gha,mode=max,scope=contract-image
+      - name: Upload contract artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CONTRACT_ARTIFACT }}
+          path: |
+            target/vesting_cliff_drip_stream.optimized.wasm
+            target/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ github.sha }}
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Restore Stellar quickstart image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/docker/quickstart.Dockerfile
+          load: true
+          push: false
+          tags: stellar-quickstart:ci
+          cache-from: type=gha,scope=stellar-quickstart
+          cache-to: type=gha,mode=max,scope=stellar-quickstart
+      - name: Tag cached Stellar quickstart image
+        run: docker tag stellar-quickstart:ci stellar/quickstart:latest
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Run Stellar integration suites
+        run: |
+          docker compose -f docker-compose.e2e.yml up -d --wait
+          trap 'docker compose -f docker-compose.e2e.yml down -v' EXIT
+          node tests/e2e/run_e2e.js
+          node tests/integration/indexer_pipeline.test.js
+
+  infrastructure-plan:
+    name: Infrastructure plan
+    runs-on: ubuntu-latest
+    needs: build
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    environment: testnet
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: Initialize Terraform
+        env:
+          TF_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ vars.TERRAFORM_LOCK_TABLE }}
+        run: |
+          terraform init \
+            -backend-config="bucket=$TF_BUCKET" \
+            -backend-config="key=vesting/testnet/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=$TF_LOCK_TABLE"
+      - name: Create testnet plan
+        env:
+          TF_VAR_db_password: ${{ secrets.TESTNET_DB_PASSWORD }}
+          TF_VAR_cost_alert_emails: ${{ vars.COST_ALERT_EMAILS }}
+          TF_VAR_slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          terraform workspace new testnet 2>/dev/null || terraform workspace select testnet
+          terraform fmt -check -recursive
+          terraform validate
+          terraform plan -var-file=envs/staging.tfvars -no-color -out=terraform.tfplan
+      - name: Upload Terraform plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TERRAFORM_PLAN_ARTIFACT }}
+          path: terraform/terraform.tfplan
+          if-no-files-found: error
+          retention-days: 7
+
+  infrastructure-apply-testnet:
+    name: Infrastructure apply (testnet)
+    runs-on: ubuntu-latest
+    needs: infrastructure-plan
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    environment: testnet
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - name: Download approved plan
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.TERRAFORM_PLAN_ARTIFACT }}
+          path: terraform
+      - name: Apply approved plan
+        env:
+          TF_BUCKET: ${{ vars.TERRAFORM_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ vars.TERRAFORM_LOCK_TABLE }}
+        run: |
+          terraform init \
+            -backend-config="bucket=$TF_BUCKET" \
+            -backend-config="key=vesting/testnet/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=$TF_LOCK_TABLE"
+          terraform workspace select testnet
+          terraform apply -auto-approve terraform.tfplan
+
+  deploy-testnet:
+    name: Deploy contract (testnet)
+    runs-on: ubuntu-latest
+    needs:
+      - integration-tests
+      - infrastructure-apply-testnet
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    environment: testnet
+    timeout-minutes: 15
+    outputs:
+      contract-id: ${{ steps.deploy.outputs.contract-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download optimized contract
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CONTRACT_ARTIFACT }}
+          path: target
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Add testnet deployer
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
+        run: |
+          echo "::add-mask::$STELLAR_SECRET_KEY"
+          stellar keys add deployer --secret-key "$STELLAR_SECRET_KEY" --network testnet
+      - name: Deploy and initialize contract
+        id: deploy
+        env:
+          FEE_BPS: ${{ vars.TESTNET_FEE_BPS }}
+          TREASURY: ${{ vars.TESTNET_TREASURY_ADDRESS }}
+        run: |
+          contract_id=$(stellar contract deploy --wasm "$OPTIMIZED_WASM" --source deployer --network testnet)
+          admin_address=$(stellar keys address deployer --network testnet)
+          treasury=${TREASURY:-$admin_address}
+          stellar contract invoke \
+            --id "$contract_id" \
+            --source deployer \
+            --network testnet \
+            -- \
+            initialize \
+            --admin "$admin_address" \
+            --fee_bps "${FEE_BPS:-0}" \
+            --treasury "$treasury"
+          echo "contract-id=$contract_id" >> "$GITHUB_OUTPUT"
+          echo "### Testnet contract: \`$contract_id\`" >> "$GITHUB_STEP_SUMMARY"
+
+  testnet-smoke:
+    name: Testnet smoke tests
+    runs-on: ubuntu-latest
+    needs: deploy-testnet
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    environment: testnet
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Add testnet deployer
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
+        run: |
+          echo "::add-mask::$STELLAR_SECRET_KEY"
+          stellar keys add deployer --secret-key "$STELLAR_SECRET_KEY" --network testnet
+      - name: Run smoke tests
+        env:
+          VESTING_CONTRACT: ${{ needs.deploy-testnet.outputs.contract-id }}
+          SPONSOR: deployer
+          RECIPIENT: ${{ secrets.TESTNET_RECIPIENT }}
+          TOKEN: ${{ secrets.TESTNET_TOKEN }}
+          SOROBAN_NETWORK: testnet
+        run: ./scripts/smoke_test.sh
+
+  deploy-mainnet:
+    name: Deploy contract (mainnet)
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - integration-tests
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: mainnet
+    timeout-minutes: 20
+    outputs:
+      contract-id: ${{ steps.deploy.outputs.contract-id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download optimized contract
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CONTRACT_ARTIFACT }}
+          path: target
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Add mainnet deployer
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_MAINNET_SECRET_KEY }}
+        run: |
+          echo "::add-mask::$STELLAR_SECRET_KEY"
+          stellar keys add deployer --secret-key "$STELLAR_SECRET_KEY" --network mainnet
+      - name: Deploy and initialize contract
+        id: deploy
+        env:
+          FEE_BPS: ${{ vars.MAINNET_FEE_BPS }}
+          TREASURY: ${{ vars.MAINNET_TREASURY_ADDRESS }}
+        run: |
+          contract_id=$(stellar contract deploy --wasm "$OPTIMIZED_WASM" --source deployer --network mainnet)
+          admin_address=$(stellar keys address deployer --network mainnet)
+          treasury=${TREASURY:-$admin_address}
+          stellar contract invoke \
+            --id "$contract_id" \
+            --source deployer \
+            --network mainnet \
+            -- \
+            initialize \
+            --admin "$admin_address" \
+            --fee_bps "${FEE_BPS:-0}" \
+            --treasury "$treasury"
+          echo "contract-id=$contract_id" >> "$GITHUB_OUTPUT"
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: "3.14.4"
-
-      - name: Configure production kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 --decode > ~/.kube/config
-          chmod 600 ~/.kube/config
-
-      - name: Helm upgrade/install production
+          version: 3.14.4
+      - name: Configure production cluster
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          KUBECONFIG_MAINNET: ${{ secrets.KUBECONFIG_MAINNET }}
         run: |
+          echo "::add-mask::$KUBECONFIG_MAINNET"
+          mkdir -p "$HOME/.kube"
+          echo "$KUBECONFIG_MAINNET" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+      - name: Deploy production application
+        env:
+          IMAGE_REPOSITORY: ${{ vars.MAINNET_IMAGE_REPOSITORY }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          NAMESPACE: ${{ vars.MAINNET_K8S_NAMESPACE }}
+        run: |
+          : "${IMAGE_REPOSITORY:?MAINNET_IMAGE_REPOSITORY environment variable is required}"
+          : "${NAMESPACE:?MAINNET_K8S_NAMESPACE environment variable is required}"
           helm upgrade vesting-prod helm/vesting-backend \
             --install \
-            --namespace production \
+            --namespace "$NAMESPACE" \
             --create-namespace \
             --wait \
             --timeout 10m \
             --atomic \
-            --set image.tag="${RELEASE_TAG}" \
-            --set ingress.host="https://api.vesting.example.com"
+            -f helm/vesting-backend/values-production.yaml \
+            --set image.repository="$IMAGE_REPOSITORY" \
+            --set image.tag="$RELEASE_TAG"
 
-      - name: Notify Slack – production deploy success
-        if: success()
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "text": "🚀 *Production deployment succeeded*",
-              "attachments": [{
-                "color": "good",
-                "fields": [
-                  {"title": "Tag",        "value": "${{ github.ref_name }}", "short": true},
-                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
-                  {"title": "Run",        "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>", "short": false}
-                ]
-              }]
-            }'
-
-# =============================================================================
-# FAILURE NOTIFICATION – fires on any job failure across all scenarios
-# =============================================================================
-
-  # ── notify-failure ───────────────────────────────────────────────────────────
-  notify-failure:
-    name: Slack failure notification
+  mainnet-smoke:
+    name: Mainnet smoke tests
     runs-on: ubuntu-latest
-    # Run after all real jobs; trigger only when something actually failed.
-    needs:
-      - lint
-      - unit-tests
-      - build
-      - contract-tests
-      - wasm-size-check
-      - frontend-lint
-      - e2e-tests
-      - staging-deploy
-      - production-deploy
-    if: >
-      always() &&
-      (
-        needs.lint.result             == 'failure' ||
-        needs.unit-tests.result       == 'failure' ||
-        needs.build.result            == 'failure' ||
-        needs.contract-tests.result   == 'failure' ||
-        needs.wasm-size-check.result  == 'failure' ||
-        needs.frontend-lint.result    == 'failure' ||
-        needs.e2e-tests.result        == 'failure' ||
-        needs.staging-deploy.result   == 'failure' ||
-        needs.production-deploy.result == 'failure'
-      )
-
+    needs: deploy-mainnet
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment: mainnet
+    timeout-minutes: 10
     steps:
-      - name: Send Slack alert
+      - uses: actions/checkout@v4
+      - name: Install Stellar CLI
+        run: |
+          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Add mainnet deployer
+        env:
+          STELLAR_SECRET_KEY: ${{ secrets.STELLAR_MAINNET_SECRET_KEY }}
+        run: |
+          echo "::add-mask::$STELLAR_SECRET_KEY"
+          stellar keys add deployer --secret-key "$STELLAR_SECRET_KEY" --network mainnet
+      - name: Run smoke tests
+        env:
+          VESTING_CONTRACT: ${{ needs.deploy-mainnet.outputs.contract-id }}
+          SPONSOR: deployer
+          RECIPIENT: ${{ secrets.MAINNET_RECIPIENT }}
+          TOKEN: ${{ secrets.MAINNET_TOKEN }}
+          SOROBAN_NETWORK: mainnet
+        run: ./scripts/smoke_test.sh
+
+  github-release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - mainnet-smoke
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Download contract artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CONTRACT_ARTIFACT }}
+          path: target
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            target/vesting_cliff_drip_stream.optimized.wasm
+            target/SHA256SUMS.txt
+
+  notify-failure:
+    name: Failure notification
+    runs-on: ubuntu-latest
+    if: always() && (needs.build.result == 'failure' || needs.integration-tests.result == 'failure' || needs.deploy-testnet.result == 'failure' || needs.deploy-mainnet.result == 'failure' || needs.github-release.result == 'failure')
+    needs:
+      - build
+      - integration-tests
+      - deploy-testnet
+      - deploy-mainnet
+      - github-release
+    steps:
+      - name: Write failure summary
+        env:
+          BUILD: ${{ needs.build.result }}
+          INTEGRATION: ${{ needs.integration-tests.result }}
+          TESTNET_DEPLOY: ${{ needs.deploy-testnet.result }}
+          MAINNET_DEPLOY: ${{ needs.deploy-mainnet.result }}
+          RELEASE: ${{ needs.github-release.result }}
+        run: |
+          {
+            echo "### Pipeline failure"
+            echo "- Build: $BUILD"
+            echo "- Integration: $INTEGRATION"
+            echo "- Testnet deploy: $TESTNET_DEPLOY"
+            echo "- Mainnet deploy: $MAINNET_DEPLOY"
+            echo "- Release: $RELEASE"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Notify Slack
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          # Determine which jobs failed for a useful message
-          FAILED_JOBS=""
-          for job in lint unit-tests build contract-tests wasm-size-check frontend-lint e2e-tests staging-deploy production-deploy; do
-            result_var="needs_${job//-/_}_result"
-            echo "Checking $job"
-          done
-
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "Slack webhook is not configured"
+            exit 0
+          fi
           curl -fsS -X POST "$SLACK_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d '{
-              "text": "❌ *Pipeline failed*",
-              "attachments": [{
-                "color": "danger",
-                "fields": [
-                  {"title": "Repository", "value": "${{ github.repository }}", "short": true},
-                  {"title": "Ref",        "value": "${{ github.ref_name }}", "short": true},
-                  {"title": "Triggered by", "value": "${{ github.actor }}", "short": true},
-                  {"title": "Run",        "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View failed run>", "short": false}
-                ]
-              }]
-            }'
+            -d "{\"text\":\"Pipeline failed for ${{ github.repository }} on ${{ github.ref_name }}. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
