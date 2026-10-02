@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json",
     "test:visual": "playwright test --config=playwright.visual.config.ts",
-    "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots"
+    "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots",
+    "test:a11y": "playwright test --config=playwright.a11y.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.5.7",
@@ -27,6 +28,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.61.1",
     "@sentry/react": "^10.62.0",
     "@testing-library/dom": "^10.4.1",
@@ -39,6 +41,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^2.1.9",
+    "axe-core": "^4.13.0",
     "jsdom": "^25.0.1",
     "msw": "^2.15.0",
     "oxlint": "^1.69.0",

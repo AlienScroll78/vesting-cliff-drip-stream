@@ -1,6 +1,7 @@
 "use client";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { NotificationEventType } from "@/hooks/useNotifications";
+import { useBrowserPush } from "@/hooks/useBrowserPush";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
 
@@ -36,6 +37,21 @@ const EVENT_META: Record<
  */
 export default function NotificationPreferencesPage() {
   const { preferences, setPreference } = useNotificationContext();
+  const { permission, requestPermission } = useBrowserPush();
+
+  const permissionStatusText =
+    permission === "granted"
+      ? "Enabled"
+      : permission === "denied"
+      ? "Blocked"
+      : "Not enabled";
+
+  const permissionColor =
+    permission === "granted"
+      ? "var(--color-completed)"
+      : permission === "denied"
+      ? "var(--color-cancelled)"
+      : "#9ca3af";
 
   return (
     <main id="main-content" className="page">
@@ -47,7 +63,78 @@ export default function NotificationPreferencesPage() {
         </p>
       </header>
 
+      {/* Browser Push Notifications Section */}
+      <section aria-label="Browser push notifications" style={{ marginBottom: "2rem" }}>
+        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
+          Browser Push Notifications
+        </h2>
+        <div
+          style={{
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius)",
+            padding: "1.25rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "1rem",
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "0.25rem" }}>
+              Background Notifications
+            </div>
+            <div style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "0.5rem" }}>
+              Receive notifications even when the app is closed or in the background.
+            </div>
+            <div style={{ fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <span style={{ fontWeight: 600 }}>Status:</span>
+              <span style={{ color: permissionColor, fontWeight: 600 }}>
+                {permissionStatusText}
+              </span>
+            </div>
+          </div>
+          {permission !== "granted" && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void requestPermission()}
+              disabled={permission === "denied"}
+              style={{ fontSize: "0.875rem", flexShrink: 0 }}
+              data-testid="enable-push-button"
+            >
+              {permission === "denied" ? "Blocked by browser" : "Enable"}
+            </button>
+          )}
+          {permission === "granted" && (
+            <span
+              aria-label="Push notifications enabled"
+              style={{ fontSize: "1.5rem", flexShrink: 0 }}
+            >
+              ✅
+            </span>
+          )}
+        </div>
+        {permission === "denied" && (
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "#9ca3af",
+              marginTop: "0.5rem",
+              lineHeight: 1.5,
+            }}
+          >
+            Push notifications are blocked by your browser. To enable them, you
+            must update your browser's site settings and allow notifications for
+            this site.
+          </p>
+        )}
+      </section>
+
+      {/* In-App Event Preferences Section */}
       <section aria-label="Notification preferences">
+        <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
+          In-App Event Preferences
+        </h2>
         <ul
           style={{
             listStyle: "none",
