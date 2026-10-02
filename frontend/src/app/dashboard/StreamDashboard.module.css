@@ -1,0 +1,350 @@
+/* Stream Dashboard — Issue #757 */
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+
+.page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  color: var(--color-text, #111827);
+}
+
+/* ── Connect gate ────────────────────────────────────────────────────────── */
+
+.connectGate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.connectDescription {
+  color: var(--color-muted, #6b7280);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ── Typography ──────────────────────────────────────────────────────────── */
+
+.heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.25;
+}
+
+/* ── Claimable section ───────────────────────────────────────────────────── */
+
+.claimableSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  background: var(--color-surface-alt, #f9fafb);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+.claimableLabel {
+  font-size: 0.875rem;
+  color: var(--color-muted, #6b7280);
+  margin-bottom: 0.25rem;
+}
+
+.claimableAmount {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+  line-height: 1.1;
+}
+
+.tokenSymbol {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-muted, #6b7280);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.375rem;
+  background: var(--color-primary, #6366f1);
+  color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--color-primary-hover, #4f46e5);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnPrimary:focus-visible {
+  outline: 2px solid var(--color-primary, #6366f1);
+  outline-offset: 2px;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+
+.progressMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-muted, #6b7280);
+  margin-bottom: 0.375rem;
+}
+
+.progressTrack {
+  position: relative;
+  height: 0.625rem;
+  background: var(--color-border, #e5e7eb);
+  border-radius: 9999px;
+  overflow: visible;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-primary, #6366f1);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+  min-width: 0.25rem;
+}
+
+.cliffMarker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: calc(100% + 6px);
+  background: var(--color-warning, #f59e0b);
+  border-radius: 1px;
+  transform: translateX(-50%);
+  cursor: help;
+}
+
+.dateMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--color-muted, #6b7280);
+  margin-top: 0.375rem;
+}
+
+/* ── Details grid ────────────────────────────────────────────────────────── */
+
+.detailsGrid {
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 1rem;
+}
+
+.detailsGrid dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border-faint, #f3f4f6);
+  align-items: baseline;
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailRow dt {
+  font-size: 0.875rem;
+  color: var(--color-muted, #6b7280);
+  font-weight: 500;
+}
+
+.detailRow dd {
+  font-size: 0.9375rem;
+  color: var(--color-text, #111827);
+  margin: 0;
+  word-break: break-all;
+}
+
+/* ── Address ─────────────────────────────────────────────────────────────── */
+
+.address {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  background: var(--color-surface-alt, #f9fafb);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+}
+
+/* ── Cliff notice ────────────────────────────────────────────────────────── */
+
+.cliffNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-warning-bg, #fffbeb);
+  border: 1px solid var(--color-warning-border, #fde68a);
+  border-radius: 0.5rem;
+  color: var(--color-warning-text, #92400e);
+}
+
+.cliffIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.cliffDate {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-warning-text, #92400e);
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  max-width: 90vw;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(0.5rem); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.toast_success {
+  background: #065f46;
+  color: #d1fae5;
+}
+
+.toast_error {
+  background: #7f1d1d;
+  color: #fee2e2;
+}
+
+.toast_info {
+  background: #1e3a5f;
+  color: #dbeafe;
+}
+
+/* ── Error / empty states ────────────────────────────────────────────────── */
+
+.errorState,
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.errorMessage {
+  color: var(--color-danger, #dc2626);
+  font-size: 0.9375rem;
+  max-width: 400px;
+}
+
+.emptyDescription {
+  color: var(--color-muted, #6b7280);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.emptyHint {
+  color: var(--color-muted, #6b7280);
+  font-size: 0.875rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .claimableSection {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btnPrimary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .detailRow {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+
+  .claimableAmount {
+    font-size: 1.5rem;
+  }
+}

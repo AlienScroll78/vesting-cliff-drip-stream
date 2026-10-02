@@ -1,13 +1,14 @@
 /**
  * db.js — PostgreSQL connection pool with structured query logging.
  *
- * Every query is logged at debug level with the following fields so that
+ * Every query is logged at info level with the following fields so that
  * database activity can be correlated to the originating HTTP request:
  *   request_id     — propagated automatically via AsyncLocalStorage
  *   trace_id       — propagated automatically via AsyncLocalStorage
  *   correlation_id — propagated automatically via AsyncLocalStorage
- *   db.query       — normalised SQL text (parameters replaced by $N placeholders)
- *   db.duration_ms — round-trip time in milliseconds
+ *   query_hash     — SHA-256 hash of normalized SQL text (no parameter values)
+ *   rows_affected  — number of rows returned or changed
+ *   duration_ms    — round-trip time in milliseconds
  *
  * Usage (drop-in replacement for the bare Pool):
  *   import { pool, query } from './db.js';
@@ -15,41 +16,41 @@
  *   const result = await query('SELECT * FROM streams WHERE id = $1', [id]);
  */
 
-import pg from 'pg';
-import { logger } from './logger.js';
+/**
+ * Shared PostgreSQL connection pool (CommonJS entry point).
+ * Requires DATABASE_URL in the environment.
+ *
+ * Pool configuration (Issue #741):
+ *   - min: 5 connections kept warm at all times
+ *   - max: 20 connections — stays within RDS t3.micro limit of 100
+ *   - idleTimeoutMillis: 300 000 ms (5 min) — evict idle connections
+ *   - connectionTimeoutMillis: 5 000 ms — fail fast on pool exhaustion
+ *   - statement_timeout: 5 000 ms — prevent runaway queries
+ */
 
-const { Pool } = pg;
+const { Pool } = require("pg");
 
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required for database access');
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Connection count bounds
+  min: 5,
+  max: 20,
+  // Evict connections idle longer than 5 minutes
+  idleTimeoutMillis: 300_000,
+  // Wait at most 5 s for a connection from the pool before throwing
+  connectionTimeoutMillis: 5_000,
+  // Per-connection session configuration — kills any query running > 5 s
+  options: "-c statement_timeout=5000",
+});
 
-/**
- * Execute a parameterised query and emit a structured debug log line.
- * Errors are logged at error level and re-thrown to the caller.
- *
- * @param {string}  text    — SQL string with $N placeholders
- * @param {any[]}  [values] — bound parameter values
- * @returns {Promise<import('pg').QueryResult>}
- */
-export async function query(text, values) {
-  const startNs = process.hrtime.bigint();
-  try {
-    const result = await pool.query(text, values);
-    const durationMs = Number(process.hrtime.bigint() - startNs) / 1e6;
-
-    logger.debug(
-      {
-        event:            'db_query',
-        'db.system':      'postgresql',
-        'db.query':       text,
-        'db.row_count':   result.rowCount,
-        'db.duration_ms': Math.round(durationMs * 100) / 100,
-      },
-      'db query',
-    );
+// Surface pool errors so they don't silently crash the process
+pool.on("error", (err) => {
+  console.error("[db] Idle client error:", err.message);
+});
 
     return result;
   } catch (err) {

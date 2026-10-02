@@ -39,6 +39,12 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   const [showClaim, setShowClaim] = useState(false);
   const [urlCopied, setUrlCopied] = useState(false);
   const [currentLedger] = useState(51_200_000);
+  const [shareUrl, setShareUrl] = useState("");
+
+  // Populate the share URL client-side (window is not available during SSR)
+  useEffect(() => {
+    setShareUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     fetchSchedule(recipient).then(setStream);
@@ -101,6 +107,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
               {stream.claimableAmount.toLocaleString()} {stream.token}
             </div>
             <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>claimable</div>
+            {/* Claim button only shown when the connected wallet IS the recipient */}
             {isRecipient && stream.status !== "completed" && stream.status !== "cancelled" && (
               <button
                 type="button"
@@ -147,6 +154,61 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
             />
           </div>
         )}
+      </section>
+
+      {/* Share section — enhanced for issue #765.
+          Shows a copyable URL input alongside the copy button. */}
+      <section
+        aria-label="Share this stream"
+        style={{
+          marginTop: "1.25rem",
+          padding: "1rem",
+          borderRadius: "0.5rem",
+          background: "var(--card-bg, #f9fafb)",
+          border: "1px solid var(--card-border, #e5e7eb)",
+        }}
+      >
+        <p style={{ fontWeight: 600, marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+          Share this stream
+        </p>
+        <p style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: "0.75rem" }}>
+          Anyone with this link can view the schedule — no wallet required.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          {/* Read-only URL input so users can triple-click and copy manually */}
+          <input
+            type="text"
+            readOnly
+            value={shareUrl}
+            aria-label="Public share URL"
+            data-testid="share-url-input"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+            style={{
+              flex: 1,
+              fontFamily: "monospace",
+              fontSize: "0.8rem",
+              padding: "0.4rem 0.6rem",
+              border: "1px solid var(--input-border, #d1d5db)",
+              borderRadius: "0.375rem",
+              background: "var(--input-bg, #fff)",
+              color: "inherit",
+              outline: "none",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={copyShareUrl}
+            aria-label={urlCopied ? "Link copied!" : "Copy share link"}
+            data-testid="share-copy-btn"
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {urlCopied ? "✓ Copied!" : "Copy link"}
+          </button>
+        </div>
       </section>
 
       {showClaim && (
