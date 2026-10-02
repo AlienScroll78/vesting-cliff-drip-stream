@@ -1,0 +1,205 @@
+{
+  "appTitle": "归属流",
+  "nav": {
+    "dashboard": "仪表板",
+    "create": "创建",
+    "history": "历史",
+    "settings": "设置",
+    "myStreams": "我的流",
+    "compareStreams": "比较流",
+    "back": "← 返回"
+  },
+  "wallet": {
+    "connect": "连接钱包",
+    "disconnect": "断开连接",
+    "connected": "已连接",
+    "address": "地址",
+    "copyAddress": "复制地址",
+    "copied": "已复制！"
+  },
+  "claim": "领取",
+  "claimTokens": "领取代币",
+  "claimableBalance": "可领取余额",
+  "claiming": "领取中…",
+  "claimSubmitted": "领取已提交！✓",
+  "cliffNotReached": "悬崖期未到",
+  "retry": "重试",
+  "cancel": "取消",
+  "confirm": "确认",
+  "close": "关闭",
+  "dismiss": "忽略",
+  "back": "返回",
+  "search": "搜索",
+  "loading": "加载中…",
+  "error": "错误",
+  "submit": "提交",
+  "export": "导出",
+  "exportCsv": "导出 CSV",
+  "newStream": "+ 新建流",
+  "cancelCreate": "✕ 取消",
+  "status": {
+    "active": "活跃",
+    "precliff": "悬崖前",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "legend": "状态图例",
+  "streams": {
+    "title": "您的流",
+    "myStreams": "我的流",
+    "noStreams": "暂无流",
+    "create": "创建流",
+    "all": "全部",
+    "filterByStatus": "按状态筛选",
+    "filterByToken": "按代币筛选",
+    "allTokens": "所有代币",
+    "sortBy": "排序方式",
+    "viewCard": "卡片视图",
+    "viewTable": "表格视图",
+    "claimableAmount": "可领取",
+    "cliffDate": "悬崖日期",
+    "endDate": "结束日期",
+    "recipient": "接收方",
+    "token": "代币",
+    "rate": "速率 / 账本",
+    "cliffLedger": "悬崖账本",
+    "endLedger": "结束账本",
+    "actions": "操作",
+    "selectAll": "选择所有可取消的流",
+    "selectStream": "选择 {{address}} 的流",
+    "cancelStream": "取消 {{address}} 的流",
+    "bulkSelected": "已选择 {{count}} 个流",
+    "bulkSelected_plural": "已选择 {{count}} 个流",
+    "cancelSelected": "取消所选",
+    "clearSelection": "清除选择",
+    "confirmBulkCancel": "取消 {{count}} 个流？",
+    "confirmBulkCancel_plural": "取消 {{count}} 个流？",
+    "bulkCancelWarning": "此操作将取消所有选定的流。可领取的代币（悬崖后）将发送给接收方；余额将退还给您。",
+    "confirmCancel": "确认取消",
+    "page": "第 {{page}} 页，共 {{total}} 页",
+    "previousPage": "上一页",
+    "nextPage": "下一页",
+    "ascending": "升序",
+    "descending": "降序"
+  },
+  "stream": {
+    "create": "创建归属流",
+    "rate": "速率（代币 / 账本）",
+    "cliffDuration": "悬崖期时长（账本数）",
+    "totalDuration": "总时长（账本数）",
+    "recipient": "接收方",
+    "sponsor": "赞助方",
+    "token": "代币",
+    "totalDeposit": "总存款",
+    "totalVested": "总归属量",
+    "timeline": "切换归属时间线图表",
+    "cliffUnlock": "悬崖解锁"
+  },
+  "horizon": {
+    "degraded": "降级",
+    "offline": "离线",
+    "degradedMsg": "响应缓慢（{{latency}} ms）。交易可能延迟。",
+    "offlineMsg": "无法连接到 Horizon。当前交易不可用。",
+    "lastChecked": "上次检查：{{time}}",
+    "statusPage": "状态页面 ↗",
+    "recheck": "↺ 重新检查",
+    "dismissFor5Min": "忽略 5 分钟"
+  },
+  "tx": {
+    "pending": "交易待处理…",
+    "confirmed": "交易已确认",
+    "failed": "交易失败",
+    "viewOnExplorer": "在浏览器中查看",
+    "estimatingFee": "⏳ 估算手续费…",
+    "feeUnavailable": "⚠️ 手续费估算不可用",
+    "fee": "预计手续费：{{amount}} XLM"
+  },
+  "bottomSheet": {
+    "youCanClaim": "您可以领取",
+    "tokensLocked": "代币已锁定至悬崖期",
+    "cliffNotReached": "🔒 悬崖期未到",
+    "unlockIn": "代币将在约 {{duration}}（剩余 {{ledgers}} 个账本）后解锁",
+    "tokensStillLocked": "您的代币仍锁定至悬崖期。",
+    "dragToClose": "向下拖动或点击关闭"
+  },
+  "cancelModal": {
+    "title": "取消流",
+    "warning": "取消将立即停止代币流转。",
+    "recipientReceives": "接收方获得",
+    "sponsorRefund": "您退回",
+    "cliffNotReachedRefund": "悬崖期未到——全额存款退还给您。"
+  },
+  "admin": {
+    "title": "管理面板",
+    "indexerStatus": "索引器状态",
+    "lastLedger": "最后索引账本",
+    "errorRate": "错误率",
+    "recentEvents": "最近事件",
+    "reindex": "触发重新索引",
+    "autoRefresh": "每30秒自动刷新",
+    "accessDenied": "访问被拒绝。需要管理员令牌。",
+    "enterToken": "输入管理员令牌",
+    "submit": "提交"
+  },
+  "history": {
+    "title": "交易历史",
+    "noHistory": "暂无交易。",
+    "type": {
+      "claim": "领取",
+      "create": "创建",
+      "cancel": "取消"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "darkMode": "深色模式",
+    "analytics": "分析",
+    "optOut": "退出分析"
+  },
+  "accessibility": {
+    "skipToContent": "跳转到主要内容",
+    "copyRecipient": "复制接收方地址",
+    "pagination": "分页"
+  },
+  "skipToContent": "跳转到主要内容",
+  "language": "语言",
+  "errors": {
+    "generic": "出现错误，请重试。",
+    "notFound": "未找到",
+    "cliffNotReached": "悬崖期尚未到达。请在悬崖日期后再回来。",
+    "nothingToClaim": "目前没有可领取的内容。"
+  },
+  "dates": {
+    "minutes": "{{count}} 分钟",
+    "minutes_plural": "{{count}} 分钟",
+    "hours": "{{count}} 小时",
+    "hours_plural": "{{count}} 小时",
+    "days": "{{count}} 天",
+    "days_plural": "{{count}} 天"
+  },
+  "mobile": {
+    "swipeToClose": "向下滑动关闭"
+  },
+  "share": {
+    "title": "分享流",
+    "description": "与他人分享此归属流",
+    "copied": "链接已复制！",
+    "copy": "复制链接",
+    "publicView": "公开视图"
+  },
+  "notifications": {
+    "title": "通知",
+    "noNotifications": "暂无通知",
+    "markAllRead": "全部标为已读",
+    "preferences": "偏好设置",
+    "cliffReached": "已到达悬崖期",
+    "expiringSoon": "即将到期",
+    "claimAvailable": "可领取",
+    "streamCancelled": "流已取消",
+    "pushPromptTitle": "启用推送通知？",
+    "pushPromptBody": "当悬崖期到达、代币可领取或流到期时，您将收到通知。",
+    "pushEnable": "启用",
+    "pushDecline": "暂不"
+  }
+}

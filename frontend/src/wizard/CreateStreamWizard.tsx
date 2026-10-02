@@ -4,6 +4,7 @@ import { StepRecipient } from './StepRecipient'
 import { StepSelectToken } from './StepSelectToken'
 import { StepSchedule } from './StepSchedule'
 import { StepReview } from './StepReview'
+import styles from './wizard.module.css'
 
 interface Props {
   onClose?: () => void
