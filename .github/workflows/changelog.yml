@@ -1,0 +1,133 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Only one run per PR at a time; cancel in-progress runs when new commits arrive.
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ── changelog-reminder ─────────────────────────────────────────────────────
+  # Checks that CHANGELOG.md has been modified in this PR.
+  # This is a reminder job — it posts a comment if the file was not touched,
+  # but does NOT block merge (no required-status-check).
+  # To make it blocking, add "changelog-reminder" to branch protection rules.
+  changelog-reminder:
+    name: changelog-reminder
+    runs-on: ubuntu-latest
+
+    # Skip on automated PRs (release-please, dependabot, etc.)
+    if: |
+      github.actor != 'release-please[bot]' &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
+
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check whether CHANGELOG.md was modified
+        id: check
+        run: |
+          # List all files changed in this PR against the base branch.
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -q "^CHANGELOG.md$"; then
+            echo "updated=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Remove previous reminder comment (if CHANGELOG is now updated)
+        if: steps.check.outputs.updated == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            for (const c of comments.data) {
+              if (c.user.login === 'github-actions[bot]' &&
+                  c.body.includes('<!-- changelog-reminder -->')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  comment_id: c.id,
+                });
+              }
+            }
+
+      - name: Post reminder comment if CHANGELOG.md was not updated
+        if: steps.check.outputs.updated == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Avoid duplicate comments — delete any existing reminder first.
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            for (const c of comments.data) {
+              if (c.user.login === 'github-actions[bot]' &&
+                  c.body.includes('<!-- changelog-reminder -->')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo:  context.repo.repo,
+                  comment_id: c.id,
+                });
+              }
+            }
+
+            // Post the reminder.
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `<!-- changelog-reminder -->
+            ## 📋 CHANGELOG.md reminder
+
+            This PR does not appear to include an update to **CHANGELOG.md**.
+
+            If this PR introduces a user-visible change — new feature, bug fix, breaking change, deprecation, or security patch — please add an entry under the \`## [Unreleased]\` section following the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format:
+
+            \`\`\`markdown
+            ## [Unreleased]
+
+            ### Added
+            - Short description of what was added. (#<issue-or-pr-number>)
+
+            ### Fixed
+            - Short description of what was fixed. (#<issue-or-pr-number>)
+            \`\`\`
+
+            **If this change does not need a changelog entry** (e.g. docs-only, refactor, CI config, test-only), you can safely ignore this reminder.
+
+            > This message was posted automatically and will be removed once CHANGELOG.md is updated.`,
+            });
+
+      - name: Fail if CHANGELOG is missing for non-trivial PRs (optional gate)
+        # Uncomment the block below to make this a hard failure.
+        # Remove the comment characters and add "changelog-reminder" to your
+        # branch protection required status checks.
+        run: |
+          # if [ "${{ steps.check.outputs.updated }}" = "false" ]; then
+          #   echo "::error file=CHANGELOG.md::CHANGELOG.md was not updated. \
+          #     Please add an entry under ## [Unreleased] for user-visible changes."
+          #   exit 1
+          # fi
+          echo "Changelog check complete (non-blocking). \
+            Updated: ${{ steps.check.outputs.updated }}"

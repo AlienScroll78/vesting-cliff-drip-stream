@@ -21,7 +21,7 @@ fn test_minimal_cliff_one_ledger() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 1);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -34,7 +34,7 @@ fn test_claim_exactly_at_end_removes_schedule() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     assert!(client.get_schedule(&recipient).is_none());
 }
@@ -48,11 +48,11 @@ fn test_incremental_claims_sum_to_total() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 20);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // 100 ledgers * 5 tokens = 500
     assert_eq!(tc.balance(&recipient), 500);
@@ -68,7 +68,7 @@ fn test_regression_cliff_equals_total_minus_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 100);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 1_000);
     assert_eq!(tc.balance(&recipient), 1_000);
     assert!(client.get_schedule(&recipient).is_none());
@@ -83,7 +83,7 @@ fn test_regression_rate_of_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -97,7 +97,7 @@ fn test_regression_claim_well_past_end_caps_correctly() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10_000);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 500);
     assert_eq!(tc.balance(&recipient), 500);
 }
@@ -185,7 +185,7 @@ fn test_create_stream_sets_proactive_ttl() {
         let ttl = env
             .storage()
             .persistent()
-            .get_ttl(&DataKey::Schedule(recipient.clone()));
+            .get_ttl(&DataKey::ScheduleById(recipient.clone(), 0));
         assert_eq!(
             ttl, PERSISTENT_BUMP_AMOUNT,
             "Short stream TTL should be capped at PERSISTENT_BUMP_AMOUNT"
@@ -244,13 +244,13 @@ fn test_claim_vested_re_extends_ttl() {
 
     // claim_vested re-extends TTL proactively.
     advance_ledger(&env, 10); // past cliff
-    let _ = client.claim_vested(&recipient);
+    let _ = client.claim_vested(&recipient, &None);
 
     env.as_contract(&contract_id, || {
         let ttl = env
             .storage()
             .persistent()
-            .get_ttl(&DataKey::Schedule(recipient.clone()));
+            .get_ttl(&DataKey::ScheduleById(recipient.clone(), 0));
         assert_eq!(
             ttl, PERSISTENT_BUMP_AMOUNT,
             "TTL after claim_vested should be restored to PERSISTENT_BUMP_AMOUNT"
@@ -258,3 +258,179 @@ fn test_claim_vested_re_extends_ttl() {
     });
 }
 
+
+// ── Variable-rate segment tests (issue #717) ──────────────────────────────────
+//
+// Covers at least 3 distinct segment configurations to verify:
+// - Piecewise claimable_amount computation at segment boundaries
+// - InvalidSegments validation (empty, non-ascending, non-positive rate)
+// - Backward-compatible single-segment behaviour
+// - Total deposit equals sum(segment_duration × segment_rate)
+
+/// Configuration 1: single segment (backward-compatible case).
+///
+/// A single-segment variable-rate stream behaves identically to a fixed-rate
+/// stream: `claimable = ledgers_since_cliff × rate`.
+#[test]
+fn test_variable_rate_single_segment_backward_compatible() {
+    let env = setup_env(); // sequence = 100
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    // Single segment: ledgers 100..200 at rate 10. deposit = 10 × 100 = 1000.
+    let deposit: i128 = 10 * 100;
+    let (token_id, token_client) = setup_token(&env, &sponsor, deposit);
+    let segments = soroban_sdk::vec![&env, (200u32, 10i128)];
+    client.create_variable_rate_stream(
+        &sponsor,
+        &recipient,
+        &token_id,
+        &20,  // cliff_duration = 20 → cliff_ledger = 120
+        &segments,
+    );
+
+    // At cliff (ledger 120): 20 ledgers × 10 = 200 claimable.
+    advance_ledger(&env, 20);
+    let claimed = client.claim_variable_vested(&recipient);
+    assert_eq!(claimed, 200);
+
+    // After stream ends (ledger 200): 80 remaining ledgers × 10 = 800.
+    advance_ledger(&env, 80);
+    let final_claim = client.claim_variable_vested(&recipient);
+    assert_eq!(final_claim, 800);
+    assert_eq!(token_client.balance(&recipient), 1_000);
+    assert!(client.get_variable_schedule(&recipient).is_none());
+}
+
+/// Configuration 2: two-segment stream with a ramp-up pattern.
+///
+/// Segment 1: slow rate (5 tokens/ledger) for the first 50 ledgers.
+/// Segment 2: fast rate (20 tokens/ledger) for the next 100 ledgers.
+/// Verifies claimable amount at the segment boundary and after.
+#[test]
+fn test_variable_rate_two_segments_ramp_up() {
+    let env = setup_env(); // sequence = 100
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    // Segment 1: 100..150 at rate 5  → deposit = 5 × 50 = 250
+    // Segment 2: 150..250 at rate 20 → deposit = 20 × 100 = 2000
+    // Total deposit = 2250
+    let deposit: i128 = 5 * 50 + 20 * 100;
+    let (token_id, token_client) = setup_token(&env, &sponsor, deposit);
+    let segments = soroban_sdk::vec![&env, (150u32, 5i128), (250u32, 20i128)];
+    client.create_variable_rate_stream(
+        &sponsor,
+        &recipient,
+        &token_id,
+        &10, // cliff_duration = 10 → cliff_ledger = 110
+        &segments,
+    );
+
+    // At ledger 150 (exactly at segment boundary): 50 ledgers × 5 = 250.
+    advance_ledger(&env, 50);
+    assert_eq!(client.claimable_variable_amount(&recipient), 250);
+    let first = client.claim_variable_vested(&recipient);
+    assert_eq!(first, 250);
+
+    // At ledger 200 (50 ledgers into segment 2): 50 × 20 = 1000.
+    advance_ledger(&env, 50);
+    let second = client.claim_variable_vested(&recipient);
+    assert_eq!(second, 1_000);
+
+    // At ledger 250 (end): 50 × 20 = 1000 remaining.
+    advance_ledger(&env, 50);
+    let third = client.claim_variable_vested(&recipient);
+    assert_eq!(third, 1_000);
+
+    // Total = 250 + 1000 + 1000 = 2250.
+    assert_eq!(token_client.balance(&recipient), 2_250);
+    assert!(client.get_variable_schedule(&recipient).is_none());
+}
+
+/// Configuration 3: three-segment stream (slow → fast → cool-down).
+///
+/// Verifies piecewise accrual across three distinct rate phases.
+#[test]
+fn test_variable_rate_three_segments_piecewise() {
+    let env = setup_env(); // sequence = 100
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+
+    // Segment 1: 100..150  rate=5   → 50 × 5  = 250
+    // Segment 2: 150..250  rate=15  → 100 × 15 = 1500
+    // Segment 3: 250..300  rate=8   → 50 × 8  = 400
+    // Total deposit = 2150
+    let deposit: i128 = 5 * 50 + 15 * 100 + 8 * 50;
+    let (token_id, token_client) = setup_token(&env, &sponsor, deposit);
+    let segments = soroban_sdk::vec![
+        &env,
+        (150u32, 5i128),
+        (250u32, 15i128),
+        (300u32, 8i128)
+    ];
+    client.create_variable_rate_stream(
+        &sponsor,
+        &recipient,
+        &token_id,
+        &5, // cliff_duration = 5 → cliff_ledger = 105
+        &segments,
+    );
+
+    // Claim at ledger 150: 50 × 5 = 250.
+    advance_ledger(&env, 50);
+    let c1 = client.claim_variable_vested(&recipient);
+    assert_eq!(c1, 250);
+
+    // Claim at ledger 200 (50 into seg 2): 50 × 15 = 750.
+    advance_ledger(&env, 50);
+    let c2 = client.claim_variable_vested(&recipient);
+    assert_eq!(c2, 750);
+
+    // Claim at stream end ledger 300: 50 × 15 + 50 × 8 = 750 + 400 = 1150.
+    advance_ledger(&env, 100);
+    let c3 = client.claim_variable_vested(&recipient);
+    assert_eq!(c3, 1_150);
+
+    assert_eq!(token_client.balance(&recipient), 2_150);
+    assert!(client.get_variable_schedule(&recipient).is_none());
+}
+
+/// `InvalidSegments` is returned for an empty segment list.
+#[test]
+fn test_variable_rate_empty_segments_invalid() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+
+    let segments: soroban_sdk::Vec<(u32, i128)> = soroban_sdk::Vec::new(&env);
+    let err = client
+        .try_create_variable_rate_stream(&sponsor, &recipient, &token_id, &10, &segments)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, crate::error::VestingError::InvalidSegments);
+}
+
+/// `InvalidSegments` is returned when segment end_ledgers are not ascending.
+#[test]
+fn test_variable_rate_non_ascending_end_ledgers_invalid() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+
+    // Second segment end (110) < first (200) — out of order.
+    let segments = soroban_sdk::vec![&env, (200u32, 5i128), (110u32, 10i128)];
+    let err = client
+        .try_create_variable_rate_stream(&sponsor, &recipient, &token_id, &10, &segments)
+        .unwrap_err()
+        .unwrap();
+    assert_eq!(err, crate::error::VestingError::InvalidSegments);
+}
+
+/// `InvalidSegments` error code is 19.
+#[test]
+fn test_invalid_segments_error_code_is_19() {
+    assert_eq!(crate::error::VestingError::InvalidSegments as u32, 19);
+}

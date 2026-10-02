@@ -18,6 +18,9 @@
  *   POST /admin/indexer/restart
  *   GET  /admin/webhooks/dlq
  *   POST /admin/webhooks/dlq/replay
+ *   POST /admin/backfill?from_ledger=N&to_ledger=M  (Issue #749)
+ *   GET  /admin/backfill                             (Issue #749)
+ *   GET  /admin/backfill/:id                         (Issue #749)
  */
 
 import { Router } from "express";
@@ -25,6 +28,7 @@ import { requireAdminAuth } from "./auth.js";
 import { streamsRouter } from "./streams.js";
 import { indexerRouter } from "./indexer.js";
 import { webhooksRouter } from "./webhooks.js";
+import { backfillRouter } from "./backfill.js";
 
 export const adminRouter = Router();
 
@@ -35,3 +39,4 @@ adminRouter.use(requireAdminAuth);
 adminRouter.use("/streams", streamsRouter);
 adminRouter.use("/indexer", indexerRouter);
 adminRouter.use("/webhooks", webhooksRouter);
+adminRouter.use("/backfill", backfillRouter);

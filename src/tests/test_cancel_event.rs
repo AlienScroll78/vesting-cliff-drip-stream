@@ -27,7 +27,7 @@ fn test_cancel_before_cliff_emits_event_with_zero_release() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 20); // still before cliff
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let all_events = env.events().all();
     let cancel_event = all_events.iter().find(|(contract, topics, _data)| {
@@ -74,7 +74,7 @@ fn test_cancel_after_cliff_emits_event_with_split() {
 
     // At ledger 200 (100 ledgers after start): earned = 100 * 10 = 1000
     advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let all_events = env.events().all();
     let cancel_event = all_events.iter().find(|(contract, topics, _data)| {
@@ -111,7 +111,7 @@ fn test_cancel_event_ledger_matches_current() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 50); // exactly at cliff, ledger=150
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let all_events = env.events().all();
     let cancel_event = all_events
@@ -142,7 +142,7 @@ fn test_cancel_event_sponsor_field() {
 
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let all_events = env.events().all();
     let cancel_event = all_events
