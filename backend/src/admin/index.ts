@@ -18,6 +18,9 @@
  *   POST /admin/indexer/restart
  *   GET  /admin/webhooks/dlq
  *   POST /admin/webhooks/dlq/replay
+ *   POST /admin/backfill?from_ledger=N&to_ledger=M  (Issue #749)
+ *   GET  /admin/backfill                             (Issue #749)
+ *   GET  /admin/backfill/:id                         (Issue #749)
  */
 
 import { Router } from "express";
