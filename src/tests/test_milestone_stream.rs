@@ -17,6 +17,12 @@ fn test_create_milestone_stream_empty_milestones_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -36,6 +42,12 @@ fn test_create_milestone_stream_bps_not_10000_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -55,6 +67,12 @@ fn test_create_milestone_stream_non_ascending_ledgers_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -74,6 +92,12 @@ fn test_create_milestone_stream_duplicate_ledger_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -93,6 +117,12 @@ fn test_create_milestone_stream_same_recipient_twice_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -114,6 +144,12 @@ fn test_create_milestone_stream_sponsor_equals_recipient_rejected() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let (token_id, _) = create_token(&env, &sponsor);
@@ -134,6 +170,12 @@ fn test_create_milestone_stream_single_milestone_success() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -149,6 +191,12 @@ fn test_create_milestone_stream_four_equal_milestones() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -172,6 +220,12 @@ fn test_claim_milestone_nothing_before_first_milestone() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -190,6 +244,12 @@ fn test_claim_milestone_single_100pct_milestone() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -211,6 +271,12 @@ fn test_claim_milestone_partial_two_of_four_milestones() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -238,6 +304,12 @@ fn test_claim_milestone_accumulates_all_four() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -265,6 +337,12 @@ fn test_claim_milestone_incremental_claims() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
