@@ -1489,3 +1489,7 @@ fn compute_variable_claimable(
 
     claimable
 }
+
+// Issue #720: set_allowlist, set_allowlist_enabled, is_allowed are implemented
+// above. RecipientNotAllowed (14) returned when allowlist is enabled and
+// recipient is not listed.
