@@ -258,7 +258,7 @@ fn test_total_claimed_no_overflow_high_rate() {
 
     // Advance to cliff.
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient).unwrap();
+    let claimed = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(claimed, rate * 10);
 
     let schedule = client.get_schedule(&recipient).unwrap();

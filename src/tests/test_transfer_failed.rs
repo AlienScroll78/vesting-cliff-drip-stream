@@ -156,7 +156,7 @@ fn test_cancel_recipient_frozen_schedule_not_removed() {
     // Freeze the recipient.
     freeze_account(&env, &token_id, &recipient);
 
-    let err = client.cancel_stream(&sponsor, &recipient).unwrap_err();
+    let err = client.cancel_stream(&sponsor, &recipient, &0).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must still be present — cancel did not commit.
@@ -189,7 +189,7 @@ fn test_cancel_before_cliff_sponsor_frozen_schedule_not_removed() {
     // Freeze the sponsor so the refund transfer will fail.
     freeze_account(&env, &token_id, &sponsor);
 
-    let err = client.cancel_stream(&sponsor, &recipient).unwrap_err();
+    let err = client.cancel_stream(&sponsor, &recipient, &0).unwrap_err();
     assert_eq!(err, VestingError::TransferFailed.into());
 
     // Schedule must be intact — nothing was removed.

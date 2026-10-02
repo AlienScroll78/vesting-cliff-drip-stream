@@ -222,7 +222,7 @@ fn test_claim_vested_sponsor_cannot_claim_as_recipient_panics() {
 
     // Sponsor's auth was only mocked during stream creation (now expired).
     // Claiming as recipient without mocked auth → panics.
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -237,7 +237,7 @@ fn test_cancel_stream_attacker_as_third_party_panics() {
 
     let attacker = Address::generate(&env);
     // attacker's auth is not mocked → panics.
-    client.cancel_stream(&attacker, &recipient).unwrap();
+    client.cancel_stream(&attacker, &recipient, &0).unwrap();
 }
 
 /// The recipient cannot cancel their own stream (only the sponsor can).

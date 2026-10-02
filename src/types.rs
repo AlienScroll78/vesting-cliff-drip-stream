@@ -170,7 +170,7 @@ pub struct MultiTokenSchedule {
 #[derive(Clone)]
 #[allow(missing_docs)]
 pub enum DataKey {
-    /// Per-recipient fixed-rate vesting schedule.
+    /// Legacy single-stream schedule key retained for existing deployments.
     Schedule(Address),
     /// Per-recipient variable-rate vesting schedule.
     VariableSchedule(Address),
@@ -190,6 +190,10 @@ pub enum DataKey {
 
     /// Instance-level configuration: minimum rate per ledger (default 1).
     ConfigMinRate,
+    /// Per-recipient fixed-rate schedule keyed by its stream ID.
+    ScheduleById(Address, u32),
+    /// Next stream ID to allocate for a recipient.
+    NextStreamId(Address),
 }
 
 /// Human-readable status of a vesting stream.

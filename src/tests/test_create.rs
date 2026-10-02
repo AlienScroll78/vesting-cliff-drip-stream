@@ -69,21 +69,20 @@ fn test_create_stream_invalid_duration_fails() {
 }
 
 #[test]
-fn test_create_duplicate_stream_fails() {
+fn test_multiple_streams_for_one_recipient_get_distinct_ids() {
     let env = setup_env();
     let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient) = generate_addresses(&env);
-    let rate = 10 * RATE_DECIMALS;
-    // deposit = 10 * 200 = 2000
-    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+    let (sponsor_a, recipient) = generate_addresses(&env);
+    let sponsor_b = Address::generate(&env);
+    let (token_a, _) = create_vesting_stream(&env, &client, &sponsor_a, &recipient, 10, 50, 200);
+    let (token_b, _) = create_vesting_stream(&env, &client, &sponsor_b, &recipient, 20, 50, 200);
 
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200);
-
-    let err = client
-        .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
-        .unwrap_err();
-
-    assert_eq!(err, Ok(VestingError::ScheduleAlreadyExists));
+    let ids = client.get_stream_ids(&recipient);
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.get(0), Some(0));
+    assert_eq!(ids.get(1), Some(1));
+    assert_eq!(client.get_schedule_by_id(&recipient, &0).unwrap().token, token_a);
+    assert_eq!(client.get_schedule_by_id(&recipient, &1).unwrap().token, token_b);
 }
 
 #[test]
@@ -104,7 +103,7 @@ fn test_two_recipients_claim_independently() {
     advance_ledger(&env, 60);
 
     // alice: from ledger 100 to 160 = 60 ledgers * 10 = 600
-    let alice_claimed = client.claim_vested(&alice);
+    let alice_claimed = client.claim_vested(&alice, &None);
     assert_eq!(alice_claimed, 600);
 
     let bob_sched = client.get_schedule(&bob).unwrap();

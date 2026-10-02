@@ -52,7 +52,7 @@ fn test_claim_with_scaled_rate() {
 
     // At cliff (50 ledgers): 50 * 10 = 500
     advance_ledger(&env, 50);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 500);
 }
 
@@ -72,7 +72,7 @@ fn test_sub_token_rate_claim() {
 
     // At cliff (10 ledgers): 10 * 0.5 = 5 tokens
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 5);
 }
 

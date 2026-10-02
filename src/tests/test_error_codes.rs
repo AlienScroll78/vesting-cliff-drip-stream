@@ -43,7 +43,7 @@ fn test_error_1_schedule_not_found() {
     // No stream has been created for this recipient.
     let unknown = Address::generate(&env);
 
-    let err = client.claim_vested(&unknown).unwrap_err();
+    let err = client.claim_vested(&unknown, &None).unwrap_err();
     assert_eq!(
         err,
         VestingError::ScheduleNotFound.into(),
@@ -75,7 +75,7 @@ fn test_error_2_cliff_not_reached() {
     // Advance to ledger 130 — still before the cliff at 150.
     advance_ledger(&env, 30);
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(
         err,
         VestingError::CliffNotReached.into(),
@@ -266,10 +266,10 @@ fn test_error_7_nothing_to_claim() {
     advance_ledger(&env, 50);
 
     // First claim succeeds — accrued 50 ledgers × 10 = 500.
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // Second claim at the same ledger — nothing has accrued since the first claim.
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(
         err,
         VestingError::NothingToClaim.into(),
@@ -474,7 +474,7 @@ fn test_error_15_stream_paused() {
     advance_ledger(&env, 60); // ledger 160
     client.pause_stream(&sponsor, &recipient).unwrap();
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(
         err,
         VestingError::StreamPaused.into(),

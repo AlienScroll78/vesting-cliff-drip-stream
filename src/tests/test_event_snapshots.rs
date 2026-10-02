@@ -240,7 +240,7 @@ fn test_event_snapshot_tokens_claimed() {
 
     // Advance past cliff but not to end: ledger 100 → 200.
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // After claim_vested (stream not finished), events emitted since the env
     // started are: [vc_create, vc_claim]. We check all events are as expected.
@@ -308,7 +308,7 @@ fn test_event_snapshot_stream_completed() {
     // Jump well past end_ledger (300) so a single claim drains the whole stream.
     advance_ledger(&env, 500); // ledger → 600
 
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // Both vc_done (stream complete) and vc_claim are emitted by claim_vested.
     // Order: claim is emitted before done inside the function body.
@@ -385,7 +385,7 @@ fn test_event_snapshot_stream_cancelled() {
     // Cancel before cliff at ledger 120 → full refund.
     // rate(10) × (end(300) − last_claimed(100)) = 10 × 200 = 2000 refunded
     advance_ledger(&env, 20); // ledger → 120 (cliff is 150)
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     let refund: i128 = 2_000;
 
@@ -471,7 +471,7 @@ fn test_event_snapshot_stream_clawed_back() {
     advance_ledger(&env, 20); // ledger → 120 (before cliff at 150)
     let reason = SorobanString::from_str(&env, "regulatory compliance");
     client
-        .clawback_stream(&sponsor, &recipient, &reason)
+        .clawback_stream(&sponsor, &recipient, &0, &reason)
         .unwrap();
 
     let clawed_amount: i128 = 2_000;

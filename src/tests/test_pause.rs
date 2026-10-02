@@ -105,7 +105,7 @@ fn test_claim_while_paused_returns_stream_paused_error() {
     advance_ledger(&env, 60); // ledger 160, past cliff (150)
     client.pause_stream(&sponsor, &recipient).unwrap();
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     assert_eq!(err, VestingError::StreamPaused.into());
 }
 
@@ -117,7 +117,7 @@ fn test_claim_while_paused_pre_cliff_returns_stream_paused() {
     // Pause before cliff
     client.pause_stream(&sponsor, &recipient).unwrap();
 
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = client.claim_vested(&recipient, &None).unwrap_err();
     // CliffNotReached is checked before StreamPaused in claim_vested,
     // but the implementation checks paused after cliff — let's verify
     // which error comes first based on implementation order.
@@ -248,7 +248,7 @@ fn test_claim_succeeds_after_resume_with_correct_offset() {
 
     // Current ledger is 190, cliff is 180 → cliff passed.
     // Claimable: 190 - 130 = 60 ledgers × 10 = 600.
-    let amount = client.claim_vested(&recipient).unwrap();
+    let amount = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(amount, 600);
     assert_eq!(token_client.balance(&recipient), 600);
 }
@@ -313,7 +313,7 @@ fn test_multiple_pause_resume_cycles() {
 
     // Current ledger: 185, cliff: 175 → past cliff
     // Claimable: 185 - 125 = 60 × 10 = 600
-    let amount = client.claim_vested(&recipient).unwrap();
+    let amount = client.claim_vested(&recipient, &None).unwrap();
     assert_eq!(amount, 600);
     assert_eq!(token_client.balance(&recipient), 600);
 }
@@ -331,7 +331,7 @@ fn test_cancel_paused_stream_full_refund_before_cliff() {
     advance_ledger(&env, 20); // ledger 120, cliff was 150
 
     // Cancel: cliff not passed (current 120 < cliff 150) → full refund
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient, &0).unwrap();
 
     assert_eq!(token_client.balance(&sponsor), 2_000);
     assert_eq!(token_client.balance(&recipient), 0);

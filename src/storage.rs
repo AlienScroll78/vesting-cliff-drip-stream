@@ -64,7 +64,16 @@ pub fn compute_stream_ttl(env: &Env, end_ledger: u32) -> u32 {
 ///
 /// Falls back to `ensure_ttl` behaviour if the computed TTL would be ≤ the threshold.
 pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
-    let key = DataKey::Schedule(recipient.clone());
+    ensure_ttl_for_stream_id(env, recipient, 0, schedule);
+}
+
+pub fn ensure_ttl_for_stream_id(
+    env: &Env,
+    recipient: &Address,
+    stream_id: u32,
+    schedule: &VestingSchedule,
+) {
+    let key = DataKey::ScheduleById(recipient.clone(), stream_id);
     if env.storage().persistent().has(&key) {
         let ttl = compute_stream_ttl(env, schedule.end_ledger);
         // Use the larger of the proactive TTL and the standard threshold.
@@ -74,6 +83,16 @@ pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingS
             PERSISTENT_LEDGER_THRESHOLD,
             bump,
         );
+    } else if stream_id == 0 {
+        let legacy_key = DataKey::Schedule(recipient.clone());
+        if env.storage().persistent().has(&legacy_key) {
+            let ttl = compute_stream_ttl(env, schedule.end_ledger);
+            env.storage().persistent().extend_ttl(
+                &legacy_key,
+                PERSISTENT_LEDGER_THRESHOLD,
+                ttl.max(PERSISTENT_BUMP_AMOUNT),
+            );
+        }
     }
     env.storage()
         .instance()
@@ -83,30 +102,45 @@ pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingS
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 pub fn get_schedule(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
-    let key = DataKey::Schedule(recipient.clone());
+    get_schedule_by_id(env, recipient, 0)
+}
+
+pub fn get_schedule_by_id(
+    env: &Env,
+    recipient: &Address,
+    stream_id: u32,
+) -> Option<VestingSchedule> {
+    let key = DataKey::ScheduleById(recipient.clone(), stream_id);
     let schedule = env
         .storage()
         .persistent()
-        .get::<DataKey, VestingSchedule>(&key)?;
-    ensure_ttl_for_stream(env, recipient, &schedule);
+        .get::<DataKey, VestingSchedule>(&key)
+        .or_else(|| {
+            if stream_id == 0 {
+                env.storage()
+                    .persistent()
+                    .get::<DataKey, VestingSchedule>(&DataKey::Schedule(recipient.clone()))
+            } else {
+                None
+            }
+        })?;
+    ensure_ttl_for_stream_id(env, recipient, stream_id, &schedule);
     Some(schedule)
 }
 
 /// Returns the vesting schedule for `recipient` and bumps TTL via [`ensure_ttl_for_stream`].
 pub fn get_schedule_readonly(env: &Env, recipient: &Address) -> Option<VestingSchedule> {
-    let key = DataKey::Schedule(recipient.clone());
-    let schedule = env
-        .storage()
-        .persistent()
-        .get::<DataKey, VestingSchedule>(&key)?;
-    ensure_ttl_for_stream(env, recipient, &schedule);
-    Some(schedule)
+    get_schedule_by_id(env, recipient, 0)
 }
 
 pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
     env.storage()
         .persistent()
-        .has(&DataKey::Schedule(recipient.clone()))
+        .has(&DataKey::ScheduleById(recipient.clone(), 0))
+        || env
+            .storage()
+            .persistent()
+            .has(&DataKey::Schedule(recipient.clone()))
 }
 
 /// Persists `schedule` for `recipient` and bumps TTL proactively based on stream duration.
@@ -115,15 +149,100 @@ pub fn has_schedule(env: &Env, recipient: &Address) -> bool {
 /// ensuring the entry survives the full stream lifetime without relying solely on passive
 /// bump-on-access (Issue #585).
 pub fn set_schedule(env: &Env, recipient: &Address, schedule: &VestingSchedule) {
-    let key = DataKey::Schedule(recipient.clone());
+    set_schedule_by_id(env, recipient, 0, schedule);
+}
+
+pub fn set_schedule_by_id(
+    env: &Env,
+    recipient: &Address,
+    stream_id: u32,
+    schedule: &VestingSchedule,
+) {
+    let key = DataKey::ScheduleById(recipient.clone(), stream_id);
     env.storage().persistent().set(&key, schedule);
-    ensure_ttl_for_stream(env, recipient, schedule);
+    if stream_id == 0 {
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Schedule(recipient.clone()));
+    }
+    if let Some(next_id) = stream_id.checked_add(1) {
+        let next_key = DataKey::NextStreamId(recipient.clone());
+        let stored_next = env.storage().persistent().get::<DataKey, u32>(&next_key).unwrap_or(0);
+        if stored_next < next_id {
+            env.storage().persistent().set(&next_key, &next_id);
+        }
+    }
+    ensure_ttl_for_stream_id(env, recipient, stream_id, schedule);
 }
 
 pub fn remove_schedule(env: &Env, recipient: &Address) {
+    remove_schedule_by_id(env, recipient, 0);
+}
+
+pub fn remove_schedule_by_id(env: &Env, recipient: &Address, stream_id: u32) {
     env.storage()
         .persistent()
-        .remove(&DataKey::Schedule(recipient.clone()));
+        .remove(&DataKey::ScheduleById(recipient.clone(), stream_id));
+    if stream_id == 0 {
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Schedule(recipient.clone()));
+    }
+}
+
+pub fn next_stream_id(env: &Env, recipient: &Address) -> Result<u32, crate::error::VestingError> {
+    let key = DataKey::NextStreamId(recipient.clone());
+    let next_id = env.storage().persistent().get::<DataKey, u32>(&key).unwrap_or_else(|| {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Schedule(recipient.clone()))
+        {
+            1
+        } else {
+            0
+        }
+    });
+    let following_id = next_id
+        .checked_add(1)
+        .ok_or(crate::error::VestingError::DepositOverflow)?;
+    env.storage().persistent().set(&key, &following_id);
+    env.storage().persistent().extend_ttl(
+        &key,
+        PERSISTENT_LEDGER_THRESHOLD,
+        PERSISTENT_BUMP_AMOUNT,
+    );
+    Ok(next_id)
+}
+
+pub fn get_stream_ids(env: &Env, recipient: &Address) -> Vec<u32> {
+    let mut ids = Vec::new(env);
+    let next_id = env
+        .storage()
+        .persistent()
+        .get::<DataKey, u32>(&DataKey::NextStreamId(recipient.clone()))
+        .unwrap_or(0);
+    for stream_id in 0..next_id {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::ScheduleById(recipient.clone(), stream_id))
+            || (stream_id == 0
+                    && env.storage().persistent().has(&DataKey::Schedule(recipient.clone())))
+        {
+            ids.push_back(stream_id);
+        }
+    }
+    if next_id == 0
+        && (env
+            .storage()
+            .persistent()
+            .has(&DataKey::ScheduleById(recipient.clone(), 0))
+            || env.storage().persistent().has(&DataKey::Schedule(recipient.clone())))
+    {
+        ids.push_back(0);
+    }
+    ids
 }
 
 // ── Variable-rate schedule ────────────────────────────────────────────────────

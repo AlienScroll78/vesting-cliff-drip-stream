@@ -137,18 +137,22 @@ pub fn create_vesting_stream(
     rate: i128,           // tokens per ledger (> 0)
     cliff_duration: u32,  // ledgers until cliff
     total_duration: u32,  // total stream length (> cliff_duration)
-) -> Result<(), VestingError>
+) -> Result<u32, VestingError> // newly allocated stream_id
 ```
 
-Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
+Stream IDs start at `0` for new recipients and increase per recipient. Existing deployments read their legacy single schedule as stream ID `0`; newly created streams receive subsequent IDs. Validates that `rate × total_duration ≥ min_deposit` (configurable, default 100).
 
 ### `claim_vested`
 
 ```rust
-pub fn claim_vested(env: Env, recipient: Address) -> Result<i128, VestingError>
+pub fn claim_vested(
+    env: Env,
+    recipient: Address,
+    stream_id: Option<u32>, // None claims all active streams
+) -> Result<i128, VestingError>
 ```
 
-Returns the amount transferred. Fails with `CliffNotReached` before the cliff.
+Returns the total amount transferred across the selected stream(s). Streams use their own token; pass `Some(stream_id)` to claim one stream or `None` to claim all claimable streams.
 
 ### `cancel_stream`
 
@@ -157,6 +161,7 @@ pub fn cancel_stream(
     env: Env,
     sponsor: Address,
     recipient: Address,
+    stream_id: u32,
 ) -> Result<(), VestingError>
 ```
 
@@ -169,6 +174,7 @@ pub fn clawback_stream(
     env: Env,
     sponsor: Address,    // original stream funder; must sign
     recipient: Address,
+    stream_id: u32,
     reason: String,      // compliance reason (max 256 chars)
 ) -> Result<(), VestingError>
 ```
@@ -204,6 +210,8 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | Function | Returns |
 |---|---|
 | `get_schedule(recipient)` | `Option<VestingSchedule>` |
+| `get_stream_ids(recipient)` | `Vec<u32>` — active stream IDs in ascending order |
+| `get_schedule_by_id(recipient, stream_id)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
 | `is_cliff_passed(recipient)` | `bool` |
 | `get_min_deposit()` | `i128` — current minimum deposit threshold |
@@ -219,7 +227,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 3 | `InvalidDuration` | `total_duration` ≤ `cliff_duration` |
 | 4 | `InvalidRate` | `rate` is zero or negative; or `fee_bps` > 500 |
 | 5 | `DepositOverflow` | Arithmetic overflow computing total deposit |
-| 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient |
+| 6 | `ScheduleAlreadyExists` | A conflicting schedule already exists |
 | 7 | `NothingToClaim` | Claimable amount is zero at current ledger |
 | 8 | `StreamNotExpired` | `end_ledger` has not yet been reached |
 | 9 | `TransferFailed` | Token transfer failed |
@@ -297,7 +305,7 @@ export TOTAL_DURATION=172800  # ~10 days
 - **Auth**: Both `create_vesting_stream` ([sponsor](docs/glossary.md#sponsor)) and `claim_vested` / `cancel_stream` (respective callers) use [`require_auth()`](docs/glossary.md#auth--require_auth).
 - **Overflow protection**: All arithmetic uses [checked_* operations](docs/glossary.md#checked-arithmetic), returning `DepositOverflow` on failure.
 - **Overflow boundary**: The maximum valid deposit rate for a given duration is `i128::MAX / total_duration`; one unit above that returns `DepositOverflow`.
-- **Duplicate prevention**: A second stream for the same recipient is rejected with `ScheduleAlreadyExists`.
+- **Multiple streams**: Each recipient can have concurrent streams, identified by an auto-incremented `stream_id`.
 - **TTL management**: [Persistent storage](docs/glossary.md#persistent-storage) entries are bumped on every read/write (~60-day window) to prevent expiry of active streams.
 - **No admin backdoor**: The contract has no owner/admin key; only the original sponsor can cancel.
 

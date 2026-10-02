@@ -94,7 +94,7 @@ fn test_cancel_at_end_ledger_zero_sponsor_refund() {
 
     // Advance exactly to end_ledger (20 ledgers).
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     // All 200 tokens go to recipient; sponsor gets 0.
     assert_eq!(token_client.balance(&recipient), 200);

@@ -172,7 +172,7 @@ fn test_stream_status_not_found_after_full_claim() {
     create_stream(&client, &sponsor, &recipient, &token_id);
 
     advance_ledger(&env, 300);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     assert_eq!(client.stream_status(&recipient), StreamStatus::NotFound);
 }
@@ -189,7 +189,7 @@ fn test_stream_status_not_found_after_cancel() {
     mint_to(&env, &token_id, &sponsor, 5_000);
 
     create_stream(&client, &sponsor, &recipient, &token_id);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     assert_eq!(client.stream_status(&recipient), StreamStatus::NotFound);
 }

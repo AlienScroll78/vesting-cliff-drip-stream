@@ -204,7 +204,7 @@ fn s_new_11_remove_schedule_clears_storage() {
     assert!(client.get_schedule(&recipient).is_some());
 
     // Cancel before cliff → full refund, schedule removed
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient, &0).unwrap();
     assert!(client.get_schedule(&recipient).is_none());
 }
 
@@ -228,7 +228,7 @@ fn s_new_12_remove_schedule_on_stream_completion() {
 
     // Advance past end_ledger (100 + 20 = 120)
     advance_ledger(&env, 25);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 
     // Schedule must be removed after full stream is claimed
     assert!(client.get_schedule(&recipient).is_none());
@@ -268,7 +268,7 @@ fn s_new_13_schedules_are_isolated_per_recipient() {
     assert!(client.get_schedule(&r2).is_some());
 
     // Cancel r1 does not affect r2
-    client.cancel_stream(&sponsor, &r1).unwrap();
+    client.cancel_stream(&sponsor, &r1, &0).unwrap();
     assert!(client.get_schedule(&r1).is_none());
     assert!(client.get_schedule(&r2).is_some());
 }
@@ -295,7 +295,7 @@ fn s_new_14_get_schedule_reads_latest_write_after_claim() {
 
     // Claim updates last_claimed_ledger and total_claimed in storage
     advance_ledger(&env, 50);
-    client.claim_vested(&recipient).unwrap();
+    client.claim_vested(&recipient, &None).unwrap();
 
     let updated = client.get_schedule(&recipient).unwrap();
     assert!(

@@ -192,7 +192,7 @@ fn snapshot_event_stream_cancelled() {
     client
         .create_vesting_stream(&sponsor, &recipient, &token, &10, &50, &200, &None)
         .unwrap();
-    client.cancel_stream(&sponsor, &recipient).unwrap();
+    client.cancel_stream(&sponsor, &recipient, &0).unwrap();
 
     assert_event_snapshot(&env, "event_stream_cancelled.snap", "vc_cancel");
 }
