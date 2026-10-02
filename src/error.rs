@@ -68,4 +68,7 @@ pub enum VestingError {
     /// Reason strings are stored on-chain in the emitted event. Trim the reason
     /// to at most 256 UTF-8 bytes before retrying.
     ReasonTooLong = 22,
+
+    /// **Code 16** — A batch contains more than 20 recipients.
+    BatchTooLarge = 16,
 }

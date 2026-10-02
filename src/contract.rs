@@ -1411,6 +1411,36 @@ impl VestingDrips {
         compute_claimable(&schedule, current_ledger)
     }
 
+    /// Returns claimable amounts for `recipients` in input order.
+    ///
+    /// Recipients without a schedule, before their cliff, or with a paused
+    /// schedule have a claimable amount of `0`.
+    pub fn get_claimable_batch(
+        env: Env,
+        recipients: Vec<Address>,
+    ) -> Result<Vec<(Address, i128)>, VestingError> {
+        if recipients.len() > MAX_BATCH_SIZE {
+            return Err(VestingError::BatchTooLarge);
+        }
+
+        let current_ledger = env.ledger().sequence();
+        let mut results = Vec::new(&env);
+        for recipient in recipients.iter() {
+            let amount = match storage::get_schedule_readonly(&env, &recipient) {
+                Some(schedule)
+                    if schedule.paused_at_ledger.is_none()
+                        && current_ledger >= schedule.cliff_ledger =>
+                {
+                    compute_claimable(&schedule, current_ledger)
+                }
+                _ => 0,
+            };
+            results.push_back((recipient, amount));
+        }
+
+        Ok(results)
+    }
+
     /// Returns `true` if the cliff has been passed for `recipient`.
     pub fn is_cliff_passed(env: Env, recipient: Address) -> bool {
         let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {

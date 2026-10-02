@@ -205,6 +205,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 |---|---|
 | `get_schedule(recipient)` | `Option<VestingSchedule>` |
 | `claimable_amount(recipient)` | `i128` — `0` if cliff not reached |
+| `get_claimable_batch(recipients)` | `Vec<(Address, i128)>` — preserves input order; unknown recipients return `0` |
 | `is_cliff_passed(recipient)` | `bool` |
 | `get_min_deposit()` | `i128` — current minimum deposit threshold |
 
