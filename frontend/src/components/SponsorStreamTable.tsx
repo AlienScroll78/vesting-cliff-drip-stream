@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
 import { StatusBadge } from "./StatusBadge";
+import { StreamExplorerSkeleton } from "./Skeletons";
 import styles from "./SponsorStreamTable.module.css";
 
 interface SponsorStreamTableProps {
@@ -44,7 +45,9 @@ export function SponsorStreamTable({
   return (
     <div className={styles.container}>
       {isLoading ? (
-        <div className={styles.skeleton} aria-hidden="true" />
+        // #823 — shaped rows instead of a flat block, so column widths are
+        // already in place when the data lands (no layout shift).
+        <StreamExplorerSkeleton rows={8} />
       ) : (
         <>
           <div className={styles.tableWrapper}>

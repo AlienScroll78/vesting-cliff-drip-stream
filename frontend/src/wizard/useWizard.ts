@@ -74,7 +74,8 @@ const INITIAL_DATA: WizardFormData = {
   walletAddress: '',
 }
 
-const LEDGERS_PER_SECOND = 0.2
+/** Average time between Stellar ledgers (~5 s). Shared with the date→ledger conversion. */
+export const LEDGERS_PER_SECOND = 0.2
 
 /** i128::MAX value for overflow detection */
 export const I128_MAX = BigInt('170141183460469231731687303715884105727')
@@ -117,11 +118,74 @@ function setHash(step: WizardStep) {
   }
 }
 
+// ── Progress persistence (#822) ───────────────────────────────────────────────
+// Form state is saved to localStorage on every change so an accidental back
+// navigation, a refresh, or closing the browser mid-flow never loses progress.
+
+const STORAGE_KEY = 'vesting_wizard_progress'
+
+interface PersistedProgress {
+  stepIndex: number
+  data: WizardFormData
+}
+
+function loadProgress(): PersistedProgress | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as PersistedProgress
+    if (typeof parsed?.stepIndex !== 'number') return null
+    if (!parsed.data || typeof parsed.data !== 'object') return null
+    // Guard against a corrupt or out-of-range step index.
+    if (parsed.stepIndex < 0 || parsed.stepIndex >= WIZARD_STEPS.length) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveProgress(stepIndex: number, data: WizardFormData) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ stepIndex, data }))
+  } catch {
+    // Storage full or unavailable (private browsing) — persistence is best-effort.
+  }
+}
+
+function clearProgress() {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useWizard() {
-  const [stepIndex, setStepIndex] = useState(getStepFromHash)
-  const [data, setData] = useState<WizardFormData>(INITIAL_DATA)
+  // Restore any saved progress so a refresh or accidental back navigation
+  // doesn't discard the user's answers (#822).
+  const restored = useRef<PersistedProgress | null>(null)
+  if (restored.current === null) restored.current = loadProgress()
+
+  const [stepIndex, setStepIndex] = useState(
+    () => restored.current?.stepIndex ?? getStepFromHash()
+  )
+  const [data, setData] = useState<WizardFormData>(
+    () => restored.current?.data ?? INITIAL_DATA
+  )
   const [touched, setTouched] = useState<Set<string>>(new Set())
   const initialized = useRef(false)
+  // Highest step reached this session — drives the ✓ checkmarks in the
+  // step indicator (#822) and which steps are tappable.
+  const [furthestStep, setFurthestStep] = useState(stepIndex)
+
+  // Persist on every change; debounce isn't needed because these writes are
+  // small and localStorage is synchronous.
+  useEffect(() => {
+    saveProgress(stepIndex, data)
+  }, [stepIndex, data])
 
   useEffect(() => {
     if (!initialized.current) {
@@ -148,6 +212,7 @@ export function useWizard() {
       setHash(WIZARD_STEPS[nextIdx] as WizardStep)
       return nextIdx
     })
+    setFurthestStep(f => Math.min(f + 1, totalSteps - 1))
   }, [totalSteps])
 
   const back = useCallback(() => {
@@ -167,19 +232,26 @@ export function useWizard() {
   }, [])
 
   const reset = useCallback(() => {
+    // Stream created (or abandoned) — drop the saved draft so the next run
+    // starts clean.
+    clearProgress()
     setStepIndex(0)
     setData(INITIAL_DATA)
     setTouched(new Set())
+    setFurthestStep(0)
     setHash(WIZARD_STEPS[0] as WizardStep)
   }, [])
 
   const goToStep = useCallback((idx: number) => {
-    setStepIndex(idx)
-    setHash(WIZARD_STEPS[idx] as WizardStep)
+    setStepIndex(i => {
+      const safe = Math.min(Math.max(idx, 0), i)
+      setHash(WIZARD_STEPS[safe] as WizardStep)
+      return safe
+    })
   }, [])
 
   return {
-    step, stepIndex, totalSteps, data,
+    step, stepIndex, totalSteps, data, furthestStep,
     touched, next, back, update, touch, reset, goToStep,
     WIZARD_STEPS,
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ErrorCategory } from "@/errorMessages";
+import type { ErrorCategory } from "@/lib/errorMessages";
 
 interface ErrorStateIllustrationProps {
   category: ErrorCategory;

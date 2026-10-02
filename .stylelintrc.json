@@ -1,0 +1,33 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "color-no-invalid-hex": true,
+    "color-named": "never",
+    "color-no-hex": [
+      true,
+      {
+        "message": "Hardcoded hex colours are not allowed. Use a CSS custom property from design-system/tokens/tokens.css instead (e.g. var(--color-primary-600))."
+      }
+    ],
+    "custom-property-pattern": null,
+    "selector-class-pattern": null,
+    "keyframes-name-pattern": null,
+    "alpha-value-notation": null,
+    "color-function-notation": null,
+    "import-notation": null,
+    "no-empty-source": null,
+    "comment-empty-line-before": null,
+    "rule-empty-line-before": null,
+    "declaration-block-single-line-max-declarations": null,
+    "no-descending-specificity": null
+  },
+  "ignoreFiles": [
+    "node_modules/**",
+    "design-system/tokens/tokens.css",
+    "design-system/tokens/typography.css",
+    "**/node_modules/**",
+    "**/*.min.css",
+    "frontend/**",
+    "backend/**"
+  ]
+}
