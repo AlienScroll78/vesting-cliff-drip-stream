@@ -18,6 +18,10 @@ import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
+// #820 — first-time-user onboarding tour
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { ReplayTourButton } from "@/components/ReplayTourButton";
+import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -292,6 +296,7 @@ function StreamList() {
                         setClaimTarget(s);
                       }}
                       data-testid={`claim-btn-${s.id}`}
+                      data-tour="claim"
                     >
                       {t("claim")}
                     </button>
@@ -301,6 +306,7 @@ function StreamList() {
             </div>
 
             <SegmentedProgressBar
+              data-tour="claimable"
               total={s.totalDeposit ?? 3000}
               dripped={s.status === "active" ? s.claimableAmount : s.status === "completed" ? (s.totalDeposit ?? 3000) : 0}
               cliffCatchUp={s.status === "active" ? 500 : 0}
@@ -387,6 +393,7 @@ export default function Home() {
               style={{ whiteSpace: "nowrap" }}
               onClick={() => setShowCreate((v) => !v)}
               aria-expanded={showCreate}
+              aria-controls="create-stream-section"
               data-testid="toggle-create-form"
             >
               {showCreate ? "✕ Cancel" : "+ New Stream"}
@@ -403,7 +410,9 @@ export default function Home() {
         )}
 
         {showCreate && (
-          <CreateStreamWizard onClose={() => setShowCreate(false)} />
+          <section id="create-stream-section" aria-label="Create new vesting stream">
+            <CreateStreamWizard onClose={() => setShowCreate(false)} />
+          </section>
         )}
 
         <StreamList />

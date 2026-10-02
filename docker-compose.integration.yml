@@ -1,0 +1,30 @@
+# docker-compose.integration.yml
+#
+# Local Stellar quickstart node for integration tests (issue #779).
+#
+# Starts a stellar/quickstart:testing node with Soroban RPC enabled.
+# Exposes Horizon on port 8000 and Soroban RPC on port 8000/soroban/rpc.
+#
+# Usage:
+#   docker compose -f docker-compose.integration.yml up -d
+#   make integration-test
+#   docker compose -f docker-compose.integration.yml down
+
+services:
+  stellar:
+    image: stellar/quickstart:testing
+    ports:
+      - "8000:8000"    # Horizon HTTP API + Soroban RPC
+      - "11625:11625"  # Stellar Core peer port
+      - "11626:11626"  # Stellar Core HTTP port
+    environment:
+      NETWORK: local
+      ENABLE_SOROBAN_RPC: "true"
+      # Accelerate ledger close for faster test runs (~1 s/ledger in testing mode)
+      STELLAR_CORE_CATCHUP_COMPLETE: "false"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
