@@ -6,14 +6,7 @@ import { type FeeEstimate, estimateFee } from "@/utils/feeEstimate";
 import { VestingStream } from "@/types";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { ConfettiBurst } from "@/components/ConfettiBurst";
-
-/** Convert a ledger count to a human-readable duration string (~5 s/ledger). */
-function ledgersToHuman(ledgers: number): string {
-  const seconds = ledgers * 5;
-  if (seconds < 3600) return `${Math.round(seconds / 60)} minutes`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)} hours`;
-  return `${Math.round(seconds / 86400)} days`;
-}
+import { CliffCountdown } from "@/components/CliffCountdown";
 
 /** Trigger haptic feedback on supported mobile devices. */
 function triggerHaptic(type: "light" | "medium" | "success" = "medium") {
@@ -48,12 +41,15 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
   const titleId = "claim-sheet-title";
 
   const isPreCliff = status === "pre-cliff";
+  const [cliffReached, setCliffReached] = useState(!isPreCliff);
 
-  // Cliff countdown
-  const ledgersUntilCliff =
-    isPreCliff && stream.cliffLedger && currentLedger
-      ? Math.max(0, stream.cliffLedger - currentLedger)
-      : null;
+  useEffect(() => {
+    if (isPreCliff && stream.cliffLedger !== undefined && currentLedger !== undefined) {
+      setCliffReached(currentLedger >= stream.cliffLedger);
+    } else {
+      setCliffReached(!isPreCliff);
+    }
+  }, [currentLedger, isPreCliff, stream.cliffLedger]);
 
   // Progress: vested / total
   const vestedPct =
@@ -180,7 +176,7 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
     }
   }
 
-  const canClaim = !isPreCliff && optimisticAmount > 0 && !claimed;
+  const canClaim = cliffReached && optimisticAmount > 0 && !claimed;
 
   return (
     <>
@@ -249,17 +245,25 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
 
           {/* Caption */}
           <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "0.25rem 0 0", alignSelf: "flex-start" }}>
-            {isPreCliff ? "Tokens locked until cliff" : "You can claim"}
+            {isPreCliff && !cliffReached ? "Tokens locked until cliff" : "You can claim"}
           </p>
 
-          {/* Pre-cliff banner */}
-          {isPreCliff && (
+          {isPreCliff && stream.cliffLedger !== undefined && currentLedger !== undefined ? (
+            <CliffCountdown
+              cliffLedger={stream.cliffLedger}
+              currentLedger={currentLedger}
+              onReached={() => setCliffReached(true)}
+              onClaim={handleClaim}
+              claimableAmount={optimisticAmount}
+              tokenSymbol={tokenSymbol}
+            />
+          ) : isPreCliff ? (
             <div
               role="status"
               data-testid="cliff-countdown"
               style={{
                 padding: "0.75rem 1rem",
-                background: "var(--color-pre-cliff)" + "18",
+                background: "var(--color-pre-cliff)",
                 border: "1px solid var(--color-pre-cliff)",
                 borderRadius: "var(--radius)",
                 marginTop: "0.75rem",
@@ -268,17 +272,9 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
               }}
             >
               <strong style={{ color: "var(--color-pre-cliff)" }}>🔒 Cliff not reached</strong>
-              {ledgersUntilCliff !== null ? (
-                <p style={{ margin: "0.25rem 0 0" }}>
-                  Tokens unlock in approximately{" "}
-                  <strong>{ledgersToHuman(ledgersUntilCliff)}</strong>{" "}
-                  ({ledgersUntilCliff.toLocaleString()} ledgers remaining)
-                </p>
-              ) : (
-                <p style={{ margin: "0.25rem 0 0" }}>Your tokens are still locked until the cliff.</p>
-              )}
+              <p style={{ margin: "0.25rem 0 0" }}>Your tokens are still locked until the cliff.</p>
             </div>
-          )}
+          ) : null}
 
           {/* Claimable amount — prominent */}
           <div
@@ -403,34 +399,35 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
             </p>
           )}
 
-          {/* Primary CTA — 48px touch target */}
-          <button
-            className="btn btn-primary btn-full"
-            onClick={handleClaim}
-            disabled={loading || !canClaim}
-            data-testid="claim-button"
-            aria-disabled={!canClaim}
-            style={{
-              minHeight: 48,
-              fontSize: "1rem",
-              marginTop: "0.5rem",
-              background: claimed && !loading && !txError
-                ? "var(--color-completed)"
+          {(!isPreCliff || !cliffReached || stream.cliffLedger === undefined || currentLedger === undefined) && (
+            <button
+              className="btn btn-primary btn-full"
+              onClick={handleClaim}
+              disabled={loading || !canClaim}
+              data-testid="claim-button"
+              aria-disabled={!canClaim}
+              style={{
+                minHeight: 48,
+                fontSize: "1rem",
+                marginTop: "0.5rem",
+                background: claimed && !loading && !txError
+                  ? "var(--color-completed)"
+                  : isPreCliff
+                  ? undefined
+                  : undefined,
+              }}
+            >
+              {loading
+                ? <span aria-live="polite">Claiming…</span>
                 : isPreCliff
-                ? undefined
-                : undefined,
-            }}
-          >
-            {loading
-              ? <span aria-live="polite">Claiming…</span>
-              : isPreCliff
-              ? "Cliff not reached"
-              : claimed && !txError
-              ? "Claimed! ✓"
-              : txError
-              ? "Retry"
-              : "Claim Tokens →"}
-          </button>
+                ? "Cliff not reached"
+                : claimed && !txError
+                ? "Claimed! ✓"
+                : txError
+                ? "Retry"
+                : "Claim Tokens →"}
+            </button>
+          )}
 
           {/* Dismiss link */}
           <button

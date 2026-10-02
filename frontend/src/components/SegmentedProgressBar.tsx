@@ -13,6 +13,8 @@ export interface SegmentedProgressBarProps {
   /** Tokens released via linear drip so far */
   dripped: number;
   tokenSymbol?: string;
+  /** #820 — marks this bar as the "claimable balance" step target for the tour. */
+  "data-tour"?: string;
 }
 
 function fmt(n: number, sym: string) {
@@ -34,6 +36,7 @@ export function SegmentedProgressBar({
   cliffCatchUp,
   dripped,
   tokenSymbol = "tokens",
+  "data-tour": dataTour,
 }: SegmentedProgressBarProps) {
   const id = useId();
   const reducedMotion = useReducedMotion();
@@ -58,7 +61,7 @@ export function SegmentedProgressBar({
   const shownCliffPct   = filled ? cliffPct   : 0;
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%" }} data-tour={dataTour}>
       {/* Screen-reader summary */}
       <p id={id} className="sr-only">
         Vesting progress: {fmt(released, tokenSymbol)} released of {fmt(total, tokenSymbol)}.
