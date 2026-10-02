@@ -91,7 +91,7 @@ fn test_create_duplicate_stream_fails() {
     // deposit = 10 * 200 = 2000
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
 
-    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200);
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &50, &200, &None);
 
     let err = client
         .try_create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200, &None)
@@ -112,8 +112,8 @@ fn test_two_recipients_claim_independently() {
 
     let rate_alice = 10 * RATE_DECIMALS;
     let rate_bob = 10 * RATE_DECIMALS;
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &50, &200);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &30, &100);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &50, &200, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &30, &100, &None);
 
     advance_ledger(&env, 60);
 
@@ -136,8 +136,8 @@ fn test_storage_keys_are_per_recipient() {
 
     let rate_alice = 7 * RATE_DECIMALS;
     let rate_bob = 13 * RATE_DECIMALS;
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &40, &150);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &60, &200);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate_alice, &40, &150, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate_bob, &60, &200, &None);
 
     let alice_sched = client.get_schedule(&alice).unwrap();
     let bob_sched = client.get_schedule(&bob).unwrap();
@@ -204,6 +204,42 @@ fn test_create_with_none_metadata_stored_as_none() {
 
     let schedule = client.get_schedule(&recipient).unwrap();
     assert_eq!(schedule.metadata, None);
+}
+
+// ── InvalidRecipient regression test (#729) ───────────────────────────────────
+
+/// Calling `create_vesting_stream` with identical sponsor and recipient addresses
+/// must be rejected immediately with `InvalidRecipient` (error code 11).
+///
+/// Regression test for issue #729: ensures the same-address guard is present
+/// and returns the correct error code before any token transfer occurs.
+#[test]
+fn test_create_stream_same_sponsor_and_recipient_returns_invalid_recipient() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let sponsor = Address::generate(&env);
+    let (token_id, _) = setup_token(&env, &sponsor, 10_000);
+
+    // Sponsor and recipient are the same address.
+    let err = client
+        .try_create_vesting_stream(
+            &sponsor,
+            &sponsor, // same as sponsor — must be rejected
+            &token_id,
+            &10,
+            &50,
+            &200,
+            &None,
+        )
+        .unwrap_err();
+
+    assert_eq!(err, Ok(VestingError::InvalidRecipient));
+}
+
+/// Confirms `InvalidRecipient` carries error code 11.
+#[test]
+fn test_invalid_recipient_error_code_is_11() {
+    assert_eq!(VestingError::InvalidRecipient as u32, 11);
 }
 
 /// A metadata string of 257 bytes is rejected with MetadataTooLong.

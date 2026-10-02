@@ -24,17 +24,8 @@
  */
 
 import { randomUUID } from 'crypto';
-import { logger, runWithIds } from './logger.js';
-
-// Optional: read trace_id from the active OTel span without hard-coupling to
-// @opentelemetry/api.  If the package is absent (e.g. unit tests without tracing
-// set up) we silently fall back to null.
-let otelTrace = null;
-try {
-  otelTrace = (await import('@opentelemetry/api')).trace;
-} catch {
-  // tracing not available — proceed without trace_id
-}
+import { getTraceId, logger, runWithIds } from './logger.js';
+import { trace as otelTrace } from '@opentelemetry/api';
 
 /** Extract the W3C traceId from the currently active OTel span, if any. */
 function getActiveTraceId() {
@@ -72,11 +63,13 @@ function sanitizeHeaders(headers) {
  * @param {Function} next
  */
 export function requestLoggerMiddleware(req, res, next) {
-  // Generate a fresh UUID for this specific HTTP request.
+  // Keep a request ID for compatibility and establish one trusted correlation ID.
   const requestId = req.headers['x-request-id'] ?? randomUUID();
-
-  // Honour a caller-supplied logical correlation ID; fall back to requestId.
-  const correlationId = req.headers['x-correlation-id'] ?? requestId;
+  const incomingCorrelationId = req.headers['x-correlation-id'];
+  const correlationId = typeof incomingCorrelationId === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(incomingCorrelationId)
+    ? incomingCorrelationId
+    : randomUUID();
 
   // Best-effort extraction of the W3C traceId from the OTel span that the
   // HTTP instrumentation has already started for this request.
@@ -84,20 +77,22 @@ export function requestLoggerMiddleware(req, res, next) {
 
   // Echo both identifiers in the response so the caller can correlate.
   res.setHeader('X-Request-ID',    requestId);
-  res.setHeader('X-Correlation-Id', correlationId);
+  res.setHeader('X-Correlation-ID', correlationId);
+  req.requestId = requestId;
+  req.correlationId = correlationId;
 
   // Propagate all three IDs through the full async chain for this request.
   runWithIds({ requestId, traceId, correlationId }, () => {
     const startNs = process.hrtime.bigint();
 
-    const traceCtxOnReceive = getTraceContext();
+    const traceIdOnReceive = getTraceId();
     logger.info(
       {
         event:   'request_received',
         method:  req.method,
         path:    req.url,
         headers: sanitizeHeaders(req.headers),
-        ...(traceCtxOnReceive ? { trace_id: traceCtxOnReceive.trace_id, span_id: traceCtxOnReceive.span_id } : {}),
+        ...(traceIdOnReceive ? { trace_id: traceIdOnReceive } : {}),
       },
       `${req.method} ${req.url}`,
     );
@@ -106,15 +101,15 @@ export function requestLoggerMiddleware(req, res, next) {
     const originalEnd = res.end.bind(res);
     res.end = function (...args) {
       const durationMs = Number(process.hrtime.bigint() - startNs) / 1e6;
-      const traceCtxOnComplete = getTraceContext();
+      const traceIdOnComplete = getTraceId();
       logger.info(
         {
           event:      'request_completed',
           method:     req.method,
           path:       req.url,
           status:     res.statusCode,
-          durationMs: Math.round(durationMs * 100) / 100,
-          ...(traceCtxOnComplete ? { trace_id: traceCtxOnComplete.trace_id, span_id: traceCtxOnComplete.span_id } : {}),
+          duration_ms: Math.round(durationMs * 100) / 100,
+          ...(traceIdOnComplete ? { trace_id: traceIdOnComplete } : {}),
         },
         `${req.method} ${req.url} ${res.statusCode} ${Math.round(durationMs)}ms`,
       );

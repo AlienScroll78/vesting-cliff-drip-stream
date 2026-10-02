@@ -9,13 +9,12 @@ use soroban_sdk::contracterror;
 /// All error codes returned by the VestingDrips contract.
 ///
 /// Codes are pinned to explicit `u32` values so clients can switch on them
-/// reliably across contract upgrades (see ADR-0004). Code 0 is reserved for
-/// success by the Soroban runtime and must never be used here.
+/// reliably across contract upgrades. Code 0 is reserved for success by the
+/// Soroban runtime and must never be used here.
 #[allow(missing_docs)]
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
-#[allow(missing_docs)]
 pub enum VestingError {
     /// **Code 1** — No active vesting schedule exists for the given recipient.
     ScheduleNotFound = 1,
@@ -41,14 +40,14 @@ pub enum VestingError {
     /// **Code 8** — The stream's `end_ledger` has not yet been reached.
     StreamNotExpired = 8,
 
-    /// **Code 9** — A token transfer call failed.
-    TransferFailed = 9,
+    /// **Code 9** — The emergency-drain delay period has not yet elapsed.
+    DrainDelayNotExpired = 9,
 
-    /// **Code 10** — The emergency-drain delay period has not yet elapsed.
-    DrainDelayNotExpired = 10,
+    /// **Code 10** — `sponsor` and `recipient` must be distinct addresses.
+    InvalidRecipient = 10,
 
-    /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
-    InvalidRecipient = 11,
+    /// **Code 11** — A token transfer call failed.
+    TransferFailed = 11,
 
     /// **Code 27** — The token address is not a valid SAC (Stellar Asset Contract).
     InvalidToken = 27,
@@ -59,16 +58,36 @@ pub enum VestingError {
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
 
-    /// **Code 21** — The token does not have the SAC clawback flag enabled.
-    ///
-    /// `clawback_stream` is only available on tokens where the Stellar Asset
-    /// Contract issuer has set `AUTH_CLAWBACK_ENABLED_FLAG`. Use `cancel_stream`
-    /// to recover tokens from non-clawback-enabled token streams.
-    TokenDoesNotSupportClawback = 21,
+    /// **Code 21** — Caller is not the contract admin or original sponsor.
+    Unauthorized = 21,
 
-    /// **Code 22** — The clawback `reason` string exceeds 256 bytes.
-    ///
-    /// Reason strings are stored on-chain in the emitted event. Trim the reason
-    /// to at most 256 UTF-8 bytes before retrying.
-    ReasonTooLong = 22,
+    /// **Code 22** — Total deposit is below the configured minimum.
+    DepositBelowMinimum = 22,
+
+    /// **Code 23** — Stream is already paused.
+    StreamAlreadyPaused = 23,
+
+    /// **Code 24** — `resume_stream` called on a non-paused stream.
+    StreamNotPaused = 24,
+
+    /// **Code 25** — Version counter has reached `u32::MAX`.
+    VersionOverflow = 25,
+
+    /// **Code 26** — Token does not support the SAC clawback flag.
+    ClawbackNotSupported = 26,
+
+    /// **Code 27** — The clawback `reason` string exceeds 256 bytes.
+    ReasonTooLong = 27,
+
+    /// **Code 28** — Reentrancy detected.
+    Reentrancy = 28,
+
+    /// **Code 29** — Batch size exceeds the maximum of 50 (extended batch endpoint).
+    BatchSizeExceeded = 29,
+
+    /// **Code 30** — Milestone validation failed.
+    InvalidMilestones = 30,
+
+    /// **Code 31** — The token address is not a valid SAC.
+    InvalidToken = 31,
 }
