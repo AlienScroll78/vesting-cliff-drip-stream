@@ -4,10 +4,18 @@ import { validateAddress } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
+import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+import { prometheusMetricsHandler } from './routes/metrics.js';
 
 const app = express();
 
 app.set('trust proxy', 1);
+
+// Prometheus metrics — collect timing for every request (before other middleware).
+app.use(metricsMiddleware);
+
+// Prometheus scrape endpoint — must NOT be behind auth or rate-limiting.
+app.get('/metrics', prometheusMetricsHandler);
 
 // Assign request_id / trace_id / correlation_id and propagate via
 // AsyncLocalStorage so every log call during a request includes all three IDs.
