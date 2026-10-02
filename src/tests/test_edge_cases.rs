@@ -21,7 +21,7 @@ fn test_minimal_cliff_one_ledger() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 1);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -34,7 +34,7 @@ fn test_claim_exactly_at_end_removes_schedule() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 10, 100);
 
     advance_ledger(&env, 100);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     assert!(client.get_schedule(&recipient).is_none());
 }
@@ -48,11 +48,11 @@ fn test_incremental_claims_sum_to_total() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 20);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
     advance_ledger(&env, 40);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // 100 ledgers * 5 tokens = 500
     assert_eq!(tc.balance(&recipient), 500);
@@ -68,7 +68,7 @@ fn test_regression_cliff_equals_total_minus_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 100);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 1_000);
     assert_eq!(tc.balance(&recipient), 1_000);
     assert!(client.get_schedule(&recipient).is_none());
@@ -83,7 +83,7 @@ fn test_regression_rate_of_one() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 10);
     assert_eq!(tc.balance(&recipient), 10);
 }
@@ -97,7 +97,7 @@ fn test_regression_claim_well_past_end_caps_correctly() {
     let tc = soroban_sdk::token::TokenClient::new(&env, &token_id);
 
     advance_ledger(&env, 10_000);
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 500);
     assert_eq!(tc.balance(&recipient), 500);
 }
@@ -185,7 +185,7 @@ fn test_create_stream_sets_proactive_ttl() {
         let ttl = env
             .storage()
             .persistent()
-            .get_ttl(&DataKey::Schedule(recipient.clone()));
+            .get_ttl(&DataKey::ScheduleById(recipient.clone(), 0));
         assert_eq!(
             ttl, PERSISTENT_BUMP_AMOUNT,
             "Short stream TTL should be capped at PERSISTENT_BUMP_AMOUNT"
@@ -244,13 +244,13 @@ fn test_claim_vested_re_extends_ttl() {
 
     // claim_vested re-extends TTL proactively.
     advance_ledger(&env, 10); // past cliff
-    let _ = client.claim_vested(&recipient);
+    let _ = client.claim_vested(&recipient, &None);
 
     env.as_contract(&contract_id, || {
         let ttl = env
             .storage()
             .persistent()
-            .get_ttl(&DataKey::Schedule(recipient.clone()));
+            .get_ttl(&DataKey::ScheduleById(recipient.clone(), 0));
         assert_eq!(
             ttl, PERSISTENT_BUMP_AMOUNT,
             "TTL after claim_vested should be restored to PERSISTENT_BUMP_AMOUNT"

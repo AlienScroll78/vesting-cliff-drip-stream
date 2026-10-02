@@ -131,6 +131,10 @@ helm uninstall vesting-backend --namespace vesting
 | `config.contractId` | `""` | Deployed vesting contract ID |
 | `config.sorobanRpcUrl` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint |
 | `config.logLevel` | `info` | Log verbosity: `debug\|info\|warn\|error` |
+| `logging.fluentBit.enabled` | `true` | Deploy Fluent Bit sidecars for API and event-worker logs |
+| `logging.fluentBit.image` | AWS for Fluent Bit stable | Sidecar image |
+| `logging.fluentBit.awsRegion` | `us-east-1` | AWS region containing the log groups |
+| `logging.fluentBit.logGroupPrefix` | `/vesting/production` | CloudWatch Logs group prefix |
 | `config.requestTimeoutMs` | `30000` | Soroban RPC timeout (ms) |
 | `config.graphqlMaxDepth` | `5` | GraphQL query depth limit |
 | `externalSecret.enabled` | `true` | Create ExternalSecret resource |

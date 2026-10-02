@@ -1,0 +1,205 @@
+{
+  "appTitle": "Fluxos de Vesting",
+  "nav": {
+    "dashboard": "Painel",
+    "create": "Criar",
+    "history": "Histórico",
+    "settings": "Configurações",
+    "myStreams": "Meus Fluxos",
+    "compareStreams": "Comparar Fluxos",
+    "back": "← Voltar"
+  },
+  "wallet": {
+    "connect": "Conectar Carteira",
+    "disconnect": "Desconectar",
+    "connected": "Conectado",
+    "address": "Endereço",
+    "copyAddress": "Copiar endereço",
+    "copied": "Copiado!"
+  },
+  "claim": "Resgatar",
+  "claimTokens": "Resgatar Tokens",
+  "claimableBalance": "Saldo resgatável",
+  "claiming": "Resgatando…",
+  "claimSubmitted": "Resgate enviado! ✓",
+  "cliffNotReached": "Cliff não atingido",
+  "retry": "Tentar novamente",
+  "cancel": "Cancelar",
+  "confirm": "Confirmar",
+  "close": "Fechar",
+  "dismiss": "Dispensar",
+  "back": "Voltar",
+  "search": "Pesquisar",
+  "loading": "Carregando…",
+  "error": "Erro",
+  "submit": "Enviar",
+  "export": "Exportar",
+  "exportCsv": "Exportar CSV",
+  "newStream": "+ Novo Fluxo",
+  "cancelCreate": "✕ Cancelar",
+  "status": {
+    "active": "Ativo",
+    "precliff": "Pré-cliff",
+    "completed": "Concluído",
+    "cancelled": "Cancelado"
+  },
+  "legend": "Legenda de status",
+  "streams": {
+    "title": "Seus fluxos",
+    "myStreams": "Meus Fluxos",
+    "noStreams": "Nenhum fluxo ainda",
+    "create": "Criar um fluxo",
+    "all": "Todos",
+    "filterByStatus": "Filtrar por status",
+    "filterByToken": "Filtrar por token",
+    "allTokens": "Todos os tokens",
+    "sortBy": "Ordenar por",
+    "viewCard": "Visualização em cartões",
+    "viewTable": "Visualização em tabela",
+    "claimableAmount": "Resgatável",
+    "cliffDate": "Data do cliff",
+    "endDate": "Data de término",
+    "recipient": "Destinatário",
+    "token": "Token",
+    "rate": "Taxa / ledger",
+    "cliffLedger": "Ledger do cliff",
+    "endLedger": "Ledger final",
+    "actions": "Ações",
+    "selectAll": "Selecionar todos os fluxos canceláveis",
+    "selectStream": "Selecionar fluxo para {{address}}",
+    "cancelStream": "Cancelar fluxo para {{address}}",
+    "bulkSelected": "{{count}} fluxo selecionado",
+    "bulkSelected_plural": "{{count}} fluxos selecionados",
+    "cancelSelected": "Cancelar selecionados",
+    "clearSelection": "Limpar seleção",
+    "confirmBulkCancel": "Cancelar {{count}} fluxo?",
+    "confirmBulkCancel_plural": "Cancelar {{count}} fluxos?",
+    "bulkCancelWarning": "Esta ação cancelará todos os fluxos selecionados. Os tokens resgatáveis (pós-cliff) serão enviados aos destinatários; o restante será reembolsado a você.",
+    "confirmCancel": "Confirmar cancelamento",
+    "page": "Página {{page}} de {{total}}",
+    "previousPage": "Página anterior",
+    "nextPage": "Próxima página",
+    "ascending": "crescente",
+    "descending": "decrescente"
+  },
+  "stream": {
+    "create": "Criar Fluxo de Vesting",
+    "rate": "Taxa (tokens / ledger)",
+    "cliffDuration": "Duração do cliff (ledgers)",
+    "totalDuration": "Duração total (ledgers)",
+    "recipient": "Destinatário",
+    "sponsor": "Patrocinador",
+    "token": "Token",
+    "totalDeposit": "Depósito total",
+    "totalVested": "Total adquirido",
+    "timeline": "Alternar gráfico de linha do tempo de vesting",
+    "cliffUnlock": "Desbloqueio no cliff"
+  },
+  "horizon": {
+    "degraded": "Degradado",
+    "offline": "Offline",
+    "degradedMsg": "A resposta está lenta ({{latency}} ms). As transações podem ser atrasadas.",
+    "offlineMsg": "Não é possível alcançar o Horizon. As transações estão indisponíveis no momento.",
+    "lastChecked": "Última verificação: {{time}}",
+    "statusPage": "Página de status ↗",
+    "recheck": "↺ Verificar novamente",
+    "dismissFor5Min": "Dispensar por 5 minutos"
+  },
+  "tx": {
+    "pending": "Transação pendente…",
+    "confirmed": "Transação confirmada",
+    "failed": "Transação falhou",
+    "viewOnExplorer": "Ver no explorador",
+    "estimatingFee": "⏳ Estimando taxa…",
+    "feeUnavailable": "⚠️ Estimativa de taxa indisponível",
+    "fee": "Taxa estimada: {{amount}} XLM"
+  },
+  "bottomSheet": {
+    "youCanClaim": "Você pode resgatar",
+    "tokensLocked": "Tokens bloqueados até o cliff",
+    "cliffNotReached": "🔒 Cliff não atingido",
+    "unlockIn": "Os tokens serão desbloqueados em aproximadamente {{duration}} ({{ledgers}} ledgers restantes)",
+    "tokensStillLocked": "Seus tokens ainda estão bloqueados até o cliff.",
+    "dragToClose": "Arraste para baixo ou toque para fechar"
+  },
+  "cancelModal": {
+    "title": "Cancelar Fluxo",
+    "warning": "Cancelar interromperá o fluxo de tokens imediatamente.",
+    "recipientReceives": "O destinatário recebe",
+    "sponsorRefund": "Você recebe de volta",
+    "cliffNotReachedRefund": "Cliff ainda não atingido — depósito total reembolsado a você."
+  },
+  "admin": {
+    "title": "Painel de Administração",
+    "indexerStatus": "Status do Indexador",
+    "lastLedger": "Último Ledger Indexado",
+    "errorRate": "Taxa de Erros",
+    "recentEvents": "Eventos Recentes",
+    "reindex": "Acionar Reindexação",
+    "autoRefresh": "Atualizando automaticamente a cada 30s",
+    "accessDenied": "Acesso negado. Token de administrador necessário.",
+    "enterToken": "Inserir token de administrador",
+    "submit": "Enviar"
+  },
+  "history": {
+    "title": "Histórico de Transações",
+    "noHistory": "Nenhuma transação ainda.",
+    "type": {
+      "claim": "Resgate",
+      "create": "Criação",
+      "cancel": "Cancelamento"
+    }
+  },
+  "settings": {
+    "title": "Configurações",
+    "language": "Idioma",
+    "darkMode": "Modo escuro",
+    "analytics": "Análises",
+    "optOut": "Desativar análises"
+  },
+  "accessibility": {
+    "skipToContent": "Ir para o conteúdo principal",
+    "copyRecipient": "Copiar endereço do destinatário",
+    "pagination": "Paginação"
+  },
+  "skipToContent": "Ir para o conteúdo principal",
+  "language": "Idioma",
+  "errors": {
+    "generic": "Algo deu errado. Por favor, tente novamente.",
+    "notFound": "Não encontrado",
+    "cliffNotReached": "Cliff ainda não atingido. Volte após a data do cliff.",
+    "nothingToClaim": "Nada a resgatar no momento."
+  },
+  "dates": {
+    "minutes": "{{count}} minuto",
+    "minutes_plural": "{{count}} minutos",
+    "hours": "{{count}} hora",
+    "hours_plural": "{{count}} horas",
+    "days": "{{count}} dia",
+    "days_plural": "{{count}} dias"
+  },
+  "mobile": {
+    "swipeToClose": "Deslize para baixo para fechar"
+  },
+  "share": {
+    "title": "Compartilhar Fluxo",
+    "description": "Compartilhe este fluxo de vesting com outras pessoas",
+    "copied": "Link copiado!",
+    "copy": "Copiar link",
+    "publicView": "Visualização Pública"
+  },
+  "notifications": {
+    "title": "Notificações",
+    "noNotifications": "Nenhuma notificação ainda",
+    "markAllRead": "Marcar todas como lidas",
+    "preferences": "Preferências",
+    "cliffReached": "Cliff Atingido",
+    "expiringSoon": "Expirando em Breve",
+    "claimAvailable": "Resgate Disponível",
+    "streamCancelled": "Fluxo Cancelado",
+    "pushPromptTitle": "Ativar notificações push?",
+    "pushPromptBody": "Seja notificado quando seu cliff for atingido, os tokens estiverem disponíveis para resgate ou os fluxos expirarem.",
+    "pushEnable": "Ativar",
+    "pushDecline": "Agora não"
+  }
+}
