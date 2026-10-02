@@ -50,8 +50,11 @@ pub enum VestingError {
     /// **Code 11** — `sponsor` and `recipient` must be distinct addresses.
     InvalidRecipient = 11,
 
-    /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
-    InvalidToken = 12,
+    /// **Code 27** — The token address is not a valid SAC (Stellar Asset Contract).
+    InvalidToken = 27,
+
+    /// **Code 12** — `cliff_duration` must be greater than zero.
+    InvalidCliffDuration = 12,
 
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,

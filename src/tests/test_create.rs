@@ -48,6 +48,20 @@ fn test_create_stream_zero_rate_fails() {
 }
 
 #[test]
+fn test_create_stream_zero_cliff_duration_fails() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let token = Address::generate(&env);
+
+    let err = client
+        .try_create_vesting_stream(&sponsor, &recipient, &token, &10, &0, &200, &None)
+        .unwrap_err();
+
+    assert_eq!(err, Ok(VestingError::InvalidCliffDuration));
+}
+
+#[test]
 fn test_create_stream_invalid_duration_fails() {
     let env = setup_env();
     let (_contract_id, client) = register_contract(&env);

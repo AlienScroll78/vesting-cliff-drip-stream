@@ -201,6 +201,9 @@ impl VestingDrips {
         if rate < min_rate {
             return Err(VestingError::InvalidRate);
         }
+        if cliff_duration == 0 {
+            return Err(VestingError::InvalidCliffDuration);
+        }
         if total_duration <= cliff_duration {
             return Err(VestingError::InvalidDuration);
         }

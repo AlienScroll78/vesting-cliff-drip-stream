@@ -240,6 +240,7 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
 | 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
 | 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 27 | `InvalidToken` | Token address is not a valid SAC contract |
 
 ---
 
