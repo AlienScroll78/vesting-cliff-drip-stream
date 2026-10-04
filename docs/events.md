@@ -206,14 +206,24 @@ Emitted by `clawback_stream` when a sponsor performs a compliance clawback.
 | topics[0] | `discriminator` | `Symbol` | `"vc_claw"` |
 | topics[1] | `recipient` | `Address` | Stream recipient |
 
-**Data payload** — tuple `(sponsor, token, amount, reason)`:
+**Data payload** — tuple `(StreamClawedBackData, reason)`:
+
+The first element is a `StreamClawedBackData` struct (encoded as `Vec<SCVal>` in field order):
 
 | Index | Field | XDR Type | Description |
 |-------|-------|----------|-------------|
-| 0 | `sponsor` | `Address` | Original sponsor (receives tokens) |
-| 1 | `token` | `Address` | SAC token address |
-| 2 | `amount` | `Int128Parts` | Tokens returned to sponsor |
-| 3 | `reason` | `String` | Compliance reason string (max 256 UTF-8 bytes) |
+| 0 | `sponsor` | `Address` | Original sponsor (receives recovered tokens) |
+| 1 | `recipient` | `Address` | Stream recipient whose stream was clawed back |
+| 2 | `token` | `Address` | SAC token contract address |
+| 3 | `amount_recovered` | `Int128Parts` | Total tokens returned to sponsor |
+| 4 | `reason_hash` | `Bytes` (32) | SHA-256 of the compliance reason string |
+| 5 | `ledger` | `Uint32` | Ledger sequence at which clawback was executed |
+
+The second element is the raw reason string for human readability:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 1 | `reason` | `String` | Compliance reason string (max 256 UTF-8 bytes) |
 
 **Example JSON payload:**
 
@@ -223,22 +233,32 @@ Emitted by `clawback_stream` when a sponsor performs a compliance clawback.
     { "type": "symbol",  "value": "vc_claw" },
     { "type": "address", "value": "GRECIPIENT..." }
   ],
-  "value": {
-    "sponsor": { "type": "address", "value": "GSPONSOR..." },
-    "token":   { "type": "address", "value": "CTOKEN..." },
-    "amount":  { "type": "i128",    "value": "1500" },
-    "reason":  { "type": "string",  "value": "Regulatory compliance — OFAC sanction" }
-  }
+  "value": [
+    {
+      "sponsor":          { "type": "address", "value": "GSPONSOR..." },
+      "recipient":        { "type": "address", "value": "GRECIPIENT..." },
+      "token":            { "type": "address", "value": "CTOKEN..." },
+      "amount_recovered": { "type": "i128",    "value": "1500" },
+      "reason_hash":      { "type": "bytes",   "value": "e3b0c44298fc1c149afb..." },
+      "ledger":           { "type": "u32",     "value": 200 }
+    },
+    { "type": "string", "value": "Regulatory compliance — OFAC sanction" }
+  ]
 }
 ```
 
 **Indexer notes:**
+- `reason_hash` is the SHA-256 of the reason string encoded as XDR bytes. Use it for
+  machine-readable compliance record matching and deduplication.
+- The human-readable `reason` string is still present as the second data element.
 - Only emitted on tokens with `AUTH_CLAWBACK_ENABLED_FLAG`. Regular cancellation
   uses `StreamCancelled`.
 - `reason` is stored on-chain in the event — max 256 bytes enforced by contract error
-  `ReasonTooLong` (code 22).
+  `ReasonTooLong` (code 28).
 - Clawback bypasses cliff state; it recovers **all** remaining vault tokens regardless
   of how much has vested.
+- `ledger` enables precise audit trail reconstruction without cross-referencing ledger
+  metadata from Horizon.
 
 ---
 
@@ -500,6 +520,7 @@ added, removed, or reordered:
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0.0 | 2026-10-02 | Initial schema documentation for all 14 events |
+| 1.1.0 | 2026-10-04 | `StreamClawedBack` enhanced: data is now `(StreamClawedBackData, reason)` with `sponsor`, `recipient`, `token`, `amount_recovered`, `reason_hash` (SHA-256), and `ledger` fields for compliance audit trail |
 
 ---
 
