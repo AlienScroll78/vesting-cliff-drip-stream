@@ -430,23 +430,16 @@ pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
 
-/// Returns the protocol fee configuration.
+/// Returns the protocol fee configuration as `(fee_bps, treasury)`.
 ///
-/// Intended return value is `(fee_bps, treasury)`.
-///
-/// # Returns
-/// Currently a `Vec<Address>` read from `DataKey::AllowedTokens`, defaulting to
-/// an empty vector when unset — **not** the declared tuple. The fee and treasury
-/// are never read back.
-///
-/// # Warning
-/// This does not compile against the current `DataKey` enum and does not
-/// behave as its signature advertises. It is left unchanged here rather than
-/// silently rewritten, because correcting it changes observable behaviour and
-/// belongs with the compile fix in #856. There is no `get_treasury` accessor
-/// anywhere in the crate.
+/// `fee_bps` defaults to 0 when unset. `treasury` is `None` when unset.
 pub fn get_fee(env: &Env) -> (u32, Option<Address>) {
     let fee_bps = env
+        .storage()
+        .instance()
+        .get::<DataKey, u32>(&DataKey::FeeBps)
+        .unwrap_or(0);
+    let treasury = env
         .storage()
         .instance()
         .get::<DataKey, Address>(&DataKey::Treasury);
