@@ -826,13 +826,20 @@ impl VestingDrips {
             }
 
             schedule.increment_version()?;
-            let total_deposited =
-                (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+            let duration = (schedule.end_ledger - schedule.start_ledger) as i128;
+            let total_deposited = duration
+                .checked_mul(schedule.rate_per_ledger)
+                .ok_or(VestingError::DepositOverflow)?;
             let claimable_amount = if current_ledger >= schedule.end_ledger {
-                total_deposited - schedule.claimed_amount
+                total_deposited
+                    .checked_sub(schedule.claimed_amount)
+                    .ok_or(VestingError::DepositOverflow)?
             } else {
                 let active_end = current_ledger.min(schedule.end_ledger);
-                (active_end - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger
+                let elapsed = (active_end - schedule.last_claimed_ledger) as i128;
+                elapsed
+                    .checked_mul(schedule.rate_per_ledger)
+                    .ok_or(VestingError::DepositOverflow)?
             };
             if claimable_amount == 0 {
                 if specific_stream {
@@ -1119,8 +1126,10 @@ impl VestingDrips {
 
         let current_ledger = env.ledger().sequence();
         let token_client = token::Client::new(&env, &schedule.token);
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        let duration = (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_deposited = duration
+            .checked_mul(schedule.rate_per_ledger)
+            .ok_or(VestingError::DepositOverflow)?;
 
         // Compute effective current ledger accounting for pause state.
         // If the stream is paused, use paused_at_ledger as the effective current ledger.
@@ -1133,11 +1142,18 @@ impl VestingDrips {
         let (recipient_share, sponsor_refund) = if effective_ledger >= schedule.cliff_ledger {
             let active_end = effective_ledger.min(schedule.end_ledger);
             let earned_ledgers = active_end - schedule.last_claimed_ledger;
-            let earned = earned_ledgers as i128 * schedule.rate_per_ledger;
-            let refund = total_deposited - schedule.claimed_amount - earned;
+            let earned = (earned_ledgers as i128)
+                .checked_mul(schedule.rate_per_ledger)
+                .ok_or(VestingError::DepositOverflow)?;
+            let refund = total_deposited
+                .checked_sub(schedule.claimed_amount)
+                .and_then(|v| v.checked_sub(earned))
+                .ok_or(VestingError::DepositOverflow)?;
             (earned, refund.max(0))
         } else {
-            let refund = total_deposited - schedule.claimed_amount;
+            let refund = total_deposited
+                .checked_sub(schedule.claimed_amount)
+                .ok_or(VestingError::DepositOverflow)?;
             (0_i128, refund.max(0))
         };
 
@@ -1467,9 +1483,12 @@ impl VestingDrips {
             return Err(VestingError::DrainDelayNotExpired);
         }
 
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
-        let amount = total_deposited - schedule.claimed_amount;
+        let total_deposited = ((schedule.end_ledger - schedule.start_ledger) as i128)
+            .checked_mul(schedule.rate_per_ledger)
+            .ok_or(VestingError::DepositOverflow)?;
+        let amount = total_deposited
+            .checked_sub(schedule.claimed_amount)
+            .ok_or(VestingError::DepositOverflow)?;
 
         if amount > 0 {
             let token_client = token::Client::new(&env, &schedule.token);
@@ -1619,9 +1638,12 @@ impl VestingDrips {
             return Err(VestingError::DrainDelayNotExpired);
         }
 
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
-        let amount = total_deposited - schedule.claimed_amount;
+        let total_deposited = ((schedule.end_ledger - schedule.start_ledger) as i128)
+            .checked_mul(schedule.rate_per_ledger)
+            .ok_or(VestingError::DepositOverflow)?;
+        let amount = total_deposited
+            .checked_sub(schedule.claimed_amount)
+            .ok_or(VestingError::DepositOverflow)?;
 
         if amount > 0 {
             let token_client = token::Client::new(&env, &schedule.token);
@@ -1815,25 +1837,34 @@ impl VestingDrips {
     /// Returns the number of tokens claimable right now for `recipient`.
     ///
     /// Returns `0` if the cliff has not been reached, stream is paused, or no schedule exists.
-    pub fn claimable_amount(env: Env, recipient: Address) -> i128 {
+    /// Returns `DepositOverflow` (error 5) if the stored rate would overflow `i128` arithmetic.
+    pub fn claimable_amount(env: Env, recipient: Address) -> Result<i128, VestingError> {
         let Some(schedule) = storage::get_schedule_readonly(&env, &recipient) else {
-            return 0;
+            return Ok(0);
         };
         // Return 0 while paused (issue #719).
         if schedule.paused_at_ledger.is_some() {
-            return 0;
+            return Ok(0);
         }
         let current_ledger = env.ledger().sequence();
         if current_ledger < schedule.cliff_ledger {
-            return 0;
+            return Ok(0);
         }
-        let total_deposited =
-            (schedule.end_ledger - schedule.start_ledger) as i128 * schedule.rate_per_ledger;
+        let duration = (schedule.end_ledger - schedule.start_ledger) as i128;
+        let total_deposited = duration
+            .checked_mul(schedule.rate_per_ledger)
+            .ok_or(VestingError::DepositOverflow)?;
         if current_ledger >= schedule.end_ledger {
-            return total_deposited - schedule.claimed_amount;
+            return Ok(total_deposited
+                .checked_sub(schedule.claimed_amount)
+                .ok_or(VestingError::DepositOverflow)?);
         }
         let active_end = current_ledger.min(schedule.end_ledger);
-        (active_end - schedule.last_claimed_ledger) as i128 * schedule.rate_per_ledger
+        let elapsed = (active_end - schedule.last_claimed_ledger) as i128;
+        let claimable = elapsed
+            .checked_mul(schedule.rate_per_ledger)
+            .ok_or(VestingError::DepositOverflow)?;
+        Ok(claimable)
     }
 
     /// Returns the number of tokens claimable from a variable-rate stream.
