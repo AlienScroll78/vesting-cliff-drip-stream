@@ -276,10 +276,33 @@ pub fn emit_emergency_drain(
     );
 }
 
+/// Data payload for the `StreamClawedBack` event.
+///
+/// Published as the event data field when a compliance clawback is performed.
+/// All six fields are required by regulatory audit trails and off-chain indexers.
+#[contracttype]
+#[allow(missing_docs)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StreamClawedBackData {
+    /// The original sponsor who funded the stream (receives recovered tokens).
+    pub sponsor: Address,
+    /// The recipient whose stream was clawed back.
+    pub recipient: Address,
+    /// SAC token contract address.
+    pub token: Address,
+    /// Total tokens recovered by the sponsor.
+    pub amount_recovered: i128,
+    /// SHA-256 hash of the compliance reason string, for machine-readable indexing.
+    pub reason_hash: BytesN<32>,
+    /// Ledger sequence at which the clawback was executed.
+    pub ledger: u32,
+}
+
 /// Emitted when a sponsor performs a compliance clawback on a stream.
 ///
 /// Topics: `["vc_claw", recipient]`
-/// Data:   `(sponsor, token, amount, reason)`
+/// Data:   `StreamClawedBackData` — includes sponsor, recipient, token,
+///          amount_recovered, reason_hash (SHA-256 of reason), ledger, and reason string.
 pub fn emit_stream_clawed_back(
     env: &Env,
     sponsor: &Address,
@@ -288,9 +311,24 @@ pub fn emit_stream_clawed_back(
     amount: i128,
     reason: &String,
 ) {
+    let ledger = env.ledger().sequence();
+
+    // Compute SHA-256 of the reason string for machine-readable compliance indexing.
+    let reason_bytes = reason.to_xdr(env);
+    let reason_hash = env.crypto().sha256(&reason_bytes);
+
+    let data = StreamClawedBackData {
+        sponsor: sponsor.clone(),
+        recipient: recipient.clone(),
+        token: token.clone(),
+        amount_recovered: amount,
+        reason_hash,
+        ledger,
+    };
+
     env.events().publish(
         (symbol_short!("vc_claw"), recipient.clone()),
-        (sponsor.clone(), token.clone(), amount, reason.clone()),
+        (data, reason.clone()),
     );
 }
 

@@ -30,7 +30,7 @@ mod types;
 
 pub use contract::{calculate_total_deposit, StreamStats, VestingDrips};
 pub use error::VestingError;
-pub use events::StreamCreatedData;
+pub use events::{StreamClawedBackData, StreamCreatedData};
 pub use types::{RateSegment, StreamStatus, VariableRateSchedule, VestingSchedule, MAX_CLIFF_RATIO, RATE_DECIMALS};
 
 #[cfg(test)]
