@@ -843,15 +843,46 @@ impl VestingDrips {
                 continue;
             }
 
+            schedule.increment_version()?;
+
+            // Compute protocol fee split.
+            let (fee_bps, treasury_opt) = storage::get_fee(&env);
+            let fee_amount = if fee_bps > 0 {
+                claimable_amount
+                    .checked_mul(fee_bps as i128)
+                    .ok_or(VestingError::DepositOverflow)?
+                    / 10_000
+            } else {
+                0
+            };
+            let net_amount = claimable_amount
+                .checked_sub(fee_amount)
+                .ok_or(VestingError::DepositOverflow)?;
+
             if storage::is_locked(&env) {
                 return Err(VestingError::Reentrancy);
             }
             storage::acquire_lock(&env);
             let token_client = token::Client::new(&env, &schedule.token);
+            // Transfer fee to treasury first (if any).
+            if fee_amount > 0 {
+                let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
+                let fee_result = token_client.try_transfer(
+                    &env.current_contract_address(),
+                    &treasury,
+                    &fee_amount,
+                );
+                if fee_result.is_err() {
+                    storage::release_lock(&env);
+                    return Err(VestingError::TransferFailed);
+                }
+                events::emit_fee_taken(&env, &recipient, &treasury, fee_amount, net_amount);
+            }
+            // Transfer net amount to recipient.
             let transfer_result = token_client.try_transfer(
                 &env.current_contract_address(),
                 &recipient,
-                &claimable_amount,
+                &net_amount,
             );
             storage::release_lock(&env);
             transfer_result.map_err(|_| VestingError::TransferFailed)?;
@@ -1821,6 +1852,19 @@ impl VestingDrips {
     /// Returns the configured minimum deposit.
     pub fn get_min_deposit(env: Env) -> i128 {
         storage::get_min_deposit(&env)
+    }
+
+    /// Returns the current protocol fee configuration as `(fee_bps, treasury)`.
+    ///
+    /// `fee_bps` is the fee in basis points (0–500). `treasury` is the address
+    /// that receives collected fees. Returns `(0, treasury)` when no fee is set.
+    ///
+    /// # Errors
+    /// * `Unauthorized` — No treasury address has been configured (fee_bps > 0 but no treasury).
+    pub fn get_fee_config(env: Env) -> Result<(u32, Address), VestingError> {
+        let (fee_bps, treasury_opt) = storage::get_fee(&env);
+        let treasury = treasury_opt.ok_or(VestingError::Unauthorized)?;
+        Ok((fee_bps, treasury))
     }
 
     /// Returns the variable-rate schedule for `recipient`.

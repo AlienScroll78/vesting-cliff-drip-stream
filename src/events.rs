@@ -255,6 +255,23 @@ pub fn emit_contract_upgraded(env: &Env, admin: &Address, new_wasm_hash: &BytesN
     );
 }
 
+/// Emitted when a protocol fee is collected on a claim.
+///
+/// Topics: `["vc_fee", recipient]`
+/// Data:   `(treasury, fee_amount, net_amount)`
+pub fn emit_fee_taken(
+    env: &Env,
+    recipient: &Address,
+    treasury: &Address,
+    fee_amount: i128,
+    net_amount: i128,
+) {
+    env.events().publish(
+        (symbol_short!("vc_fee"), recipient.clone()),
+        (treasury.clone(), fee_amount, net_amount),
+    );
+}
+
 /// Emitted when a protocol fee is collected.
 pub fn emit_fee_collected(env: &Env, sponsor: &Address, treasury: &Address, amount: i128) {
     env.events().publish(

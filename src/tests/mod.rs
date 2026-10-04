@@ -21,6 +21,7 @@ mod test_edge_cases;
 mod test_error_codes;
 mod test_event_snapshots;
 mod test_events;
+mod test_fees;
 mod test_golden_path;
 mod test_initialize;
 mod test_mutation_score;
