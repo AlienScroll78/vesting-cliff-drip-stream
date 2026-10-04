@@ -100,3 +100,85 @@ fn test_incremental_claims_sum_to_total() {
         soroban_sdk::token::TokenClient::new(&env, &stream.token);
     assert_eq!(token_client.balance(&addrs.recipient), 500);
 }
+
+// ── Issue #3: claimable_amount overflow regression ────────────────────────────
+
+/// claimable_amount with a corrupted schedule whose rate would overflow i128
+/// must return DepositOverflow (error 5) rather than panic.
+#[test]
+fn test_claimable_amount_overflow_returns_error() {
+    use crate::error::VestingError;
+    use crate::contract::{VestingDrips, VestingDripsClient};
+    use crate::tests::{setup_env, token_helper::{create_token, mint_to}};
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = soroban_sdk::Address::generate(&env);
+    let treasury = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
+
+    let sponsor = soroban_sdk::Address::generate(&env);
+    let recipient = soroban_sdk::Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    // Mint a small amount — the overflow happens in arithmetic, not in balance.
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &5, &100, &None);
+
+    // Advance past cliff.
+    advance_ledger(&env, 6);
+
+    // Manually corrupt the schedule's rate to i128::MAX to force overflow.
+    let mut schedule = client.get_schedule(&recipient).unwrap();
+    schedule.rate_per_ledger = i128::MAX;
+    env.as_contract(&contract_id, || {
+        crate::storage::set_schedule(&env, &recipient, &schedule);
+    });
+
+    // claimable_amount must return DepositOverflow, not panic.
+    let result = client.try_claimable_amount(&recipient);
+    match result {
+        Err(Ok(VestingError::DepositOverflow)) => {} // expected
+        other => panic!("expected DepositOverflow, got {:?}", other),
+    }
+}
+
+/// claim_vested with a corrupted schedule whose rate would overflow i128
+/// must return DepositOverflow rather than panic.
+#[test]
+fn test_claim_vested_overflow_returns_error() {
+    use crate::error::VestingError;
+    use crate::contract::{VestingDrips, VestingDripsClient};
+    use crate::tests::{setup_env, token_helper::{create_token, mint_to}};
+
+    let env = setup_env();
+    let contract_id = env.register(VestingDrips, ());
+    let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = soroban_sdk::Address::generate(&env);
+    let treasury = soroban_sdk::Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
+
+    let sponsor = soroban_sdk::Address::generate(&env);
+    let recipient = soroban_sdk::Address::generate(&env);
+    let (token_id, _) = create_token(&env, &sponsor);
+    mint_to(&env, &token_id, &sponsor, 1_000);
+
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &5, &100, &None);
+
+    advance_ledger(&env, 6);
+
+    // Corrupt the rate.
+    let mut schedule = client.get_schedule(&recipient).unwrap();
+    schedule.rate_per_ledger = i128::MAX;
+    env.as_contract(&contract_id, || {
+        crate::storage::set_schedule(&env, &recipient, &schedule);
+    });
+
+    let err = client.try_claim_vested(&recipient, &None).unwrap_err().unwrap();
+    assert_eq!(
+        err,
+        VestingError::DepositOverflow,
+        "claim_vested must return DepositOverflow on rate overflow"
+    );
+}
