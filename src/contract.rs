@@ -724,6 +724,7 @@ impl VestingDrips {
 
         let current_ledger = env.ledger().sequence();
         schedule.paused_at_ledger = Some(current_ledger);
+        schedule.increment_version()?;
 
         storage::set_schedule(&env, &recipient, &schedule);
         events::emit_stream_paused(&env, &recipient, &sponsor, current_ledger);
@@ -767,6 +768,7 @@ impl VestingDrips {
         schedule.end_ledger = schedule.end_ledger.saturating_add(paused_duration);
         schedule.last_claimed_ledger = schedule.last_claimed_ledger.saturating_add(paused_duration);
         schedule.paused_at_ledger = None;
+        schedule.increment_version()?;
 
         storage::set_schedule(&env, &recipient, &schedule);
         events::emit_stream_resumed(&env, &recipient, &sponsor, schedule.end_ledger);
@@ -841,7 +843,6 @@ impl VestingDrips {
                 continue;
             }
 
-            schedule.increment_version()?;
             if storage::is_locked(&env) {
                 return Err(VestingError::Reentrancy);
             }
@@ -1105,7 +1106,7 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
-        let schedule =
+        let mut schedule =
             storage::get_schedule_by_id(&env, &recipient, stream_id)
                 .ok_or(VestingError::ScheduleNotFound)?;
 
@@ -1116,6 +1117,9 @@ impl VestingDrips {
         if schedule.sponsor != sponsor {
             return Err(VestingError::Unauthorized);
         }
+
+        // Increment version to signal this mutation; validates no overflow.
+        schedule.increment_version()?;
 
         let current_ledger = env.ledger().sequence();
         let token_client = token::Client::new(&env, &schedule.token);
@@ -1642,6 +1646,21 @@ impl VestingDrips {
     /// Returns the vesting schedule for `recipient`, if any.
     pub fn get_schedule(env: Env, recipient: Address) -> Option<VestingSchedule> {
         storage::get_schedule_readonly(&env, &recipient)
+    }
+
+    /// Returns the current version counter for `recipient`'s vesting schedule.
+    ///
+    /// The version counter starts at `1` on stream creation and increments by `1`
+    /// on every state-changing operation (`claim_vested`, `pause_stream`,
+    /// `resume_stream`, `cancel_stream`). Off-chain indexers and frontends can
+    /// use this value to detect stale cached data without re-fetching the full
+    /// schedule.
+    ///
+    /// Returns `0` if no schedule exists for `recipient`.
+    pub fn get_stream_version(env: Env, recipient: Address) -> u32 {
+        storage::get_schedule_readonly(&env, &recipient)
+            .map(|s| s.version)
+            .unwrap_or(0)
     }
 
     /// Returns the number of tokens claimable right now for `recipient`.
