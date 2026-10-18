@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
 import './App.css'
+// #535 — initialise i18n before the app renders
+import './i18n/index'
 
 // #123 — field tooltips
 import { Tooltip } from './Tooltip'
@@ -14,6 +17,8 @@ import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animatio
 import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
+// #535 — language switcher
+import { LanguageSwitcher } from './components/LanguageSwitcher'
 
 // #539 — register service worker for offline support
 function registerServiceWorker() {
@@ -32,6 +37,7 @@ function registerServiceWorker() {
 }
 
 function App() {
+  const { t } = useTranslation()
   const [count, setCount] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   // demo: simulate an error code returned from the contract
@@ -45,6 +51,20 @@ function App() {
   return (
     // #121 — page fade-in on mount
     <PageTransition>
+      {/* #535 — language switcher in app header */}
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '0.75rem 1.5rem',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
+        }}
+      >
+        <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--accent)' }}>⚡ VestingStream</span>
+        <LanguageSwitcher />
+      </header>
       {/* #820 — first-time-user onboarding tour */}
       <OnboardingTour />
       <section id="center">
@@ -161,8 +181,9 @@ function App() {
           style={{ marginTop: '1rem' }}
           onClick={() => setWizardOpen(true)}
           data-testid="open-create-wizard"
+          aria-label={`${t('stream.create', { defaultValue: 'Create Stream' })} (C)`}
         >
-          Create Stream
+          {t('stream.create', { defaultValue: 'Create Stream' })}
         </button>
 
         {wizardOpen && <CreateStreamWizard onClose={() => setWizardOpen(false)} />}
