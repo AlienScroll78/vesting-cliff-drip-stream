@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ChangeEvent } from 'react'
 import { Tooltip } from '../Tooltip'
-import { ledgersToDuration, scheduleSchema, isDepositOverflow } from './useWizard'
+import { ledgersToDuration, scheduleSchema, isDepositOverflow, LEDGERS_PER_SECOND } from './useWizard'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
