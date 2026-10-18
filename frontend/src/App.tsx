@@ -14,6 +14,8 @@ import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animatio
 import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
+// #534 — keyboard shortcuts
+import { initKeyboardShortcuts } from '../KeyboardShortcuts'
 
 // #539 — register service worker for offline support
 function registerServiceWorker() {
@@ -39,6 +41,18 @@ function App() {
 
   // #120 — start tour for first-time users
   useOnboardingTour()
+
+  // #534 — wire up keyboard shortcuts for power users
+  useEffect(() => {
+    const cleanup = initKeyboardShortcuts({
+      onCreateStream: () => setWizardOpen(true),
+      onRefresh:      () => window.location.reload(),
+      onCloseModal:   () => setWizardOpen(false),
+      onGoHistory:    () => console.log('navigate to history'),
+      onGoSchedule:   () => console.log('navigate to schedule'),
+    })
+    return cleanup
+  }, [setWizardOpen])
 
   const errorInfo = errorCode != null ? getErrorInfo(errorCode) : null
 
@@ -161,6 +175,7 @@ function App() {
           style={{ marginTop: '1rem' }}
           onClick={() => setWizardOpen(true)}
           data-testid="open-create-wizard"
+          aria-label="Create Stream (shortcut: C)"
         >
           Create Stream
         </button>
