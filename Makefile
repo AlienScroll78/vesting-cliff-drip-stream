@@ -7,9 +7,17 @@ WASM_OUTPUT      = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED        = target/$(CONTRACT_NAME).optimized.wasm
 MAX_WASM_SIZE_KB ?= 50
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update setup
 
 all: build
+
+## Install project dependencies and start local PostgreSQL and Redis.
+setup:
+	rustup target add wasm32-unknown-unknown
+	npm install --no-audit --no-fund
+	npm install --prefix backend --no-audit --no-fund
+	npm install --prefix frontend --no-audit --no-fund
+	docker compose up -d postgres redis
 
 ## Compile the contract to WASM
 build:
