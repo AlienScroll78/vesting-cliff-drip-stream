@@ -7,7 +7,7 @@ WASM_OUTPUT      = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED        = target/$(CONTRACT_NAME).optimized.wasm
 MAX_WASM_SIZE_KB ?= 50
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update stress-test
 
 all: build
 
@@ -18,6 +18,10 @@ build:
 ## Run all unit tests (native target, with testutils)
 test:
 	cargo test --features testutils
+
+## Run the opt-in 1,000-stream drain stress test (issue #1063).
+stress-test:
+	cargo test --features testutils test_drain_1000_expired_streams -- --ignored --nocapture
 
 ## Run coverage with cargo-llvm-cov (install: cargo install cargo-llvm-cov)
 ## Generates HTML report in docs/coverage/html and lcov.info in docs/coverage/
