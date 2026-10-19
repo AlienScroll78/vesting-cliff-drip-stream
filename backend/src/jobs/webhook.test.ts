@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import crypto from "node:crypto";
 
 const mockPool = {
   connect: vi.fn(async () => ({ query: vi.fn(), release: vi.fn() })),
@@ -45,11 +46,21 @@ vi.mock("node-cron", () => ({
 
 describe("Webhook", () => {
   let mod: any;
+  const originalSecret = process.env.WEBHOOK_HMAC_SECRET;
 
   beforeEach(async () => {
     vi.resetModules();
+    process.env.WEBHOOK_HMAC_SECRET = "test-webhook-secret";
     vi.stubGlobal("fetch", vi.fn());
     mod = await import("./notificationJob.js");
+  });
+
+  afterEach(() => {
+    if (originalSecret === undefined) {
+      delete process.env.WEBHOOK_HMAC_SECRET;
+    } else {
+      process.env.WEBHOOK_HMAC_SECRET = originalSecret;
+    }
   });
 
   describe("sendWebhook", () => {
@@ -80,6 +91,76 @@ describe("Webhook", () => {
     it("handles network timeout", async () => {
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
       await expect(mod.sendWebhook("https://example.com/hook", { event: "test" })).rejects.toThrow("fetch failed");
+    });
+
+    it("delivers valid payload with correct X-Webhook-Signature HMAC-SHA256 header", async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true });
+      vi.stubGlobal("fetch", mockFetch);
+      const payload = { event: "test", stream: { id: "1" } };
+
+      await mod.sendWebhook("https://example.com/hook", payload);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, options] = mockFetch.mock.calls[0];
+      expect(url).toBe("https://example.com/hook");
+      const body = options.body;
+      const expected = crypto
+        .createHmac("sha256", process.env.WEBHOOK_HMAC_SECRET as string)
+        .update(body)
+        .digest("hex");
+      expect(options.headers["X-Webhook-Signature"]).toBe(expected);
+    });
+
+    it("retries with exponential backoff on HTTP 500", async () => {
+      vi.useFakeTimers();
+      try {
+        const mockFetch = vi.fn()
+          .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Server Error" })
+          .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Server Error" })
+          .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Server Error" })
+          .mockResolvedValueOnce({ ok: true });
+        vi.stubGlobal("fetch", mockFetch);
+
+        const promise = mod.sendWebhook("https://example.com/hook", { event: "test" });
+        await vi.runAllTimersAsync();
+        await expect(promise).resolves.toBeUndefined();
+        expect(mockFetch).toHaveBeenCalledTimes(4);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("marks delivery as failed after 3 failures in delivery history", async () => {
+      vi.useFakeTimers();
+      try {
+        const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => "Server Error" });
+        vi.stubGlobal("fetch", mockFetch);
+
+        const promise = mod.sendWebhook("https://example.com/hook", { event: "test" });
+        const assertion = expect(promise).rejects.toThrow();
+        await vi.runAllTimersAsync();
+        await assertion;
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("HMAC verification", () => {
+    it("passes with correct secret", () => {
+      const body = JSON.stringify({ event: "test" });
+      const signature = crypto
+        .createHmac("sha256", process.env.WEBHOOK_HMAC_SECRET as string)
+        .update(body)
+        .digest("hex");
+      expect(mod.verifyWebhookSignature(body, signature)).toBe(true);
+    });
+
+    it("fails with wrong secret", () => {
+      const body = JSON.stringify({ event: "test" });
+      const signature = crypto.createHmac("sha256", "wrong-secret").update(body).digest("hex");
+      expect(mod.verifyWebhookSignature(body, signature)).toBe(false);
     });
   });
 
@@ -118,6 +199,61 @@ describe("Webhook", () => {
       vi.spyOn(mod, "sendWebhook").mockResolvedValue(undefined);
       await mod.dispatchNotification(stream, 100);
       expect(mod.sendWebhook).toHaveBeenCalledWith("https://example.com/hook", expect.any(Object));
+    });
+
+    it("does not deliver webhook registered for recipient A to recipient B", async () => {
+      const streamA = {
+        id: "1",
+        sponsor: "GSPONSOR",
+        recipient: "GRECIP_A",
+        token: "CTOKEN",
+        rate_per_ledger: "100",
+        cliff_ledger: 500,
+        end_ledger: 2000,
+        notify_webhook: true,
+        webhook_url: "https://example.com/hook-a",
+        notify_email: false,
+        email: null,
+      };
+      const streamB = {
+        ...streamA,
+        id: "2",
+        recipient: "GRECIP_B",
+        webhook_url: "https://example.com/hook-b",
+      };
+      const spy = vi.spyOn(mod, "sendWebhook").mockResolvedValue(undefined);
+
+      await mod.dispatchNotification(streamA, 100);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith("https://example.com/hook-a", expect.any(Object));
+      expect(spy).not.toHaveBeenCalledWith("https://example.com/hook-b", expect.any(Object));
+
+      spy.mockClear();
+      await mod.dispatchNotification(streamB, 100);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith("https://example.com/hook-b", expect.any(Object));
+      expect(spy).not.toHaveBeenCalledWith("https://example.com/hook-a", expect.any(Object));
+    });
+
+    it("does not trigger webhooks for backfill events older than 24 hours", async () => {
+      const stream = {
+        id: "1",
+        sponsor: "GSPONSOR",
+        recipient: "GRECIP",
+        token: "CTOKEN",
+        rate_per_ledger: "100",
+        cliff_ledger: 500,
+        end_ledger: 2000,
+        notify_webhook: true,
+        webhook_url: "https://example.com/hook",
+        notify_email: false,
+        email: null,
+      };
+      const spy = vi.spyOn(mod, "sendWebhook").mockResolvedValue(undefined);
+      const oldTimestamp = Date.now() - 25 * 60 * 60 * 1000;
+
+      await mod.dispatchNotification(stream, 100, { eventTimestamp: oldTimestamp });
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it("skips webhook when notify_webhook is false", async () => {

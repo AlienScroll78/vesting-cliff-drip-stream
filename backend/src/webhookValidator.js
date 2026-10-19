@@ -10,6 +10,7 @@
  */
 
 const dns = require("dns").promises;
+const crypto = require("crypto");
 
 // Private / reserved IPv4 CIDR blocks
 const PRIVATE_IPV4_PATTERNS = [
@@ -109,4 +110,53 @@ async function validateWebhookUrlDeep(raw) {
   return { valid: true };
 }
 
-module.exports = { validateWebhookUrl, validateWebhookUrlDeep };
+/**
+ * Compute the HMAC-SHA256 signature for a webhook payload.
+ *
+ * The secret MUST be supplied by the caller (typically read from an
+ * environment variable such as WEBHOOK_HMAC_SECRET). It is never hardcoded.
+ *
+ * @param {string|Buffer} payload  Raw request body (string or Buffer).
+ * @param {string} secret          Shared HMAC secret.
+ * @returns {string}               Hex-encoded HMAC-SHA256 digest.
+ */
+function computeSignature(payload, secret) {
+  if (typeof secret !== "string" || secret.length === 0) {
+    throw new Error("HMAC secret is required");
+  }
+  return crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+}
+
+/**
+ * Verify an incoming X-Webhook-Signature header against the payload.
+ *
+ * Uses a constant-time comparison to avoid timing side channels.
+ *
+ * @param {string|Buffer} payload  Raw request body.
+ * @param {string} signature       Value of the X-Webhook-Signature header.
+ * @param {string} secret          Shared HMAC secret.
+ * @returns {boolean}              True when the signature matches.
+ */
+function verifySignature(payload, signature, secret) {
+  if (typeof signature !== "string" || signature.length === 0) return false;
+  let expected;
+  try {
+    expected = computeSignature(payload, secret);
+  } catch {
+    return false;
+  }
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(signature, "hex");
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+module.exports = {
+  validateWebhookUrl,
+  validateWebhookUrlDeep,
+  computeSignature,
+  verifySignature,
+};
