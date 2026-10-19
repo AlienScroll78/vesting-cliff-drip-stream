@@ -129,3 +129,9 @@ test-load:
 ## Run k6 load tests in dry-run mode (skips create/claim mutations)
 test-load-dryrun:
 	cd tests/load && k6 run backend_scenarios.js -e SKIP_MUTATIONS=1
+
+## Run stress tests for drain_expired_stream (issue #1063).
+## Creates and drains 1000+ expired streams; NOT part of the default test suite.
+## Run explicitly via: make stress-test
+stress-test:
+	cargo test --features testutils -- stress_drain -- --test-threads=1 --nocapture

@@ -14,6 +14,7 @@ mod test_views;
 mod test_dust;
 mod test_variable_rate;
 mod test_initialize;
+mod test_stress_drain;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
