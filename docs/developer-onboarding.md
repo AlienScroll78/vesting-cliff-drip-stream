@@ -58,8 +58,8 @@ cargo --version
 ### 1.2 Stellar CLI 21.3.0
 
 ```bash
-## Or use the prebuilt 21.3.0 release for your platform:
-## https://github.com/stellar/stellar-cli/releases/tag/v21.3.0
+Install Stellar CLI 21.3.0 from the prebuilt release for your platform:
+<https://github.com/stellar/stellar-cli/releases/tag/v21.3.0>
 
 # Add $HOME/.cargo/bin to PATH if not already present
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc  # bash
