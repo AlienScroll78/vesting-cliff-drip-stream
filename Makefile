@@ -6,9 +6,31 @@ CONTRACT_NAME = vesting_cliff_drip_stream
 WASM_OUTPUT   = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED     = target/$(CONTRACT_NAME).optimized.wasm
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci
+.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun fuzz fuzz-ci setup
 
 all: build
+
+## One-shot developer setup: install WASM target, fetch deps, verify build.
+## See docs/developer-onboarding.md for full onboarding instructions.
+setup:
+	@echo "Checking wasm32-unknown-unknown target..."
+	rustup target add wasm32-unknown-unknown 2>/dev/null || true
+	@echo "✓ wasm32-unknown-unknown target installed"
+	@echo "Fetching cargo dependencies..."
+	cargo fetch
+	@echo "✓ cargo dependencies fetched"
+	@echo "Building contract (verification)..."
+	cargo build --target wasm32-unknown-unknown --release
+	@echo "✓ contract builds successfully"
+	@if [ -d frontend ]; then \
+		echo "Installing frontend dependencies..."; \
+		cd frontend && npm install --prefer-offline && cd ..; \
+		echo "✓ frontend dependencies installed"; \
+	else \
+		echo "ℹ frontend/ directory not found, skipping frontend setup"; \
+	fi
+	@echo ""
+	@echo "Setup complete. Run 'make test' to run the contract test suite."
 
 ## Compile the contract to WASM
 build:
