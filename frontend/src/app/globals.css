@@ -10,6 +10,9 @@
   --color-border: #e5e7eb;
   --color-text: #111827;
   --radius: 0.5rem;
+  --motion-duration-ui: 180ms;
+  --motion-duration-celebration: 900ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   /* ── Issue #766: semantic color tokens (light mode defaults) ── */
   --bg-primary: #ffffff;
   --text-primary: #1a1a1a;
@@ -123,8 +126,17 @@ body {
   min-height: 44px; min-width: 44px;
   padding: 0.5rem 1.25rem; border-radius: var(--radius); font-weight: 600;
   cursor: pointer; border: 2px solid transparent;
-  transition: opacity 0.15s, background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+  transition: opacity 0.15s, background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard),
+    transform 100ms ease-out, box-shadow 100ms ease-out;
   white-space: nowrap;
+}
+.btn:hover:not(:disabled) { box-shadow: 0 3px 7px rgb(15 23 42 / 0.18); }
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: 0 0 0 rgb(15 23 42 / 0.12);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary  { background: var(--color-active); color: #fff; }
@@ -159,12 +171,43 @@ body {
   display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
   border: 1.5px solid currentColor;
-  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+  transition: color var(--motion-duration-ui) var(--motion-ease-standard),
+    background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard);
 }
 .badge-active    { color: var(--color-active);    background: #eff6ff; }
 .badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
 .badge-completed { color: var(--color-completed); background: #f0fdf4; }
 .badge-cancelled { color: var(--color-cancelled); background: #fef2f2; }
+
+/* Stream lifecycle feedback */
+.stream-status-badge {
+  transition: color var(--motion-duration-ui) var(--motion-ease-standard),
+    background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard);
+}
+.stream-status-badge__icon {
+  display: inline-flex;
+  transform-origin: center;
+  animation: status-icon-enter var(--motion-duration-ui) var(--motion-ease-standard) both;
+}
+@keyframes status-icon-enter {
+  from { opacity: 0.35; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* The lock releases as the cliff is reached. */
+.cliff-unlock-icon {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: cliff-lock-release var(--motion-duration-celebration) var(--motion-ease-standard) both;
+}
+@keyframes cliff-lock-release {
+  0% { opacity: 0; transform: rotate(-24deg) scale(0.75); }
+  35% { opacity: 1; transform: rotate(12deg) scale(1.15); }
+  65% { transform: rotate(-6deg) scale(0.96); }
+  100% { transform: rotate(0) scale(1); }
+}
 
 /* ── Legend ── */
 .legend {
@@ -305,4 +348,5 @@ body {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  .btn:active:not(:disabled) { transform: none; }
 }

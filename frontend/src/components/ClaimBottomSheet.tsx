@@ -179,7 +179,11 @@ export function ClaimBottomSheet({ stream, currentLedger, onClaim, onClose }: Pr
 
   return (
     <>
-      <ConfettiBurst active={justSucceeded} onDone={() => setJustSucceeded(false)} />
+      <ConfettiBurst
+        active={justSucceeded}
+        onDone={() => setJustSucceeded(false)}
+        onDismiss={() => setJustSucceeded(false)}
+      />
 
       {/* Backdrop — not the dialog, just the overlay */}
       <div

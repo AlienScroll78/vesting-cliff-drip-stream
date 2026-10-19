@@ -47,7 +47,17 @@ describe("CliffCountdown", () => {
     const onReached = vi.fn();
     render(<CliffCountdown cliffLedger={100} currentLedger={100} onReached={onReached} />);
     expect(screen.getByTestId("cliff-countdown")).toHaveTextContent(/tokens are now unlocked/i);
+    expect(screen.getByTestId("cliff-unlock-icon")).toHaveTextContent("🔓");
     expect(onReached).toHaveBeenCalledOnce();
+  });
+
+  it("animates the claimable balance as it updates after the cliff", () => {
+    const { rerender } = render(
+      <CliffCountdown cliffLedger={100} currentLedger={100} claimableAmount={10} />,
+    );
+    expect(screen.getByTestId("animated-number")).toHaveTextContent("10");
+    rerender(<CliffCountdown cliffLedger={100} currentLedger={100} claimableAmount={25} />);
+    expect(screen.getByTestId("animated-number")).toBeInTheDocument();
   });
 
   it("renders a claim action after the cliff", async () => {

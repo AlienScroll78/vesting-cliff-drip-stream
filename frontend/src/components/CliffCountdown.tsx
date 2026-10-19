@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { AnimatedNumber } from "@/components/AnimatedNumber";
 
 export const LEDGERS_PER_SECOND = 5;
 const SECONDS_PER_HOUR = 60 * 60;
@@ -58,7 +58,6 @@ export function CliffCountdown({
   claimableAmount,
   tokenSymbol,
 }: CliffCountdownProps) {
-  const reducedMotion = useReducedMotion();
   const [now, setNow] = useState<number | null>(null);
   const [claimPending, setClaimPending] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -115,12 +114,15 @@ export function CliffCountdown({
           aria-live="polite"
           aria-atomic="true"
           data-testid="cliff-countdown"
-          style={{ padding: "0.75rem 1rem", background: "var(--color-pre-cliff, #fef3c7)18", border: "1px solid var(--color-completed, #10b981)", borderRadius: "var(--radius, 0.5rem)", marginTop: "0.75rem", fontSize: "0.875rem", width: "100%", animation: reducedMotion ? "none" : "cliff-unlocked 700ms ease-out" }}
+          style={{ padding: "0.75rem 1rem", background: "var(--color-pre-cliff, #fef3c7)18", border: "1px solid var(--color-completed, #10b981)", borderRadius: "var(--radius, 0.5rem)", marginTop: "0.75rem", fontSize: "0.875rem", width: "100%" }}
         >
-          <strong style={{ color: "var(--color-completed, #10b981)" }}>🎉 Your tokens are now unlocked!</strong>
+          <strong style={{ color: "var(--color-completed, #10b981)" }}>
+            <span className="cliff-unlock-icon" data-testid="cliff-unlock-icon" aria-hidden="true">🔓</span>
+            {" "}Your tokens are now unlocked!
+          </strong>
           {claimableAmount !== undefined && (
             <p style={{ margin: "0.25rem 0 0" }}>
-              Claimable balance: {claimableAmount.toLocaleString()}{tokenSymbol ? ` ${tokenSymbol}` : ""}
+              Claimable balance: <AnimatedNumber value={claimableAmount} format={(amount) => amount.toLocaleString()} />{tokenSymbol ? ` ${tokenSymbol}` : ""}
             </p>
           )}
           {onClaim && (
@@ -137,7 +139,6 @@ export function CliffCountdown({
           )}
           {claimError && <p role="alert" style={{ color: "var(--color-cancelled, #dc2626)", margin: "0.5rem 0 0" }}>{claimError}</p>}
         </div>
-        <style>{`@keyframes cliff-unlocked { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       </>
     );
   }
