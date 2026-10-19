@@ -13,6 +13,7 @@ At viewport widths up to 767 px, use a fixed, safe-area-aware bottom tab bar:
 
 The active tab follows the current route. Its color, top indicator, and icon
 scale transition over 160 ms; the bar enters from the bottom over 220 ms.
+For page navigation, fade content in while moving it up 8 px over 160 ms.
 Desktop navigation and page routes are unchanged. Animations are disabled for
 users who prefer reduced motion.
 

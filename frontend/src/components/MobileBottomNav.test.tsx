@@ -2,7 +2,7 @@
  * Tests for MobileBottomNav (#279)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { NotificationProvider } from "@/contexts/NotificationContext";
@@ -68,6 +68,21 @@ describe("MobileBottomNav (#279)", () => {
     );
   });
 
+  it("caps the visible Streams badge while retaining its full accessible count", () => {
+    localStorage.setItem("vesting_notifications", JSON.stringify(
+      Array.from({ length: 12 }, (_, index) => ({
+        id: `claim-${index}`,
+        type: "claim_available",
+        read: false,
+      }))
+    ));
+    renderNav();
+    expect(screen.getByTestId("mobile-nav-claimable-badge")).toHaveTextContent("9+");
+    expect(screen.getByTestId("mobile-nav-claimable-badge")).toHaveAccessibleName(
+      "12 new claimable tokens"
+    );
+  });
+
   it("does not render a claimable badge when there are no unread claim notifications", () => {
     renderNav();
     expect(screen.queryByTestId("mobile-nav-claimable-badge")).not.toBeInTheDocument();
@@ -126,5 +141,44 @@ describe("MobileBottomNav (#279)", () => {
     await userEvent.click(screen.getByTestId("mobile-quick-actions-button"));
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Quick actions" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("mobile-quick-actions-button")).toHaveFocus();
+  });
+
+  it("keeps keyboard focus inside quick actions when focus starts on the dialog", async () => {
+    renderNav();
+    await userEvent.click(screen.getByTestId("mobile-quick-actions-button"));
+    const dialog = screen.getByRole("dialog", { name: "Quick actions" });
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(dialog).toHaveFocus();
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(closeButton).toHaveFocus();
+    await userEvent.keyboard("{Tab}");
+    expect(screen.getByRole("link", { name: /Claim tokens/ })).toHaveFocus();
+  });
+
+  it("dismisses quick actions when swiped down beyond the drag threshold", () => {
+    renderNav();
+    fireEvent.click(screen.getByTestId("mobile-quick-actions-button"));
+    const dialog = screen.getByRole("dialog", { name: "Quick actions" });
+
+    fireEvent.touchStart(dialog, { touches: [{ clientY: 10 }] });
+    fireEvent.touchMove(dialog, { touches: [{ clientY: 131 }] });
+    fireEvent.touchEnd(dialog);
+
+    expect(screen.queryByRole("dialog", { name: "Quick actions" })).not.toBeInTheDocument();
+  });
+
+  it("snaps the quick actions sheet back after a short swipe", () => {
+    renderNav();
+    fireEvent.click(screen.getByTestId("mobile-quick-actions-button"));
+    const dialog = screen.getByRole("dialog", { name: "Quick actions" });
+
+    fireEvent.touchStart(dialog, { touches: [{ clientY: 10 }] });
+    fireEvent.touchMove(dialog, { touches: [{ clientY: 100 }] });
+    fireEvent.touchEnd(dialog);
+
+    expect(screen.getByRole("dialog", { name: "Quick actions" })).toBeInTheDocument();
+    expect(dialog).toHaveStyle({ transform: "translateY(0px)" });
   });
 });
