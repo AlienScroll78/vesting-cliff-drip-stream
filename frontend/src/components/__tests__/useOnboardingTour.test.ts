@@ -1,5 +1,11 @@
 import { renderHook, act } from '@testing-library/react';
-import { useOnboardingTour, TOUR_STEPS } from '../../useOnboardingTour';
+import {
+  buildTourSteps,
+  replayTour,
+  useOnboardingTour,
+  TOUR_STEPS,
+  type StreamState,
+} from '../../useOnboardingTour';
 
 // Mock localStorage
 const localStorageMock = (() => {

@@ -230,7 +230,7 @@
   <span class="logo">⚡ VestingStream</span>
   <div class="nav-actions">
     <button class="dark-toggle" id="dark-toggle" aria-label="Toggle dark mode" aria-pressed="false" title="Toggle dark mode">🌙</button>
-    <button class="connect-btn" id="wallet-btn">Connect Wallet</button>
+    <button class="connect-btn" id="wallet-btn" data-tour="wallet">Connect Wallet</button>
   </div>
 </nav>
 
@@ -239,7 +239,7 @@
   <p class="subtitle">Set up a cliff + linear drip vesting schedule on Stellar.</p>
 
   <div class="card">
-    <form id="vesting-form" novalidate>
+    <form id="vesting-form" data-tour="streams" novalidate>
 
       <div class="field">
         <label for="sponsor">Sponsor address</label>
@@ -265,7 +265,7 @@
 
       <div class="field">
         <label for="cliff-date">Cliff date &amp; time</label>
-        <input type="datetime-local" id="cliff-date" required />
+        <input type="datetime-local" id="cliff-date" data-tour="claimable" required />
         <div class="ledger-hint" id="cliff-hint" aria-live="polite"></div>
       </div>
 
@@ -275,7 +275,7 @@
         <div class="ledger-hint" id="end-hint" aria-live="polite"></div>
       </div>
 
-      <button type="submit" class="submit-btn">Create Stream</button>
+      <button type="submit" class="submit-btn" data-tour="create-stream">Create Stream</button>
     </form>
   </div>
 
@@ -425,6 +425,9 @@
     });
   }
 </script>
+
+<div id="onboarding-root"></div>
+<script type="module" src="/src/onboarding-entry.tsx"></script>
 
 </body>
 </html>

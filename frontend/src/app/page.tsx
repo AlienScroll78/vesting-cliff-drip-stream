@@ -19,10 +19,9 @@ import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { StreamCreateForm } from "@/components/StreamCreateForm";
 import { VestingTimeline } from "@/components/VestingTimeline";
 import { StreamComparisonView } from "@/components/StreamComparisonView";
-// #820 — first-time-user onboarding tour
-import { OnboardingTour } from "@/components/OnboardingTour";
+import { OnboardingExperience } from "@/components/OnboardingExperience";
 import { ReplayTourButton } from "@/components/ReplayTourButton";
-import { useWallet } from "@/contexts/WalletContext";
+import { GlossaryTerm } from "@/components/GlossaryTerm";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -237,6 +236,7 @@ function StreamList() {
         onActiveChange={setActiveCardId}
         ariaLabel={t("streams")}
         className="stream-list"
+        data-tour="streams"
         style={{ marginTop: "1rem" }}
       >
         {MOCK_STREAMS.map((s) => (
@@ -361,14 +361,24 @@ export default function Home() {
   return (
     <TxProvider>
       <main id="main-content" className="page">
+        <OnboardingExperience />
         <header className="header">
-          <h1>{t("appTitle")}</h1>
+          <div>
+            <h1>{t("appTitle")}</h1>
+            <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
+              Streams from each <GlossaryTerm term="sponsor" /> drip over time;
+              the <GlossaryTerm term="cliff" /> controls when tokens can be
+              claimed, and time is measured in <GlossaryTerm term="ledger" />s.
+            </p>
+          </div>
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
             <a href="/streams" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
               My Streams
             </a>
             <LanguageSwitcher />
-            <WalletButton />
+            <div data-tour="wallet">
+              <WalletButton />
+            </div>
           </div>
         </header>
 
@@ -392,10 +402,12 @@ export default function Home() {
               onClick={() => setShowCreate((v) => !v)}
               aria-expanded={showCreate}
               aria-controls="create-stream-section"
+              data-tour="create-stream"
               data-testid="toggle-create-form"
             >
               {showCreate ? "✕ Cancel" : "+ New Stream"}
             </button>
+            <ReplayTourButton />
           </div>
         </div>
 
@@ -420,6 +432,11 @@ export default function Home() {
         <StreamList />
 
         <footer style={{ marginTop: "2rem", fontSize: "0.75rem", color: "#6b7280", textAlign: "center" }}>
+          <p>
+            Stream schedules remain in contract{" "}
+            <GlossaryTerm term="persistent_storage">persistent storage</GlossaryTerm>{" "}
+            while their streams are active.
+          </p>
           <AnalyticsOptOut />
         </footer>
       </main>
