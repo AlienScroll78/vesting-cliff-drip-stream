@@ -20,6 +20,7 @@ Each ADR documents the context that forced a decision, what was decided, and the
 | [0008](0008-multi-token-storage.md) | Multi-Token Stream Storage Layout | Proposed |
 | [0009](0009-reject-multi-token-streams-same-recipient.md) | Reject Multi-Token Streams for Same Recipient | Accepted |
 | [0010](0010-permissionless-drain-one-year-delay.md) | Permissionless Drain with 1-Year Delay | Accepted |
+| [0011](0011-cliff-then-drip-model.md) | Cliff-Then-Drip Vesting Model | Accepted |
 
 ## Status Definitions
 
