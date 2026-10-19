@@ -66,6 +66,17 @@
   --color-error-800: #991B1B;
   --color-error-900: #7F1D1D;
 
+  --color-info-50:  #EFF6FF;
+  --color-info-100: #DBEAFE;
+  --color-info-200: #BFDBFE;
+  --color-info-300: #93C5FD;
+  --color-info-400: #60A5FA;
+  --color-info-500: #3B82F6; /* blue-500 */
+  --color-info-600: #2563EB;
+  --color-info-700: #1D4ED8;
+  --color-info-800: #1E40AF;
+  --color-info-900: #1E3A8A;
+
   --color-neutral-50:  #F8FAFC;
   --color-neutral-100: #F1F5F9;
   --color-neutral-200: #E2E8F0;
@@ -85,6 +96,7 @@
   --color-success:          var(--color-success-500);
   --color-warning:          var(--color-warning-500);
   --color-danger:           var(--color-error-500);
+  --color-info:             var(--color-info-500);
 
   --color-bg-base:          var(--color-neutral-900);
   --color-bg-surface:       var(--color-neutral-800);
