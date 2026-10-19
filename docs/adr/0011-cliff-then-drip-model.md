@@ -1,6 +1,6 @@
 # ADR-0011: Cliff-Then-Drip Vesting Model
 
-- **Status**: Accepted
+- **Status**: Proposed
 - **Date**: 2026-10-19
 
 ## Context
@@ -45,6 +45,10 @@ Exponential curves require either a lookup table (fixed-size, discretised) or a 
 
 From a contributor perspective, an exponential curve that back-loads rewards incentivises short-tenured contributors to stay only until the curve's inflection point, then leave — the opposite of the intended retention effect.
 
+### Why pure linear (no cliff) was not selected
+
+Pure linear streaming is predictable and simple, but it permits claims immediately after creation. That does not provide the minimum-service commitment gate required by this contract's vesting use case. Standard Drips already serves the no-cliff streaming use case; this contract adds a cliff while retaining linear accrual.
+
 ## Decision
 
 Implement the **cliff-then-drip** model. Tokens accrue linearly from `start_ledger` at `rate_per_ledger` tokens per ledger. The cliff (`cliff_ledger`) gates _withdrawal_, not accrual. The first successful `claim_vested` call after `cliff_ledger` releases all tokens that have accrued since `start_ledger` in a single catch-up transfer, then tokens continue to drip linearly until `end_ledger`.
@@ -68,13 +72,22 @@ All quantities are integers. `ledger` is the current Soroban ledger sequence num
 
 **After cliff is reached (`ledger ≥ cliff_ledger`):**
 
+For the first claim, before the stream end, the catch-up amount is the rate multiplied by elapsed ledgers from the start, bounded by the full deposit:
+
+```
+claimable = min(total_deposit, rate_per_ledger × max(0, ledger − start_ledger))
+```
+
+The stream cannot accrue past `end_ledger`. For later claims, the contract pays only the newly accrued interval:
+
 ```
 active_end       = min(ledger, end_ledger)
 claimable_ledgers = active_end − last_claimed_ledger
-claimable_amount  = claimable_ledgers × rate_per_ledger
+claimable_amount  = min(total_deposit − claimed_amount,
+						max(0, claimable_ledgers) × rate_per_ledger)
 ```
 
-On first claim after cliff, `last_claimed_ledger = start_ledger`, so the full cliff period is included in `claimable_ledgers`.
+On first claim after cliff, `last_claimed_ledger = start_ledger`, so the full cliff period is included in `claimable_ledgers`. At or beyond `end_ledger`, the dust-collection rule below pays any remaining deposit.
 
 **At or after `end_ledger` (dust collection):**
 
