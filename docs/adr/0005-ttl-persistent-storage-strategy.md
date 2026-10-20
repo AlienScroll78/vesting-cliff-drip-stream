@@ -85,6 +85,45 @@ pub fn ensure_ttl_for_stream(env: &Env, recipient: &Address, schedule: &VestingS
 
 For streams with **no on-chain activity for > 1 year**, an off-chain monitor should call a read-only view (e.g., `get_schedule`) periodically to trigger the passive TTL bump. This is a belt-and-suspenders measure; the proactive TTL set at creation and claim covers the vast majority of real-world usage.
 
+## `keeper_bump` — Permissionless TTL Refresh (Issue #727)
+
+To give off-chain keepers an explicit, gas-efficient entry point for TTL maintenance, the contract exposes two permissionless functions:
+
+### `keeper_bump(env, recipient: Address) -> Result<(), VestingError>`
+
+Extends the persistent storage TTL of a **fixed-rate** schedule entry without modifying any schedule state. Any address may call this function; no authentication is required.
+
+```rust
+pub fn keeper_bump(env: Env, recipient: Address) -> Result<(), VestingError> {
+    storage::get_schedule_readonly(&env, &recipient)
+        .ok_or(VestingError::ScheduleNotFound)?;
+    storage::bump_instance(&env);
+    Ok(())
+}
+```
+
+- Calls `get_schedule_readonly`, which internally calls `ensure_ttl_for_stream`, computing `TTL = end_ledger + TTL_BUFFER_LEDGERS` (capped at `PERSISTENT_BUMP_AMOUNT`).
+- Bumps instance storage TTL in the same call.
+- Returns `ScheduleNotFound` if no schedule exists (prevents spurious calls for expired/non-existent streams).
+
+### `keeper_bump_variable(env, recipient: Address) -> Result<(), VestingError>`
+
+Equivalent function for **variable-rate** (`create_variable_stream`) schedules.
+
+### Keeper Strategy
+
+Off-chain keepers should:
+
+1. Enumerate all active streams (via `get_streams_for_sponsor` or an indexed event stream).
+2. For each stream where `end_ledger > current_ledger + PERSISTENT_BUMP_AMOUNT`, call `keeper_bump` at least once per year.
+3. Specifically target streams created with `total_duration > PERSISTENT_BUMP_AMOUNT` ledgers that have had no on-chain activity for ≥ 11 months.
+
+The bump formula ensures the TTL is set to `max(PERSISTENT_BUMP_AMOUNT, end_ledger - current_ledger + TTL_BUFFER_LEDGERS)`. For a stream in its second year, a single `keeper_bump` call resets the full 1-year window.
+
+### Why permissionless?
+
+Making `keeper_bump` permissionless means anyone — the sponsor, the recipient, a third-party monitoring service, or a community bot — can maintain stream liveness. There is no risk to schedule state (the function is read-only w.r.t. schedule data); the only effect is extending TTL.
+
 ## Tests
 
 `test_edge_cases.rs::test_ttl_bumped_on_read` verifies the bump-on-access behaviour. Additional tests should verify:
@@ -92,3 +131,5 @@ For streams with **no on-chain activity for > 1 year**, an off-chain monitor sho
 - TTL after `create_vesting_stream` reflects `end_ledger + TTL_BUFFER_LEDGERS` (capped).
 - TTL after `claim_vested` is re-extended relative to the current ledger.
 - `compute_stream_ttl` returns `PERSISTENT_BUMP_AMOUNT` when the stream has already expired.
+- `keeper_bump` returns `ScheduleNotFound` for unknown recipients.
+- `keeper_bump` succeeds without modifying schedule state for a valid stream.

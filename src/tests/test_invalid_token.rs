@@ -22,8 +22,8 @@ fn test_invalid_token_returns_error() {
         .try_create_vesting_stream(&sponsor, &recipient, &fake_token, &10, &50, &200, &None)
         .unwrap_err();
 
-    // The contract should return Ok(Err(VestingError::InvalidToken)) - contract error
-    assert_eq!(err.unwrap_err(), VestingError::InvalidToken);
+    // The contract should return InvokeError matching InvalidToken
+    assert_eq!(err.unwrap_err(), VestingError::InvalidToken.into());
 }
 
 /// A valid SAC token should NOT trigger InvalidToken.

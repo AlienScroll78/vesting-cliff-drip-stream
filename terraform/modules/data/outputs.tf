@@ -4,20 +4,24 @@ output "db_endpoint" {
   sensitive   = true
 }
 
+output "db_address" {
+  description = "PostgreSQL RDS hostname, without the port."
+  value       = aws_db_instance.postgres.address
+}
+
 output "db_name" {
   description = "PostgreSQL database name"
   value       = aws_db_instance.postgres.db_name
 }
 
+output "db_port" {
+  description = "PostgreSQL RDS port"
+  value       = aws_db_instance.postgres.port
+}
+
 output "db_username" {
   description = "PostgreSQL master username"
   value       = aws_db_instance.postgres.username
-  sensitive   = true
-}
-
-output "db_password" {
-  description = "PostgreSQL master password"
-  value       = var.db_password
   sensitive   = true
 }
 
@@ -41,6 +45,16 @@ output "postgres_kms_key_arn" {
 output "db_instance_id" {
   description = "RDS instance identifier"
   value       = aws_db_instance.postgres.id
+}
+
+output "rds_postgresql_log_group_name" {
+  description = <<-EOT
+    CloudWatch log group that RDS writes PostgreSQL logs to, derived from
+    enabled_cloudwatch_logs_exports. This is the AWS-managed path; the logging
+    module copies it into /rds/postgresql so all three application log groups
+    sit side by side.
+  EOT
+  value       = "/aws/rds/instance/${aws_db_instance.postgres.id}/postgresql"
 }
 
 output "redis_cluster_id" {

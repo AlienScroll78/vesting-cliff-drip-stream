@@ -1,0 +1,52 @@
+name: Sentry Source Maps — #773
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/src/**"
+      - "frontend/package.json"
+
+jobs:
+  upload-source-maps:
+    name: Upload source maps to Sentry
+    runs-on: ubuntu-latest
+    if: vars.SENTRY_ORG != ''  # Skip if Sentry org not configured
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build with source maps
+        run: npm run build
+        env:
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_APP_VERSION: ${{ github.sha }}
+          VITE_SENTRY_TRACES_SR: "0.1"
+          # Enable source map generation for Sentry
+          VITE_BUILD_SOURCEMAPS: "true"
+
+      - name: Create Sentry release
+        uses: getsentry/action-release@v3
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        with:
+          environment: production
+          version: ${{ github.sha }}
+          sourcemaps: ./dist/assets
+          url_prefix: "~/assets"
+          finalize: true

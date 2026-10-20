@@ -137,6 +137,8 @@ export function MobileBottomNav({ onCreateStream, onSettings }: Props) {
         }
 
         @media (max-width: 767px) {
+
+          /* ── Tab bar ── */
           .mobile-bottom-nav {
             display: flex;
             position: fixed;
@@ -156,6 +158,7 @@ export function MobileBottomNav({ onCreateStream, onSettings }: Props) {
             height: calc(64px + env(safe-area-inset-bottom, 0px));
           }
 
+          /* ── Individual tab ── */
           .mobile-nav-tab {
             flex: 1;
             display: flex;

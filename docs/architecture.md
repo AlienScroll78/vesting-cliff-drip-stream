@@ -13,6 +13,7 @@ This document provides a comprehensive architecture overview of the `VestingDrip
    - [Cancel Stream Flow](#3-cancel-stream-flow)
 3. [Backend Component Diagram](#backend-component-diagram)
 4. [Contract Storage Layout](#contract-storage-layout)
+5. [Event Schema](events.md) — full ABI-level schema for all contract events
 
 ---
 

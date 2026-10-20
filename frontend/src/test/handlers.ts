@@ -53,9 +53,20 @@ export const sponsorPageFixture = {
   next_cursor: null,
 };
 
+export const HORIZON_BASE_URL = "https://horizon-testnet.stellar.org";
+export const COINGECKO_PRICE_URL = "https://api.coingecko.com";
+
 // ── Default happy-path handlers ───────────────────────────────────────────────
 
 export const defaultHandlers = [
+  http.get(`${HORIZON_BASE_URL}/fee_stats`, () =>
+    HttpResponse.json({ fee_charged: { p90: "100" }, last_ledger_base_fee: "100" })
+  ),
+
+  http.get(`${COINGECKO_PRICE_URL}/api/v3/simple/price`, () =>
+    HttpResponse.json({ stellar: { usd: 0.12 } })
+  ),
+
   // GET /schedules/:recipient
   http.get(`${BASE_URL}/schedules/:recipient`, ({ params }) => {
     const { recipient } = params as { recipient: string };

@@ -1,0 +1,9 @@
+# Docusaurus
+node_modules/
+.docusaurus/
+build/
+
+# Generated docs (synced from ../docs at build time)
+# Keep index.md which is the custom intro page
+docs/**
+!docs/index.md

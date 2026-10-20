@@ -200,6 +200,17 @@ Sizes: *(default)* · `btn--sm` · `btn--lg`
 </div>
 ```
 
+## Figma handoff
+
+The importable Figma source of truth is maintained in this repository. See [`FIGMA.md`](FIGMA.md) for the token import mapping, component inventory, screen manifest, prototype flows, and manual editor steps.
+
+Generate the derived manifests after changing tokens or component sources:
+
+```bash
+npm run design:export
+npm run design:check
+```
+
 ## Deploying Storybook
 
 A Storybook integration would consume these tokens and components. To set up:

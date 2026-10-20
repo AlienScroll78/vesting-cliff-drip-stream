@@ -120,9 +120,7 @@ fn test_create_stream_succeeds_after_initialize() {
     let (token_id, _) = setup_token(&env, &sponsor, 10_000);
     let rate = 10 * crate::types::RATE_DECIMALS;
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None)
-        .unwrap();
+    client.create_vesting_stream(&sponsor, &recipient, &token_id, &10, &10, &100, &None);
 }
 
 /// `create_variable_rate_stream` also fails with `NotInitialized` before init.

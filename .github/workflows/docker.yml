@@ -10,6 +10,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
 
     steps:
       - name: Checkout
@@ -28,6 +29,89 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build images for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: |
+            api-server:latest
+            indexer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: trivy-scan api-server:latest
+        id: api_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: api-server:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: trivy-scan indexer:latest
+        id: indexer_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: indexer:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Generate api-server SARIF report
+        if: always()
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: api-server:latest
+          format: sarif
+          output: trivy-api-server.sarif
+          exit-code: "0"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Generate indexer SARIF report
+        if: always()
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: indexer:latest
+          format: sarif
+          output: trivy-indexer.sarif
+          exit-code: "0"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Upload api-server SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api-server.sarif
+          category: trivy-docker-api-server
+
+      - name: Upload indexer SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-indexer.sarif
+          category: trivy-docker-indexer
+
+      - name: Enforce Trivy vulnerability gate
+        if: always() && (steps.api_scan.outcome == 'failure' || steps.indexer_scan.outcome == 'failure')
+        run: exit 1
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -39,11 +123,3 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL

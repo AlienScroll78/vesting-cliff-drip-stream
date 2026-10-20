@@ -129,6 +129,34 @@ jobs:
           retention-days: 30
 
   # ──────────────────────────────────────────────────────────────
+  # Rust – cargo-deny
+  #
+  # Complements the cargo-license report above rather than replacing
+  # it. cargo-license produces a report that the policy script
+  # compares; cargo-deny evaluates the same allowlist natively and
+  # fails on a disallowed licence without needing the report to be
+  # generated first. Running both means a policy change that satisfies
+  # one checker but not the other is caught.
+  # ──────────────────────────────────────────────────────────────
+  rust-deny:
+    name: Rust license allowlist (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+      # `check licenses` only — not a bare `cargo deny check`, which would
+      # also run the advisories, bans, and sources sections. Those are left
+      # permissive in deny.toml and are not part of this policy.
+      - name: Enforce the license allowlist
+        run: cargo deny check licenses
+
+  # ──────────────────────────────────────────────────────────────
   # Node.js (root package.json – Storybook/UI tooling)
   # ──────────────────────────────────────────────────────────────
   node-licenses-root:

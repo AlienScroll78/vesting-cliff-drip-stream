@@ -1,0 +1,125 @@
+name: Fuzz
+
+on:
+  # Nightly at 03:00 UTC
+  schedule:
+    - cron: "0 3 * * *"
+  # Allow manual trigger for ad-hoc fuzzing
+  workflow_dispatch:
+    inputs:
+      fuzz_duration_seconds:
+        description: "Seconds to run each fuzz target (default 600 = 10 min)"
+        required: false
+        default: "600"
+
+env:
+  CARGO_TERM_COLOR: always
+  # Duration in seconds; schedule always uses 600 (10 min); manual can override.
+  FUZZ_DURATION: ${{ github.event.inputs.fuzz_duration_seconds || '600' }}
+
+jobs:
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    # This job runs on nightly Rust because cargo-fuzz requires it.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            fuzz/target
+          key: ${{ runner.os }}-fuzz-${{ hashFiles('fuzz/Cargo.lock', '**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-fuzz-
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      # ── Replay regression corpus (always, no time limit) ───────────────────
+      # These run through committed crash inputs to ensure no regressions.
+      - name: Replay regression — create_vesting_stream
+        working-directory: fuzz
+        run: |
+          if [ -n "$(ls regression/create_vesting_stream/ 2>/dev/null | grep -v '.gitkeep')" ]; then
+            cargo fuzz run create_vesting_stream regression/create_vesting_stream/ \
+              -- -max_total_time=60
+          else
+            echo "No regression inputs for create_vesting_stream — skipping replay"
+          fi
+
+      - name: Replay regression — claim_vested
+        working-directory: fuzz
+        run: |
+          if [ -n "$(ls regression/claim_vested/ 2>/dev/null | grep -v '.gitkeep')" ]; then
+            cargo fuzz run claim_vested regression/claim_vested/ \
+              -- -max_total_time=60
+          else
+            echo "No regression inputs for claim_vested — skipping replay"
+          fi
+
+      - name: Replay regression — cancel_stream
+        working-directory: fuzz
+        run: |
+          if [ -n "$(ls regression/cancel_stream/ 2>/dev/null | grep -v '.gitkeep')" ]; then
+            cargo fuzz run cancel_stream regression/cancel_stream/ \
+              -- -max_total_time=60
+          else
+            echo "No regression inputs for cancel_stream — skipping replay"
+          fi
+
+      # ── Fuzz each target for FUZZ_DURATION seconds ─────────────────────────
+      - name: Fuzz — create_vesting_stream
+        working-directory: fuzz
+        run: |
+          cargo fuzz run create_vesting_stream corpus/create_vesting_stream/ \
+            -- -max_total_time=${{ env.FUZZ_DURATION }} \
+               -artifact_prefix=artifacts/create_vesting_stream/ \
+               -print_final_stats=1
+
+      - name: Fuzz — claim_vested
+        working-directory: fuzz
+        run: |
+          cargo fuzz run claim_vested corpus/claim_vested/ \
+            -- -max_total_time=${{ env.FUZZ_DURATION }} \
+               -artifact_prefix=artifacts/claim_vested/ \
+               -print_final_stats=1
+
+      - name: Fuzz — cancel_stream
+        working-directory: fuzz
+        run: |
+          cargo fuzz run cancel_stream corpus/cancel_stream/ \
+            -- -max_total_time=${{ env.FUZZ_DURATION }} \
+               -artifact_prefix=artifacts/cancel_stream/ \
+               -print_final_stats=1
+
+      - name: Fuzz — metadata_validation
+        working-directory: fuzz
+        run: |
+          cargo fuzz run metadata_validation corpus/metadata_validation/ \
+            -- -max_total_time=${{ env.FUZZ_DURATION }} \
+               -artifact_prefix=artifacts/metadata_validation/ \
+               -print_final_stats=1
+
+      # ── Upload any crash inputs as artifacts ────────────────────────────────
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ github.run_id }}
+          path: fuzz/artifacts/
+          retention-days: 30
+
+      # ── Save updated corpus ──────────────────────────────────────────────────
+      - name: Upload updated corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ github.run_id }}
+          path: fuzz/corpus/
+          retention-days: 7

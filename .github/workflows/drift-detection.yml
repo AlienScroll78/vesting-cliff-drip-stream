@@ -6,127 +6,354 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Target environment (production)'
+        description: 'Target environment'
         required: false
+        type: choice
         default: 'production'
+        options:
+          - production
+          - staging
 
 permissions:
-  id-token: write
+  id-token: write    # required for AWS OIDC (no static access keys)
   contents: read
-  issues: write   # required to open drift-tracking issues
+  issues: write      # required to open, update and close drift-tracking issues
+
+concurrency:
+  group: drift-detection-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  ISSUE_BODY_LIMIT: '65000'
+  DRIFT_ISSUE_MARKER: '<!-- terraform-drift-workflow:managed -->'
 
 jobs:
   drift-detect:
     name: Detect Infrastructure Drift
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment || 'production' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Self-test drift detection script
+        run: bash scripts/tests/test_detect_drift.sh
+
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DRIFT_DETECTION_ROLE_ARN }}
+          role-session-name: drift-detection-${{ github.run_id }}
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '~1.7'
+          terraform_version: '1.9.0'
           terraform_wrapper: false
+
+      - name: Select target environment
+        id: env
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          environment="production"
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            environment="${INPUT_ENVIRONMENT:-production}"
+          fi
+          case "${environment}" in
+            staging|production) ;;
+            *)
+              echo "::error::Unsupported drift target environment: ${environment}"
+              exit 1
+              ;;
+          esac
+          echo "environment=${environment}" >> "$GITHUB_OUTPUT"
 
       - name: Terraform init
         working-directory: terraform
+        env:
+          DRIFT_ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          TF_DATA_DIR: ${{ github.workspace }}/terraform/.terraform/${{ steps.env.outputs.environment }}
         run: |
-          terraform init \
-            -backend-config="bucket=vesting-tf-state" \
-            -backend-config="key=vesting/terraform.tfstate" \
-            -backend-config="region=us-east-1" \
-            -input=false
+          set -euo pipefail
+          terraform init -input=false \
+            -backend-config="envs/${DRIFT_ENVIRONMENT}.backend.hcl"
 
       - name: Run drift detection
         id: drift
         working-directory: terraform
+        continue-on-error: true   # exit 2 means drift, 1 means error; both are classified below
         env:
+          DRIFT_ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          DRIFT_LOCK_TIMEOUT: '5m'
+          TF_DATA_DIR: ${{ github.workspace }}/terraform/.terraform/${{ steps.env.outputs.environment }}
           TF_VAR_db_password: ${{ secrets.TF_VAR_DB_PASSWORD }}
-        run: |
-          bash ../scripts/detect_drift.sh
-        continue-on-error: true   # script exits 2 on drift; we capture it ourselves
+          TF_VAR_cost_alert_emails: ${{ secrets.TF_VAR_COST_ALERT_EMAILS }}
+          TF_VAR_slack_webhook_url: ${{ secrets.TF_VAR_SLACK_WEBHOOK_URL }}
+        run: bash ../scripts/detect_drift.sh
 
       - name: Upload plan output
+        id: plan-artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: drift-plan-${{ github.run_id }}
+          name: drift-plan-${{ steps.env.outputs.environment }}-${{ github.run_id }}
           path: terraform/drift-plan.txt
           retention-days: 90
+          if-no-files-found: warn
 
-      - name: Open GitHub issue on drift
-        if: steps.drift.outputs.drift_detected == 'true'
+      - name: Open or update drift issue
+        id: drift-issue
+        if: steps.drift.outputs.drift_status == 'drift'
         uses: actions/github-script@v7
+        env:
+          DRIFT_ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          DRIFT_SUMMARY: ${{ steps.drift.outputs.drift_summary }}
+          DRIFT_ARTIFACT_URL: ${{ steps.plan-artifact.outputs.artifact-url }}
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('terraform/drift-plan.txt', 'utf8');
-            const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n\n…(truncated — see workflow artifact)' : plan;
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = [
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const marker = process.env.DRIFT_ISSUE_MARKER;
+            const limit = Number(process.env.ISSUE_BODY_LIMIT || 65000);
+            const environment = process.env.DRIFT_ENVIRONMENT;
+            const summary = process.env.DRIFT_SUMMARY || 'unavailable';
+            const artifactUrl = process.env.DRIFT_ARTIFACT_URL || '';
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const planPath = 'terraform/drift-plan.txt';
+            const plan = fs.existsSync(planPath) ? fs.readFileSync(planPath, 'utf8') : '';
+            const requiredLabels = ['infrastructure', 'drift'];
+
+            for (const label of requiredLabels) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: label });
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({ owner, repo, name: label, color: 'd93f0b' });
+                } else {
+                  throw error;
+                }
+              }
+            }
+
+            const fenceFor = (text) => {
+              const runs = text.match(/`+/g) || [];
+              const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+              return '`'.repeat(Math.max(3, longest + 1));
+            };
+
+            const header = [
               '## :warning: Terraform Drift Detected',
               '',
+              marker,
+              `**Environment:** \`${environment}\``,
               `**Detected at:** ${new Date().toISOString()}`,
               `**Workflow run:** ${runUrl}`,
-              `**Changes summary:** ${process.env.DRIFT_SUMMARY}`,
+              `**Full plan (artifact):** ${artifactUrl || runUrl}`,
+              `**Changes summary:** ${summary}`,
               '',
               '<details>',
-              '<summary>Full terraform plan output</summary>',
+              '<summary>terraform plan output</summary>',
               '',
-              '```',
-              truncated,
-              '```',
+            ].join('\n');
+            const footer = [
+              '',
               '</details>',
               '',
               '### Next steps',
               '',
-              'See the [Drift Reconciliation Runbook](../blob/main/docs/runbooks/drift-reconciliation.md) for evaluation steps.',
+              `1. Follow the [Drift Reconciliation Runbook](${context.serverUrl}/${owner}/${repo}/blob/main/docs/runbooks/drift-reconciliation.md).`,
+              '2. Reject the drift with `terraform apply`, or accept it by codifying the change in Terraform.',
+              '3. This issue is updated in place on every run while drift persists, and is closed automatically once a clean plan is detected.',
+              '',
             ].join('\n');
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[Drift] Infrastructure drift detected — ${new Date().toISOString().slice(0, 10)}`,
-              body,
-              labels: ['infrastructure', 'drift'],
+            let excerpt = plan || '(plan output unavailable)';
+            let body = null;
+            for (let attempt = 0; attempt < 12; attempt += 1) {
+              const fence = fenceFor(excerpt);
+              const candidate = `${header}${fence}\n${excerpt}\n${fence}${footer}`;
+              if (candidate.length <= limit) {
+                body = candidate;
+                break;
+              }
+              const overflow = candidate.length - limit;
+              excerpt = excerpt.length > overflow ? excerpt.slice(0, excerpt.length - overflow) : '';
+              if (excerpt === '') {
+                body = `${header}${fence}\n(plan output truncated)\n${fence}${footer}`;
+                break;
+              }
+            }
+            if (body === null) {
+              body = `${header}\n(plan output truncated)\n${footer}`;
+            }
+            core.info(`Drift issue body length: ${body.length} characters (limit ${limit})`);
+
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
             });
+            const managed = open
+              .filter((issue) => !issue.pull_request)
+              .filter((issue) => (issue.labels || []).some((label) => label.name === 'drift'))
+              .filter((issue) => (issue.body || '').includes(marker))
+              .sort((a, b) => a.number - b.number);
+
+            const title = `[Drift] ${environment} infrastructure drift detected`;
+            let target = null;
+            if (managed.length > 0) {
+              target = managed[0];
+              const missing = requiredLabels.filter(
+                (label) => !(target.labels || []).some((item) => item.name === label),
+              );
+              if (missing.length > 0) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number: target.number, labels: missing });
+              }
+              await github.rest.issues.update({ owner, repo, issue_number: target.number, title, body });
+              core.info(`Updated existing drift issue #${target.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body, labels: requiredLabels });
+              target = created.data;
+              core.info(`Created drift issue #${target.number}`);
+            }
+
+            for (const duplicate of managed.slice(1)) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: duplicate.number,
+                body: `Superseded by #${target.number}. This workflow keeps a single open drift issue, so this duplicate is closed.`,
+              });
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: duplicate.number,
+                state: 'closed',
+              });
+            }
+
+            core.setOutput('issue_number', String(target.number));
+            core.setOutput('issue_url', target.html_url);
+
+      - name: Close resolved drift issues
+        id: close-resolved
+        if: steps.drift.outputs.drift_status == 'clean'
+        uses: actions/github-script@v7
         env:
-          DRIFT_SUMMARY: ${{ steps.drift.outputs.drift_summary }}
+          DRIFT_ENVIRONMENT: ${{ steps.env.outputs.environment }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const marker = process.env.DRIFT_ISSUE_MARKER;
+            const environment = process.env.DRIFT_ENVIRONMENT;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const managed = open
+              .filter((issue) => !issue.pull_request)
+              .filter((issue) => (issue.body || '').includes(marker))
+              .sort((a, b) => a.number - b.number);
+
+            let closed = 0;
+            for (const issue of managed) {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: [
+                  `No drift detected for \`${environment}\` — the plan reports no changes.`,
+                  '',
+                  `Verified by run <${runUrl}|${context.runId}> at ${new Date().toISOString()}.`,
+                  '',
+                  'Closing this workflow-managed drift issue. Follow the Drift Reconciliation Runbook if drift reappears.',
+                ].join('\n'),
+              });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed' });
+              closed += 1;
+              core.info(`Closed drift issue #${issue.number}`);
+            }
+
+            core.setOutput('closed_count', String(closed));
+            core.info(`Closed ${closed} workflow-managed drift issue(s); ${open.length - managed.length} unrelated open issue(s) left untouched.`);
 
       - name: Notify Slack on drift
-        if: steps.drift.outputs.drift_detected == 'true'
+        if: steps.drift.outputs.drift_status == 'drift'
         uses: slackapi/slack-github-action@v1
         with:
           payload: >
             {
-              "text": ":warning: *Terraform drift detected* in production infrastructure.\n*Changes:* ${{ steps.drift.outputs.drift_summary }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>\nSee the <${{ github.server_url }}/${{ github.repository }}/blob/main/docs/runbooks/drift-reconciliation.md|Drift Reconciliation Runbook> for next steps."
+              "text": ":warning: *Terraform drift detected* in *${{ steps.env.outputs.environment }}*.\n*Changes:* ${{ steps.drift.outputs.drift_summary }}\n*Issue:* <${{ steps.drift-issue.outputs.issue_url }}|#${{ steps.drift-issue.outputs.issue_number }}>\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>\n*Full plan:* artifact \`drift-plan-${{ steps.env.outputs.environment }}-${{ github.run_id }}\` on the run page\nFollow the <${{ github.server_url }}/${{ github.repository }}/blob/main/docs/runbooks/drift-reconciliation.md|Drift Reconciliation Runbook>."
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Notify Slack on workflow failure
-        if: failure() && steps.drift.outputs.drift_detected != 'true'
+      - name: Notify Slack on failure
+        if: always() && (failure() || (steps.drift.outputs.drift_status != 'clean' && steps.drift.outputs.drift_status != 'drift'))
         uses: slackapi/slack-github-action@v1
         with:
           payload: >
             {
-              "text": ":red_circle: Terraform drift detection *workflow failed* (not a drift event — the job itself errored).\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"
+              "text": ":red_circle: Terraform drift detection *failed* for *${{ steps.env.outputs.environment }}* (status: `${{ steps.drift.outputs.drift_status || 'no output' }}`).\nThis is not a clean result: open drift issues are left open for review.\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
 
-      - name: Fail job if drift was detected
-        if: steps.drift.outputs.drift_detected == 'true'
+      - name: Write run summary
+        if: always()
+        env:
+          DRIFT_ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          DRIFT_STATUS: ${{ steps.drift.outputs.drift_status }}
+          DRIFT_SUMMARY: ${{ steps.drift.outputs.drift_summary }}
+          DRIFT_ISSUE_URL: ${{ steps.drift-issue.outputs.issue_url }}
+          CLOSED_COUNT: ${{ steps.close-resolved.outputs.closed_count }}
         run: |
-          echo "::error::Terraform drift detected. See the GitHub issue and Slack notification."
-          exit 1
+          set -euo pipefail
+          {
+            echo "## Terraform drift detection — ${DRIFT_ENVIRONMENT:-unknown}"
+            echo ""
+            case "${DRIFT_STATUS:-error}" in
+              clean)
+                echo "**Status:** clean — no changes (closed ${CLOSED_COUNT:-0} workflow-managed drift issue(s))."
+                ;;
+              drift)
+                echo "**Status:** drift — ${DRIFT_SUMMARY:-unavailable}"
+                echo ""
+                echo "Issue: ${DRIFT_ISSUE_URL:-not created}"
+                ;;
+              *)
+                echo "**Status:** error — the plan did not complete. Open drift issues were left open."
+                ;;
+            esac
+            echo ""
+            echo "Run: [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "${DRIFT_STATUS:-error}" in
+            drift)
+              echo "::warning::Terraform drift detected in ${DRIFT_ENVIRONMENT:-unknown}: ${DRIFT_SUMMARY:-unavailable}"
+              ;;
+            *)
+              echo "::error::Terraform drift detection failed for ${DRIFT_ENVIRONMENT:-unknown}; open drift issues were left open."
+              ;;
+          esac
+
+      - name: Fail job on detection error
+        if: always() && (steps.drift.outputs.drift_status != 'clean' && steps.drift.outputs.drift_status != 'drift')
+        run: exit 1

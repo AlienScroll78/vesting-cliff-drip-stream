@@ -29,6 +29,9 @@ fn test_batch_create_single_recipient_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -58,6 +61,9 @@ fn test_batch_create_multiple_recipients_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let r1 = Address::generate(&env);
@@ -90,6 +96,9 @@ fn test_batch_create_rejects_duplicate_recipient() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -117,6 +126,9 @@ fn test_batch_create_rejects_invalid_rate() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let r1 = Address::generate(&env);
@@ -147,6 +159,9 @@ fn test_batch_create_rejects_invalid_duration() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -169,6 +184,9 @@ fn test_batch_create_enforces_max_batch_size() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let (token_id, _) = create_token(&env, &sponsor);
@@ -193,6 +211,9 @@ fn test_batch_create_exactly_max_batch_size_succeeds() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let (token_id, token_client) = create_token(&env, &sponsor);
