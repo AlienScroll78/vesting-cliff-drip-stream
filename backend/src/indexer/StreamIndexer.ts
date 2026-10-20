@@ -22,6 +22,7 @@
  *   INDEXER_POLL_MS          Poll interval in ms (default: 6000)
  *   INDEXER_MAX_BACKOFF_MS   Maximum backoff in ms (default: 60000)
  *   INDEXER_FINALITY_DEPTH   Ledgers behind tip for finality (default: 3)
+ *   INDEXER_DEFAULT_START_LEDGER  Fallback cursor when none saved (default: '')
  *   METRICS_PORT             Prometheus metrics server port (default: 9464)
  */
 
@@ -52,6 +53,7 @@ function defaultConfig(): IndexerConfig {
     maxBackoffMs:    parseInt(process.env.INDEXER_MAX_BACKOFF_MS   ?? '60000', 10),
     finalityDepth:   parseInt(process.env.INDEXER_FINALITY_DEPTH   ?? '3',     10),
     metricsPort:     parseInt(process.env.METRICS_PORT             ?? '9464',  10),
+    defaultStartLedger: process.env.INDEXER_DEFAULT_START_LEDGER   ?? '',
   };
 }
 
@@ -135,8 +137,17 @@ export class StreamIndexer {
     const cycleStart = Date.now();
 
     try {
-      // 1. Read resume cursor
-      const cursor = await readCursor(this.pool);
+      // 1. Read resume cursor. If the cursor table has no row (fresh start or
+      //    corrupted / missing entry) fall back to the configured default
+      //    start ledger so a re-index is deterministic and gap-free.
+      let cursor = await readCursor(this.pool);
+      if (cursor === '' && this.cfg.defaultStartLedger) {
+        cursor = this.cfg.defaultStartLedger;
+        console.warn(
+          `[stream-indexer] cursor row missing — falling back to ` +
+          `INDEXER_DEFAULT_START_LEDGER=${cursor}`,
+        );
+      }
       this.cursor  = cursor;
 
       // 2. Fetch one page from Horizon
