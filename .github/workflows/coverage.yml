@@ -1,0 +1,35 @@
+name: Contract coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract-coverage:
+    name: Contract line and branch coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Measure contract coverage
+        run: >-
+          cargo llvm-cov --features testutils --include-files 'src/contract.rs'
+          --fail-under-lines 90 --fail-under-branches 85 --html
+          --output-dir docs/coverage/html
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-coverage-report
+          path: docs/coverage/html/
+          if-no-files-found: warn
+          retention-days: 14
