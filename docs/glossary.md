@@ -60,7 +60,13 @@ Rust operations (e.g., `checked_mul`, `checked_add`) that return `None` instead 
 
 ### Clawback
 
-A compliance mechanism allowing the original [sponsor](#sponsor) to recover all remaining tokens from a vesting stream, regardless of [cliff](#cliff) status. Only available on tokens that support the SAC (Stellar Asset Contract) clawback flag. Used for regulatory compliance scenarios such as AML violations, sanctions list matches, or court orders. Invoked via [`clawback_stream`](api-reference.md#clawback_stream) with a mandatory reason string for audit trails.
+A compliance mechanism allowing the original [sponsor](#sponsor) to recover all remaining tokens from a vesting stream, regardless of [cliff](#cliff) status. Only available on tokens that support the [SAC](#sac-stellar-asset-contract) [clawback flag](#clawback-flag). Used for regulatory compliance scenarios such as AML violations, sanctions list matches, or court orders. Invoked via [`clawback_stream`](api-reference.md#clawback_stream) with a mandatory reason string for audit trails.
+
+---
+
+### Clawback Flag
+
+An authorization setting on a classic Stellar asset that lets the issuing account freeze balances or reclaim tokens via the [SAC (Stellar Asset Contract)](#sac-stellar-asset-contract). One-sentence definition: the clawback flag is the on-chain switch that makes [clawback](#clawback) possible. Sponsors must issue or select a token with this flag enabled before calling [`clawback_stream`](api-reference.md#clawback_stream); without it, clawback attempts fail with `ClawbackNotSupported`. See [docs/events.md](events.md#streamclawedback) for the `StreamClawedBack` event an indexer should watch.
 
 ---
 
@@ -91,6 +97,12 @@ Regulatory requirements that may necessitate recovering vested tokens from a str
 ### Deposit
 
 The total token amount locked into the contract vault at stream creation, computed as `rate × total_duration`. The sponsor must hold this balance at the time `create_vesting_stream` is called.
+
+---
+
+### Drain
+
+The sweeping of unclaimed dust from an expired stream back to the [sponsor](#sponsor) via [`drain_expired_stream`](api-reference.md#drain_expired_stream). One-sentence definition: a drain removes leftover tokens after expiry so no value stays locked in the contract's [vault](#vault). Drains are only permitted past `end_ledger` plus the [drain delay](#drain-delay), emit a `StreamDrained` event (see [docs/events.md](events.md#streamdrained)), and return dust-format amounts in the token's base unit. Related: [Emergency Drain](#emergency-drain), [TTL](#ttl-time-to-live).
 
 ---
 
@@ -208,6 +220,10 @@ A forward-compatibility mechanism where each [`VestingSchedule`](api-reference.m
 
 The smart-contract platform on the Stellar network. Contracts are compiled to [WebAssembly (WASM)](#wasm-webassembly) and executed in a deterministic sandbox. This project is a Soroban contract.
 
+### Soroban RPC
+
+The JSON-RPC service an app or indexer calls to submit transactions, simulate contract calls, and fetch events from a [Soroban](#soroban) network. One-sentence definition: Soroban RPC is the gateway between off-chain clients and on-chain contracts. The REST backend uses it for view simulations, and indexers use its `getEvents` filter (contract address plus topic, see [docs/events.md](events.md#indexer-implementation-notes)) to track this contract. Related: [Horizon](#horizon), [XDR](#xdr-external-data-representation).
+
 ---
 
 ### Sponsor
@@ -219,6 +235,12 @@ The `Address` that creates a vesting stream and deposits the full token allocati
 ### `start_ledger`
 
 The absolute ledger sequence number recorded at stream creation (`env.ledger().sequence()`). Token accrual begins from this ledger, but claims are blocked until [`cliff_ledger`](#cliff_ledger).
+
+---
+
+### Stellar
+
+A decentralized payments and smart-contract network secured by the Stellar Consensus Protocol (SCP). One-sentence definition: Stellar is the layer-1 network this project runs on. Ledgers close roughly every 5 seconds, and all contract time is measured in [ledgers](#ledger). Develop contracts with [Soroban](#soroban), inspect accounts and transactions with [Horizon](#horizon), and deploy with the [Stellar CLI](#stellar-cli-stellar). See the [Stellar Network](#stellar-network) entry and the [Quick Start](../README.md#quick-start).
 
 ---
 
@@ -279,12 +301,6 @@ A stream configuration in which the [rate](#rate) (tokens per [ledger](#ledger))
 ### VestingSchedule
 
 The core data struct stored in [persistent storage](#persistent-storage) for each recipient. Contains `sponsor`, `token`, `rate`, `start_ledger`, `cliff_ledger`, `end_ledger`, and `claimed` (total tokens already transferred).
-
----
-
-### Variable Rate
-
-A stream configuration where the token accrual [rate](#rate) changes over the lifetime of the stream rather than remaining constant. Instead of a single `rate` value, a variable-rate stream stores a schedule of `(effective_ledger, rate_per_ledger)` pairs; the claimable amount at any ledger is computed by summing each segment: `Σ rate_i × (min(current, end_i) − start_i)`. Variable-rate streams enable use cases such as step-vesting (rate doubles after one year) or decay schedules (rate halves every quarter). Because each rate segment can introduce sub-unit remainders when ledger counts are uneven, variable-rate streams are the primary source of [dust](#dust). The current contract implements a fixed rate only; variable rate is the planned extension tracked in the feature roadmap.
 
 ---
 
