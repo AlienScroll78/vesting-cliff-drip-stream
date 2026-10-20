@@ -19,6 +19,7 @@
     "i18next": "^26.3.2",
     "i18next-browser-languagedetector": "^8.2.1",
     "posthog-js": "^1.393.5",
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.83.0",

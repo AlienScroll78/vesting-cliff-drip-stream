@@ -2,6 +2,7 @@ import express, { type Request, type Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { validateAddress } from './validation.js';
 import { createScheduleController } from './controllers/schedules.js';
+import { createSharePreviewController } from './controllers/sharePreview.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
 
@@ -31,6 +32,8 @@ app.get(
   validate({ params: RecipientParamsSchema }),
   createScheduleController(),
 );
+
+app.get('/share/stream/:recipient', createSharePreviewController());
 
 // Admin API — all routes require Bearer token (ADMIN_API_KEY env var).
 app.use('/admin', adminRouter);
