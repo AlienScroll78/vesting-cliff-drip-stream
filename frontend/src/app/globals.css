@@ -287,6 +287,17 @@ body {
   border-bottom: 1px solid #fecaca; font-size: 0.9rem;
 }
 
+/* Mobile route changes fade in while moving content up by 8px. */
+@keyframes mobile-route-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 767px) {
+  .mobile-route-transition {
+    animation: mobile-route-enter 160ms ease-out both;
+  }
+}
+
 /* ── Skeleton loaders (#64) ── */
 @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .skeleton {
@@ -304,5 +315,9 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .mobile-route-transition {
+    animation: none;
   }
 }
