@@ -7,8 +7,17 @@ import "../design-system/components/components.css";
 const preview: Preview = {
   parameters: {
     layout: "centered",
+    // Chromatic configuration:
+    //  - `modes` capture every story in both light and dark colour schemes
+    //    using the `colorScheme` global defined below.
+    //  - `viewports` cover the mobile (375px) and desktop (1440px) breakpoints
+    //    required by the visual-regression acceptance criteria, plus tablet.
     chromatic: {
-      viewports: [390, 768, 1280],
+      viewports: [375, 768, 1440],
+      modes: {
+        light: { globals: { colorScheme: "light" } },
+        dark: { globals: { colorScheme: "dark" } },
+      },
     },
     a11y: {
       config: {},
