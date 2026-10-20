@@ -6,7 +6,7 @@
  *   - Creates a job record and returns 202 with job data
  *   - Runs backfill idempotently (ON CONFLICT DO NOTHING)
  *   - Progress tracked in backfill_jobs table
- *   - JWT / Bearer auth enforced (via requireAdminAuth)
+ *   - JWT auth enforced (via authMiddleware + requireRole('admin'), issue #1003)
  *   - GET /admin/backfill returns job list
  *   - GET /admin/backfill/:id returns single job
  */
