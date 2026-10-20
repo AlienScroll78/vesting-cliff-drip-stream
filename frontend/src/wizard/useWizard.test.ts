@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
-import { isDepositOverflow, ledgersToDuration, I128_MAX, useWizard } from "./useWizard";
+import { describe, it, expect } from "vitest";
+import { isDepositOverflow, ledgersToDuration, I128_MAX } from "./useWizard";
 
 describe("isDepositOverflow", () => {
   it("returns false for small values", () => {

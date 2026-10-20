@@ -31,7 +31,7 @@ output "indexer_service_name" {
 
 output "alb_security_group_id" {
   description = "Security group ID of the ALB"
-  value       = aws_lb.main.security_groups[0]
+  value       = one(aws_lb.main.security_groups)
 }
 
 output "ecs_service_name" {

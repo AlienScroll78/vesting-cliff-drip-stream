@@ -1,6 +1,7 @@
 "use client";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { NotificationEventType } from "@/hooks/useNotifications";
+import { useBrowserPush } from "@/hooks/useBrowserPush";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
 
@@ -36,6 +37,21 @@ const EVENT_META: Record<
  */
 export default function NotificationPreferencesPage() {
   const { preferences, setPreference } = useNotificationContext();
+  const { permission, requestPermission } = useBrowserPush();
+
+  const permissionStatusText =
+    permission === "granted"
+      ? "Enabled"
+      : permission === "denied"
+      ? "Blocked"
+      : "Not enabled";
+
+  const permissionColor =
+    permission === "granted"
+      ? "var(--color-completed)"
+      : permission === "denied"
+      ? "var(--color-cancelled)"
+      : "#9ca3af";
 
   return (
     <main id="main-content" className="page">

@@ -1,0 +1,10 @@
+# robots.txt — VestingStream
+#
+# Individual stream pages (/view/*) are excluded from crawling here as a
+# belt-and-suspenders measure alongside the per-page noindex meta tag added in
+# issue #765. This prevents crawlers from even fetching the pages; the meta tag
+# handles crawlers that ignore robots.txt.
+
+User-agent: *
+Allow: /
+Disallow: /view/

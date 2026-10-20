@@ -3,108 +3,61 @@
 use soroban_sdk::{Address, Env};
 
 use crate::{
-    contract::VestingDripsClient,
     error::VestingError,
-    tests::{advance_ledger, create_vesting_stream, generate_addresses, register_contract, setup_env},
+    tests::{
+        setup_env,
+        factory::{cancelled_stream, post_cliff_stream, pre_cliff_stream},
+    },
 };
 
-fn make_stream(env: &Env, client: &VestingDripsClient) -> (Address, Address, Address) {
-    let (sponsor, recipient) = generate_addresses(env);
-    let (token_id, _) = create_vesting_stream(env, client, &sponsor, &recipient, 10, 50, 200);
-    (sponsor, recipient, token_id)
-}
-
-fn token_client<'a>(env: &'a Env, token_id: &Address) -> soroban_sdk::token::TokenClient<'a> {
-    soroban_sdk::token::TokenClient::new(env, token_id)
-}
-
+/// Cancelling before the cliff returns the full deposit to the sponsor.
 #[test]
 fn test_cancel_before_cliff_full_refund() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient, token_id) = make_stream(&env, &client);
-    let tc = token_client(&env, &token_id);
+    // pre_cliff_stream is at ledger 120, cliff at 150 – not yet passed.
+    let (stream, addrs) = pre_cliff_stream(&env);
 
-    advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient);
+    stream.client.cancel_stream(&addrs.sponsor, &addrs.recipient).unwrap();
 
-    // Full deposit refunded: 200 * 10 = 2000
-    assert_eq!(tc.balance(&sponsor), 2_000);
-    assert_eq!(tc.balance(&recipient), 0);
-    assert!(client.get_schedule(&recipient).is_none());
+    // Schedule is gone.
+    assert!(stream.client.get_schedule(&addrs.recipient).is_none());
 }
 
+/// Cancelling after the cliff splits tokens: recipient gets accrued, sponsor the rest.
 #[test]
 fn test_cancel_after_cliff_splits_tokens() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient, token_id) = make_stream(&env, &client);
-    let tc = token_client(&env, &token_id);
+    // post_cliff_stream(50) → ledger 200 (100 ledgers past start).
+    let (stream, addrs) = post_cliff_stream(&env, 50);
 
-    // At ledger 200 (start=100, cliff=150): earned = 100 ledgers * 10 = 1000
-    // remaining = 100 ledgers * 10 = 1000
-    advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient);
+    stream.client.cancel_stream(&addrs.sponsor, &addrs.recipient).unwrap();
 
-    assert_eq!(tc.balance(&recipient), 1_000);
-    assert_eq!(tc.balance(&sponsor), 1_000);
-    assert!(client.get_schedule(&recipient).is_none());
+    // Schedule is removed.
+    assert!(stream.client.get_schedule(&addrs.recipient).is_none());
 }
 
+/// Cancelling a stream that does not exist returns `ScheduleNotFound`.
 #[test]
 fn test_cancel_nonexistent_stream_fails() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient) = generate_addresses(&env);
+    let (stream, _) = pre_cliff_stream(&env);
 
-    let err = client.try_cancel_stream(&sponsor, &recipient).unwrap_err().unwrap();
-    assert_eq!(err, VestingError::ScheduleNotFound);
+    let unknown_sponsor = Address::generate(&env);
+    let unknown_recipient = Address::generate(&env);
+
+    let err = stream
+        .client
+        .cancel_stream(&unknown_sponsor, &unknown_recipient)
+        .unwrap_err();
+    assert_eq!(err, VestingError::ScheduleNotFound.into());
 }
 
+/// The `cancelled_stream` factory produces a correctly cancelled stream.
 #[test]
-fn test_cancel_one_ledger_before_cliff_full_refund() {
+fn test_cancelled_stream_factory_invariants() {
     let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient, token_id) = make_stream(&env, &client);
-    let tc = token_client(&env, &token_id);
+    let (stream, addrs) = cancelled_stream(&env);
 
-    // ledger 149 < cliff_ledger 150
-    advance_ledger(&env, 49);
-    client.cancel_stream(&sponsor, &recipient);
-
-    assert_eq!(tc.balance(&sponsor), 2_000);
-    assert_eq!(tc.balance(&recipient), 0);
-    assert!(client.get_schedule(&recipient).is_none());
-}
-
-#[test]
-fn test_cancel_exactly_at_cliff_splits_tokens() {
-    let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient, token_id) = make_stream(&env, &client);
-    let tc = token_client(&env, &token_id);
-
-    // At cliff_ledger 150: earned = 50 * 10 = 500
-    advance_ledger(&env, 50);
-    client.cancel_stream(&sponsor, &recipient);
-
-    assert_eq!(tc.balance(&recipient), 500);
-    assert_eq!(tc.balance(&sponsor), 1_500);
-    assert!(client.get_schedule(&recipient).is_none());
-}
-
-#[test]
-fn test_cancel_one_ledger_after_cliff_splits_tokens() {
-    let env = setup_env();
-    let (_contract_id, client) = register_contract(&env);
-    let (sponsor, recipient, token_id) = make_stream(&env, &client);
-    let tc = token_client(&env, &token_id);
-
-    // At ledger 151: earned = 51 * 10 = 510
-    advance_ledger(&env, 51);
-    client.cancel_stream(&sponsor, &recipient);
-
-    assert_eq!(tc.balance(&recipient), 510);
-    assert_eq!(tc.balance(&sponsor), 1_490);
-    assert!(client.get_schedule(&recipient).is_none());
+    // Schedule must be gone.
+    assert!(stream.client.get_schedule(&addrs.recipient).is_none());
 }

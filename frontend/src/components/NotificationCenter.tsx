@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNotificationContext } from "@/contexts/NotificationContext";
 import { AppNotification, NotificationEventType } from "@/hooks/useNotifications";
+import { NotificationsEmpty } from "@/components/EmptyStates";
 import { trapFocus } from "@/utils/focusTrap";
-import { NotificationListSkeleton } from "@/components/Skeletons";
 
 // ── Event type metadata ────────────────────────────────────────────────────────
 
@@ -11,10 +11,10 @@ const EVENT_META: Record<
   NotificationEventType,
   { icon: string; label: string; color: string }
 > = {
-  cliff_reached:    { icon: "🏔️", label: "Cliff Reached",    color: "var(--color-active)" },
-  expiring_soon:    { icon: "⏳", label: "Expiring Soon",    color: "var(--color-pre-cliff)" },
-  claim_available:  { icon: "💸", label: "Claim Available",  color: "var(--color-completed)" },
-  stream_cancelled: { icon: "🛑", label: "Stream Cancelled", color: "var(--color-cancelled)" },
+  cliff_reached:    { icon: "🏔️", label: "Cliff Reached",    color: "var(--color-active, var(--color-brand-primary, #7c3aed))" },
+  expiring_soon:    { icon: "⏳", label: "Expiring Soon",    color: "var(--color-pre-cliff, var(--color-warning, #f59e0b))" },
+  claim_available:  { icon: "💸", label: "Claim Available",  color: "var(--color-completed, var(--color-success, #10b981))" },
+  stream_cancelled: { icon: "🛑", label: "Stream Cancelled", color: "var(--color-cancelled, var(--color-danger, #ef4444))" },
 };
 
 // ── Relative time helper ───────────────────────────────────────────────────────
@@ -78,17 +78,38 @@ function NotificationItem({
           <span style={{ fontSize: "0.75rem", fontWeight: 600, color: meta.color }}>
             {meta.label}
           </span>
-          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "#9ca3af", whiteSpace: "nowrap" }}>
+          <span style={{ marginLeft: "auto", fontSize: "0.72rem", color: "var(--color-text-secondary, var(--color-text, #64748b))", whiteSpace: "nowrap" }}>
             {relativeTime(notification.timestamp)}
           </span>
         </div>
         <p style={{ fontWeight: notification.read ? 400 : 600, fontSize: "0.875rem", margin: 0, lineHeight: 1.4 }}>
           {notification.title}
         </p>
-        <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "0.15rem 0 0", lineHeight: 1.4 }}>
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary, var(--color-text, #64748b))", margin: "0.15rem 0 0", lineHeight: 1.4 }}>
           {notification.message}
         </p>
       </div>
+
+      {/* Dismiss button */}
+      <button
+        type="button"
+        aria-label={`Dismiss notification: ${notification.title}`}
+        data-testid={`dismiss-notification-${notification.id}`}
+        onClick={(e) => { e.stopPropagation(); onDismiss(notification.id); }}
+        style={{
+          flexShrink: 0,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#9ca3af",
+          fontSize: "0.85rem",
+          padding: "0.1rem 0.25rem",
+          lineHeight: 1,
+          alignSelf: "flex-start",
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -138,9 +159,6 @@ export function NotificationCenter() {
   const { notifications, unreadCount, markRead, markAllRead } = useNotificationContext();
   const [open, setOpen] = useState(false);
   const [showPrefs, setShowPrefs] = useState(false);
-  // #823 — show skeleton rows briefly on open so the list has a stable height
-  // instead of popping between "empty" and "full".
-  const [listLoading, setListLoading] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const titleId = "notification-drawer-title";
 
@@ -176,13 +194,7 @@ export function NotificationCenter() {
       <button
         type="button"
         className="btn btn-ghost"
-        onClick={() => {
-          setOpen(true);
-          setShowPrefs(false);
-          // #823 — brief skeleton pass so the panel doesn't jump in height.
-          setListLoading(true);
-          window.setTimeout(() => setListLoading(false), 300);
-        }}
+        onClick={() => { setOpen(true); setShowPrefs(false); }}
         aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
         data-testid="notification-bell"
         style={{ position: "relative", padding: "0.35rem 0.5rem", minWidth: "auto" }}
@@ -199,8 +211,8 @@ export function NotificationCenter() {
               minWidth: 16,
               height: 16,
               borderRadius: "9999px",
-              background: "var(--color-cancelled)",
-              color: "#fff",
+              background: "var(--color-cancelled, var(--color-danger, #ef4444))",
+              color: "var(--color-text-primary, var(--color-text, #f8fafc))",
               fontSize: "0.65rem",
               fontWeight: 700,
               display: "flex",
@@ -265,8 +277,8 @@ export function NotificationCenter() {
                     style={{
                       marginLeft: "0.5rem",
                       fontSize: "0.75rem",
-                      background: "var(--color-active)",
-                      color: "#fff",
+                      background: "var(--color-active, var(--color-brand-primary, #7c3aed))",
+                      color: "var(--color-text-primary, var(--color-text, #f8fafc))",
                       borderRadius: "9999px",
                       padding: "0.1rem 0.4rem",
                     }}
@@ -321,6 +333,49 @@ export function NotificationCenter() {
               </div>
             </div>
 
+            {/* Browser push permission prompt */}
+            {showCliffReachedPrompt && (
+              <div
+                data-testid="push-permission-prompt"
+                role="alert"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  background: "var(--color-bg)",
+                  borderBottom: "1px solid var(--color-border)",
+                  flexShrink: 0,
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: "1.25rem", flexShrink: 0 }}>🔔</span>
+                <p style={{ flex: 1, fontSize: "0.825rem", margin: 0, lineHeight: 1.4 }}>
+                  Your cliff was reached! Enable browser notifications to stay
+                  updated even when the app is in the background.
+                </p>
+                <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={() => void requestPermission()}
+                    data-testid="push-permission-enable"
+                  >
+                    Enable
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", minWidth: "auto" }}
+                    onClick={dismissPrompt}
+                    data-testid="push-permission-dismiss"
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Preferences panel */}
             {showPrefs && (
               <div style={{ borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
@@ -334,32 +389,8 @@ export function NotificationCenter() {
               aria-label="Notifications list"
               style={{ flex: 1, overflowY: "auto" }}
             >
-              {listLoading ? (
-                // #823 — skeleton rows keep the panel height stable while loading.
-                <NotificationListSkeleton items={4} />
-              ) : notifications.length === 0 ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    gap: "0.75rem",
-                    padding: "2rem",
-                    textAlign: "center",
-                    color: "#9ca3af",
-                  }}
-                >
-                  <span style={{ fontSize: "2.5rem" }} aria-hidden="true">🔔</span>
-                  <p style={{ fontWeight: 600, color: "var(--color-text)", margin: 0 }}>
-                    No notifications yet
-                  </p>
-                  <p style={{ fontSize: "0.85rem", margin: 0 }}>
-                    You'll be notified when your cliff is reached, tokens are claimable, or a stream
-                    is about to expire.
-                  </p>
-                </div>
+              {notifications.length === 0 ? (
+                <NotificationsEmpty />
               ) : (
                 notifications.map((n) => (
                   <NotificationItem key={n.id} notification={n} onRead={markRead} />

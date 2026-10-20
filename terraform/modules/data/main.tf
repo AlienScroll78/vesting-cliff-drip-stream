@@ -39,8 +39,8 @@ resource "aws_db_instance" "postgres" {
   storage_encrypted               = true
   kms_key_id                      = aws_kms_key.postgres.arn
   backup_retention_period         = var.backup_retention_days
-  preferred_backup_window         = "02:00-03:00"
-  preferred_maintenance_window    = "sun:03:00-sun:04:00"
+  backup_window                   = "02:00-03:00"
+  maintenance_window              = "sun:03:00-sun:04:00"
   copy_tags_to_snapshot           = true
   deletion_protection             = true
   skip_final_snapshot             = false

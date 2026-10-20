@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CancelConfirmModal } from "@/components/CancelConfirmModal";
+import * as feeEstimate from "@/utils/feeEstimate";
 
 const stream = {
   id: "1",
@@ -140,5 +141,24 @@ describe("CancelConfirmModal", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby");
+  });
+
+  it("shows the transaction review block with a network fee", async () => {
+    render(<CancelConfirmModal {...defaultProps} />);
+    expect(screen.getByTestId("review-kind")).toHaveTextContent("Cancel Vesting Stream");
+    expect(await screen.findByTestId("fee-value")).toHaveTextContent("XLM");
+    expect(screen.getByTestId("review-eta")).toBeInTheDocument();
+  });
+
+  it("warns about an unusually high cancel fee", async () => {
+    vi.spyOn(feeEstimate, "estimateFee").mockResolvedValue({ xlm: "2.00000", usd: "$0.240000" });
+    render(<CancelConfirmModal {...defaultProps} />);
+    expect(await screen.findByTestId("review-fee-warning")).toHaveTextContent("2.00000 XLM");
+  });
+
+  it("reveals raw XDR only in the advanced section", async () => {
+    render(<CancelConfirmModal {...defaultProps} />);
+    expect(await screen.findByTestId("review-xdr-unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Advanced").closest("details")).not.toHaveAttribute("open");
   });
 });

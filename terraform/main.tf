@@ -1,11 +1,6 @@
 terraform {
-  backend "s3" {
-    bucket         = "vesting-tf-state"
-    key            = "vesting/terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "vesting-tf-locks"
-    encrypt        = true
-  }
+  backend "s3" {}
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -71,12 +66,11 @@ module "dns" {
 }
 
 module "compute" {
-  source                  = "./modules/compute"
-  environment             = var.environment
-  vpc_id                  = module.network.vpc_id
-  public_subnet_ids       = module.network.public_subnet_ids
-  private_subnet_ids      = module.network.private_subnet_ids
-  deployment_alert_emails = var.deployment_alert_emails
+  source             = "./modules/compute"
+  environment        = var.environment
+  vpc_id             = module.network.vpc_id
+  public_subnet_ids  = module.network.public_subnet_ids
+  private_subnet_ids = module.network.private_subnet_ids
 }
 
 module "data" {

@@ -23,15 +23,31 @@ infrastructure required by the vesting application.
     └────────────────┘  └────────────┘  └─────────────────┘
 ```
 
+## Module Dependency Diagram
+
+```mermaid
+flowchart TD
+    network["modules/network\nVPC · Subnets · NAT Gateways"]
+    compute["modules/compute\nECS Fargate · ALB · IAM"]
+    data["modules/data\nRDS · ElastiCache · KMS · SNS"]
+    dns["modules/dns\nRoute53 Zone · DNS Records"]
+
+    network --> compute
+    network --> data
+    compute --> dns
+```
+
+`network` must be applied first — `compute` and `data` both consume its VPC and subnet outputs. `dns` requires the ALB DNS name and zone ID from `compute`.
+
 ## Modules
 
-| Module  | Description | Resources |
-|---------|-------------|-----------|
-| `network` | VPC, subnets, NAT gateways, route tables, internet gateway | 10+ |
-| `compute` | ECS cluster, Fargate task definition, service, ALB, IAM | 9 |
-| `data` | RDS PostgreSQL, ElastiCache Redis, KMS, SNS backup alerts | 10+ |
-| `dns` | Route53 hosted zone, A/CNAME records for API and app | 3+ |
-| `secrets` | AWS Secrets Manager secrets, rotation Lambda, KMS, CloudTrail audit | 25+ |
+| Module | Description | Resources | README |
+|--------|-------------|-----------|--------|
+| [`network`](modules/network/README.md) | VPC, subnets, NAT gateways, route tables, internet gateway | 10+ | [→](modules/network/README.md) |
+| [`compute`](modules/compute/README.md) | ECS cluster, Fargate task definition, service, ALB, IAM | 8 | [→](modules/compute/README.md) |
+| [`data`](modules/data/README.md) | RDS PostgreSQL, ElastiCache Redis, KMS, SNS backup alerts | 10+ | [→](modules/data/README.md) |
+| [`dns`](modules/dns/README.md) | Route53 hosted zone, A/CNAME records for API and app | 3+ | [→](modules/dns/README.md) |
+| `secrets` | AWS Secrets Manager secrets, rotation Lambda, KMS, CloudTrail audit | 25+ | — |
 
 ## Environments
 
@@ -43,42 +59,66 @@ infrastructure required by the vesting application.
 ## Prerequisites
 
 - Terraform >= 1.6, < 2.0
-- AWS CLI configured with appropriate credentials
-- S3 bucket `vesting-tf-state` created (see bootstrap instructions below)
-- DynamoDB table `vesting-tf-locks` (auto-created on first apply)
+- AWS CLI v2 with credentials that may create the state bucket and lock table (bootstrap only)
+- Remote state bootstrapped per environment with `terraform/bootstrap/init.sh` (see
+  [docs/runbooks/terraform-bootstrap.md](../docs/runbooks/terraform-bootstrap.md))
 
-## Bootstrap (first-time setup)
+## Backend layout
 
-These steps are only needed once per AWS account:
+Every environment has its own bucket, state key, and lock table. The backend block in `main.tf` is
+partial; the values come from the per-environment file passed to `terraform init`.
+
+| Environment | State bucket | State key | Lock table | Backend config |
+|-------------|--------------|-----------|------------|----------------|
+| staging | `vestingdrips-terraform-state-staging` | `staging/terraform.tfstate` | `vestingdrips-terraform-locks-staging` | `envs/staging.backend.hcl` |
+| production | `vestingdrips-terraform-state-production` | `production/terraform.tfstate` | `vestingdrips-terraform-locks-production` | `envs/production.backend.hcl` |
+
+## Bootstrap (first-time setup, once per environment)
 
 ```bash
-# 1. Create the S3 state bucket
-aws s3 mb s3://vesting-tf-state --region us-east-1
-aws s3api put-bucket-versioning \
-  --bucket vesting-tf-state \
-  --versioning-configuration Status=Enabled
-aws s3api put-public-access-block \
-  --bucket vesting-tf-state \
-  --public-access-block-configuration \
-    BlockPublicAcls=true,BlockPublicPolicy=true,IgnorePublicAcls=true,BlockPublicPolicy=true
+cd bootstrap
 
-# 2. Create the DynamoDB state lock table
-aws dynamodb create-table \
-  --table-name vesting-tf-locks \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST \
-  --region us-east-1
+# 1. Plan the state bucket and lock table (nothing is created without --apply).
+./init.sh staging
 
-# 3. Initialize Terraform with remote state
-terraform init -backend-config="bucket=vesting-tf-state" \
-               -backend-config="key=vesting/terraform.tfstate" \
-               -backend-config="region=us-east-1" \
-               -backend-config="dynamodb_table=vesting-tf-locks"
+# 2. Apply the reviewed plan, then verify encryption, versioning, access block and lock table.
+./init.sh staging --apply
+
+# 3. Optionally enable MFA delete on the state bucket (interactive; requires a fresh MFA code).
+BOOTSTRAP_MFA_SERIAL='arn:aws:iam::<ACCOUNT_ID>:mfa/<USER_NAME>' ./init.sh staging --enable-mfa-delete
+
+# 4. Point this root module at the new backend.
+./init.sh staging --backend-only
 ```
+
+Repeat for `production`. Migration from an older backend, stale-lock handling, state recovery and MFA
+delete are documented in [docs/runbooks/terraform-bootstrap.md](../docs/runbooks/terraform-bootstrap.md).
 
 ## Usage
 
+Each environment needs its own `TF_DATA_DIR` so two backend configurations never share a working
+directory. `init.sh` sets this automatically.
+
+```bash
+# Staging
+export TF_DATA_DIR="$PWD/.terraform/staging"
+terraform init -input=false -backend-config=envs/staging.backend.hcl
+terraform plan -lock-timeout=5m -var-file=envs/staging.tfvars \
+  -var="db_password=$(aws secretsmanager get-secret-value --secret-id vesting/staging/db-password --query SecretString --output text)"
+terraform apply -lock-timeout=5m -var-file=envs/staging.tfvars \
+  -var="db_password=$(...)"
+
+# Production
+export TF_DATA_DIR="$PWD/.terraform/production"
+terraform init -input=false -backend-config=envs/production.backend.hcl
+terraform plan -lock-timeout=5m -var-file=envs/production.tfvars \
+  -var="db_password=$(aws secretsmanager get-secret-value --secret-id vesting/production/db-password --query SecretString --output text)"
+terraform apply -lock-timeout=5m -var-file=envs/production.tfvars \
+  -var="db_password=$(...)"
+```
+
+There are no Terraform workspaces: the environment is selected by the backend file and the tfvars
+file, and `var.environment` rejects any value other than `staging` or `production`.
 No secret is passed on the command line. The database password is generated by
 Terraform, and every other secret is applied once and then owned by AWS Secrets
 Manager.
@@ -117,9 +157,12 @@ for the secret inventory, rotation procedure and audit queries.
 
 | Component | Location | Notes |
 |-----------|----------|-------|
-| S3 bucket | `vesting-tf-state` | Versioning enabled, public access blocked |
-| DynamoDB table | `vesting-tf-locks` | Pay-per-request, LockID hash key |
-| State key | `vesting/terraform.tfstate` | Shared across workspaces |
+| S3 bucket (staging) | `vestingdrips-terraform-state-staging` | AES-256, versioning, public access blocked, ownership controls, lifecycle keeps the latest 30 noncurrent versions |
+| S3 bucket (production) | `vestingdrips-terraform-state-production` | Same controls; MFA delete enabled out-of-band |
+| DynamoDB table (staging) | `vestingdrips-terraform-locks-staging` | Pay-per-request, `LockID` hash key |
+| DynamoDB table (production) | `vestingdrips-terraform-locks-production` | Same; required by the drift-detection role |
+| State key | `staging/terraform.tfstate`, `production/terraform.tfstate` | One key per environment, no workspaces |
+| Bootstrap state | `bootstrap/.terraform/<env>/terraform.tfstate` | Local by design; back it up, never commit it |
 
 ## Provider Versions
 
@@ -141,7 +184,12 @@ for the secret inventory, rotation procedure and audit queries.
 - All secrets are encrypted with a customer-managed KMS key with rotation on
 - RDS storage is encrypted with a customer-managed KMS key
 - RDS deletion protection is enabled
-- S3 state bucket has public access blocked and versioning enabled
+- State buckets use AES-256 encryption, block all public access, enforce
+  bucket-owner ownership, and keep versioned history
+- State buckets use MFA delete, enabled interactively by an operator
+  (`bootstrap/init.sh --enable-mfa-delete`); no MFA code is ever stored
+  in code, CI, or documentation. See
+  [docs/runbooks/terraform-bootstrap.md](../docs/runbooks/terraform-bootstrap.md)
 
 ## Estimated Monthly Cost
 

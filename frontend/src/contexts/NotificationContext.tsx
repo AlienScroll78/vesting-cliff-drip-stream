@@ -19,6 +19,8 @@ interface NotificationCtx {
   ) => void;
   markRead: (id: string) => void;
   markAllRead: () => void;
+  /** Permanently remove a notification from the list. */
+  dismissNotification: (id: string) => void;
   setPreference: (type: NotificationEventType, enabled: boolean) => void;
 }
 

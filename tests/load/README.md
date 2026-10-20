@@ -1,7 +1,75 @@
-# Load test for creating vesting streams
+# Load Tests – Vesting API
 
-This folder contains a Locust script that invokes the repository's
-`scripts/invoke_create.sh` helper to create vesting streams in parallel.
+This folder contains two k6 load test suites for the Vesting API (issue #781)
+and a Locust script for Soroban stream creation.
+
+---
+
+## TGE Load Test Suite (`tge_scenarios.js`)
+
+Benchmarks the API server under realistic TGE (Token Generation Event) traffic
+patterns. Identifies breaking points before production deployment.
+
+### Scenarios
+
+| # | Name | VUs | Duration | Purpose |
+|---|---|---|---|---|
+| 1 | `baseline`  | 10       | 1 min    | Establish p95 latency baseline |
+| 2 | `ramp_up`   | 0 → 100  | 5 min    | Find scale-up lag / saturation |
+| 3 | `spike`     | 200      | 30 s     | Simulate TGE spike |
+| 4 | `endurance` | 50       | 30 min   | Find memory leaks |
+
+### SLA Targets
+
+| Metric | Target |
+|---|---|
+| p95 latency `GET /api/streams/:recipient` | < 200 ms |
+| Error rate under 100 VUs | < 0.1 % |
+| Throughput (read endpoints) | ≥ 500 req/s |
+
+### Usage
+
+```bash
+# Full suite
+make test-load-tge
+
+# Single scenario
+k6 run tests/load/tge_scenarios.js -e SCENARIO=baseline
+k6 run tests/load/tge_scenarios.js -e SCENARIO=ramp_up
+k6 run tests/load/tge_scenarios.js -e SCENARIO=spike
+k6 run tests/load/tge_scenarios.js -e SCENARIO=endurance
+
+# CI mode (short durations, no endurance)
+k6 run tests/load/tge_scenarios.js -e CI=1
+```
+
+### Output
+
+- `tests/load/results/report.html` — HTML report (open in browser)
+- `tests/load/results/summary.json` — JSON SLA summary
+- `tests/load/grafana-dashboard.json` — Import into Grafana for live monitoring
+
+### CI
+
+Runs on every PR to `tests/load/**` via `.github/workflows/k6-load-tests.yml`.
+Full suite runs nightly at 04:00 UTC.
+
+---
+
+## Backend Scenarios (`backend_scenarios.js`)
+
+Original k6 backend benchmark suite (100 VU schedule queries, stream creation,
+claim vested, ramping profile). See inline JSDoc for details.
+
+```bash
+make test-load
+```
+
+---
+
+## Soroban Stream Creation (`locustfile.py`, `create_streams.js`)
+
+Load test for creating vesting streams
 
 Prerequisites
 

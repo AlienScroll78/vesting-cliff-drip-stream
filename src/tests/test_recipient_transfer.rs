@@ -28,7 +28,7 @@ fn test_transfer_recipient_success() {
 
     // New recipient can claim vested tokens after cliff
     advance_ledger(&env, 100);
-    let claimed = client.claim_vested(&new_recipient);
+    let claimed = client.claim_vested(&new_recipient, &None);
     assert_eq!(claimed, 1_000);
 }
 

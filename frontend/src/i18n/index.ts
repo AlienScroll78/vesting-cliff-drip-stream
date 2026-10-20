@@ -15,6 +15,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import en from "./locales/en.json";
 import es from "./locales/es.json";
 import zh from "./locales/zh.json";
+import pt from "./locales/pt.json";
 
 /** localStorage key used to persist the user's language choice. */
 export const LANG_STORAGE_KEY = "vesting-language";

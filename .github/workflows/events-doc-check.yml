@@ -1,0 +1,43 @@
+name: Events Doc Check
+
+on:
+  pull_request:
+    paths:
+      - 'src/events.rs'
+
+jobs:
+  check-events-doc:
+    name: Verify docs/events.md updated alongside src/events.rs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check docs/events.md is updated when events.rs changes
+        run: |
+          BASE=${{ github.base_ref }}
+          echo "Checking for changes between origin/${BASE} and HEAD..."
+          CHANGED_FILES=$(git diff --name-only "origin/${BASE}...HEAD")
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          if echo "$CHANGED_FILES" | grep -q 'src/events.rs'; then
+            echo "src/events.rs was modified in this PR."
+            if echo "$CHANGED_FILES" | grep -q 'docs/events.md'; then
+              echo "✅ docs/events.md was also updated. Check passed."
+            else
+              echo ""
+              echo "❌ ERROR: src/events.rs was modified but docs/events.md was not updated."
+              echo ""
+              echo "The event schema document (docs/events.md) is the canonical reference"
+              echo "for all off-chain indexers. When event fields change, the document"
+              echo "must be updated in the same PR."
+              echo ""
+              echo "Please update docs/events.md and push a new commit."
+              exit 1
+            fi
+          else
+            echo "src/events.rs was not modified — skipping docs check."
+          fi

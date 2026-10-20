@@ -25,12 +25,11 @@ frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
 
-# Terraform build artifacts (archive_file output for the Lambda zips)
-terraform/.terraform-build/
-
-# Terraform working directories, state and plan files
+# Terraform
 **/.terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfplan
-crash.log
+*.tfvars.local
+terraform/drift-plan.txt

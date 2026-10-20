@@ -2,6 +2,11 @@ variable "environment" {
   description = "Deployment environment (staging, production)"
   type        = string
   default     = "staging"
+
+  validation {
+    condition     = contains(["staging", "production"], var.environment)
+    error_message = "environment must be either \"staging\" or \"production\" so the matching remote backend (envs/<environment>.backend.hcl) and tfvars file are always used."
+  }
 }
 
 variable "aws_region" {
