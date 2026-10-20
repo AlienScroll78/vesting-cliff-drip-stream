@@ -72,16 +72,16 @@ export async function tableExists(
 
 /**
  * Returns the current schema_version / migration version tracked by
- * node-pg-migrate (stored in the `pgmigrations` table).
+ * node-pg-migrate (stored in the `schema_migrations` table).
  */
 export async function getAppliedMigrations(
   client: PoolClient
 ): Promise<string[]> {
-  const exists = await tableExists(client, "pgmigrations");
+  const exists = await tableExists(client, "schema_migrations");
   if (!exists) return [];
 
   const result = await client.query(
-    `SELECT name FROM pgmigrations ORDER BY run_on`
+    `SELECT name FROM schema_migrations ORDER BY run_on`
   );
   return result.rows.map((r: { name: string }) => r.name);
 }

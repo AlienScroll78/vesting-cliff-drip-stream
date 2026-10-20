@@ -241,6 +241,7 @@ jobs:
           exit-code: "0"           # we handle the exit ourselves below
           severity: "CRITICAL,HIGH"
           ignore-unfixed: false
+          trivyignores: .trivyignore
 
       - name: Check Trivy results and set outputs
         id: check

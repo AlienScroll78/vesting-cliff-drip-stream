@@ -1,8 +1,8 @@
 # CI/CD Pipeline Documentation
 
-**Version:** 1.2.0  
-**Status:** Active  
-**Last Updated:** 2026-08-30  
+**Version:** 1.3.0
+**Status:** Active
+**Last Updated:** 2026-09-25
 
 This document provides a comprehensive reference for the CI/CD automation pipelines supporting the Vesting Cliff Drip Stream repository. It covers all 23 GitHub Actions workflows, visual architecture diagrams, required secrets and rotation schedules, quality gates, branch protection rules, local reproduction steps, and instructions for contributing new workflow steps.
 
@@ -179,7 +179,7 @@ All workflow definition files reside in [`.github/workflows/`](../.github/workfl
 
 | File | Name | Triggers | Description |
 |---|---|---|---|
-| [`staging.yml`](../.github/workflows/staging.yml) | Staging Deployment | Push to `main`, `workflow_dispatch` | Deploys contract to Stellar Testnet, updates GitHub Actions environment variables, executes Helm upgrades for staging backend and frontend, and validates deployment via smoke tests with automated rollback on failure. |
+| [`staging.yml`](../.github/workflows/staging.yml) | Legacy Staging Deployment | `workflow_dispatch` | Manual staging deploy; push-to-main delivery is owned by the consolidated `pipeline.yml` workflow. |
 | [`pipeline.yml`](../.github/workflows/pipeline.yml) | Unified Multi-Environment Pipeline | Push to `main`, tag `v*`, PR | Unified pipeline orchestrating PR validation, staging deployment on `main`, and production deployment on `v*` tags with manual approval gates and Slack notifications. |
 | [`release.yml`](../.github/workflows/release.yml) | Release Management | Push to `main` | Manages automated version bumping and changelog generation via Google release-please; attaches optimized WASM binaries and checksums to release assets. |
 | [`docker.yml`](../.github/workflows/docker.yml) | Docker Build & Push | Push to `main` | Builds standard container images and pushes to GitHub Container Registry (`ghcr.io`). |
@@ -190,7 +190,7 @@ All workflow definition files reside in [`.github/workflows/`](../.github/workfl
 |---|---|---|---|
 | [`helm-release.yml`](../.github/workflows/helm-release.yml) | Publish Helm Chart | Push to `main` (`helm/**`), `workflow_dispatch` | Lints Helm charts, performs template dry-runs with default and external secret configurations, packages charts, and publishes them to the `gh-pages` Helm repository via `chart-releaser`. |
 | [`terraform.yml`](../.github/workflows/terraform.yml) | Terraform | Push to `main` (`terraform/**`), PR (`terraform/**`), `workflow_dispatch` | Validates Terraform syntax (`terraform fmt`), validates configurations, generates staging plans, and comments plan outputs on pull requests. |
-| [`drift-detection.yml`](../.github/workflows/drift-detection.yml) | Infrastructure Drift Detection | Daily cron (02:00 UTC), `workflow_dispatch` | Runs `terraform plan` against production AWS infrastructure; opens GitHub issues and sends Slack alerts upon detected configuration drift. |
+| [`drift-detection.yml`](../.github/workflows/drift-detection.yml) | Infrastructure Drift Detection | Daily cron `0 2 * * *` (02:00 UTC), `workflow_dispatch` (environment choice) | Authenticates to AWS with OIDC, runs `terraform plan -detailed-exitcode` against the selected environment's S3 backend, and classifies the result as clean, drift, or error. Drift creates or updates a single workflow-managed GitHub issue (labels `infrastructure` + `drift`, plan excerpt plus artifact link) and alerts Slack `#ops`; a clean plan comments on and closes workflow-managed drift issues; an error leaves them open and alerts a failure. |
 | [`rds-backup.yml`](../.github/workflows/rds-backup.yml) | Automated RDS Backup | Daily cron (02:00 UTC), `workflow_dispatch` | Triggers automated Amazon RDS database snapshots and posts status notifications to Slack. |
 
 ---
@@ -297,10 +297,12 @@ The table below documents every secret utilized across GitHub Actions workflows,
 | `KUBECONFIG_STAGING` | `staging.yml`, `pipeline.yml` | Base64-encoded `kubeconfig` granting deployment access to the staging Kubernetes cluster. | 180 days (or on cluster certificate renewal) | Cloud Infrastructure Lead |
 | `KUBECONFIG_PROD` | `pipeline.yml` | Base64-encoded `kubeconfig` granting deployment access to the production Kubernetes cluster (protected by approval environment). | 180 days (or on cluster certificate renewal) | Cloud Infrastructure Lead |
 | `SLACK_WEBHOOK_URL` | `pipeline.yml`, `drift-detection.yml`, `rds-backup.yml` | Incoming webhook URL for posting build notifications, pipeline alerts, drift reports, and failure alerts to Slack channels. | 365 days (or upon staff offboarding) | Security / Operations Lead |
-| `AWS_DRIFT_DETECTION_ROLE_ARN` | `drift-detection.yml` | AWS IAM Role ARN assumed via GitHub OIDC for executing read-only `terraform plan` against production infrastructure. | Annually (IAM policy review every 180 days) | Cloud Security Architect |
+| `AWS_DRIFT_DETECTION_ROLE_ARN` | `drift-detection.yml` | AWS IAM Role ARN assumed via GitHub OIDC for executing read-only `terraform plan` (plus state-locking access to the `vestingdrips-terraform-locks-<env>` tables). Set per GitHub environment. | Annually (IAM policy review every 180 days) | Cloud Security Architect |
 | `AWS_BACKUP_ROLE_ARN` | `rds-backup.yml` | AWS IAM Role ARN assumed via GitHub OIDC for triggering automated RDS database snapshots. | Annually (IAM policy review every 180 days) | Cloud Security Architect |
 | `AWS_REGION` | `drift-detection.yml`, `rds-backup.yml` | AWS Region (e.g., `us-east-1`) where infrastructure resources reside. | Static configuration | DevOps Engineer |
-| `TF_VAR_DB_PASSWORD` | `drift-detection.yml` | Master database password supplied as a Terraform variable during plan generation. | 90 days | Database Administrator |
+| `TF_VAR_DB_PASSWORD` | `drift-detection.yml` | Master database password supplied as a Terraform variable during plan generation (plan only; never written to state by CI). | 90 days | Database Administrator |
+| `TF_VAR_COST_ALERT_EMAILS` | `drift-detection.yml` | HCL list of budget/backup alert recipients, e.g. `["ops@example.com"]`. | 90 days | Cloud Infrastructure Lead |
+| `TF_VAR_SLACK_WEBHOOK_URL` | `drift-detection.yml` | Slack incoming webhook configured on the cost-monitoring Lambda; required because the variable has no default. | 365 days (or upon staff offboarding) | Security / Operations Lead |
 | `RDS_INSTANCE_ID` | `rds-backup.yml` | Identifier of the production Amazon RDS database instance to snapshot. | Static configuration | Database Administrator |
 | `LHCI_TOKEN` | `lighthouse.yml` | Authentication token for persisting audits to an external Lighthouse CI server. | 365 days | Frontend Lead |
 | `LHCI_SERVER_BASE_URL` | `lighthouse.yml` | Base URL of the self-hosted Lighthouse CI server. | Static configuration | Frontend Lead |
@@ -382,6 +384,69 @@ cd frontend && npm audit --audit-level=high --omit=dev && cd ..
 # 9. Performance benchmarks (mirrors performance.yml)
 cargo test --features testutils bench_ -- --nocapture
 ```
+
+---
+
+## 7.3 Consolidated Pipeline Setup
+
+The `pipeline.yml` workflow is the single orchestrator for pull-request quality gates, main-branch testnet delivery, and tag-based mainnet delivery.
+
+### Pull requests
+
+The following checks run in parallel and are joined by the `PR gate` job:
+
+- Rust formatting and Clippy
+- Frontend lint, typecheck, and unit tests
+- Backend tests and typecheck
+- Contract tests on stable Rust and the declared MSRV (`1.84.0`)
+- Line and branch coverage thresholds
+- Optimized WASM size limit
+- Rust, npm, and repository configuration security scans
+
+The concurrency group cancels superseded pull-request runs. Cache hit results are written to the Actions job summary for the Rust and Docker layers.
+
+### GitHub environments
+
+Create these environments in **Settings → Environments** before enabling delivery:
+
+| Environment | Approval | Purpose |
+|---|---|---|
+| `testnet` | No approval | Testnet contract deployment, Terraform plan/apply, and smoke tests |
+| `mainnet` | Required reviewers | Mainnet contract deployment, production Helm release, and smoke tests |
+
+The `mainnet` environment must have required reviewers configured in GitHub; the workflow cannot create that protection rule itself. Environment secrets and variables are referenced directly by the deployment jobs, so credentials are not shared with pull-request jobs.
+
+### Environment configuration
+
+`testnet` requires:
+
+- `STELLAR_TESTNET_SECRET_KEY`
+- `TESTNET_TOKEN`
+- `TESTNET_RECIPIENT`
+- `TESTNET_DB_PASSWORD`
+- `AWS_DEPLOY_ROLE_ARN`
+- `TERRAFORM_STATE_BUCKET`
+- `TERRAFORM_LOCK_TABLE`
+- `TESTNET_FEE_BPS`
+- `TESTNET_TREASURY_ADDRESS`
+- `COST_ALERT_EMAILS`
+
+`mainnet` requires:
+
+- `STELLAR_MAINNET_SECRET_KEY`
+- `MAINNET_TOKEN`
+- `MAINNET_RECIPIENT`
+- `KUBECONFIG_MAINNET`
+- `MAINNET_FEE_BPS`
+- `MAINNET_TREASURY_ADDRESS`
+- `MAINNET_IMAGE_REPOSITORY`
+- `MAINNET_K8S_NAMESPACE`
+
+Both environments also use `AWS_REGION` and `SLACK_WEBHOOK_URL` where applicable. Protect the Stellar keys and kubeconfig as environment secrets; never place them in repository variables or pull-request logs.
+
+### Main-branch and release flow
+
+A push to `main` runs the PR gate, build, integration tests, Terraform plan, testnet apply, testnet deployment, and smoke tests. A `v*` tag repeats the validation and integration stages, then waits for the `mainnet` environment approval before deploying and publishing release assets. Terraform plans are stored as artifacts and applied only by the gated apply jobs.
 
 ---
 

@@ -1,0 +1,98 @@
+# cargo-deny configuration
+#
+# This file expresses the license policy defined in `.license-policy.json` in
+# cargo-deny's own format, so the allowlist is enforced by a purpose-built
+# checker rather than only by the `cargo-license` report comparison in
+# `.github/workflows/license-scan.yml`.
+#
+# The two must be kept in sync. `.license-policy.json` remains the
+# authoritative source, and this file is a transcription of it — if you change
+# the allowlist, change both. `docs/sbom.md` documents the relationship.
+#
+# Validate locally with:
+#   cargo deny check licenses
+#
+# Requires cargo-deny 0.14+ for the `version = 2` config format.
+
+# ── Licenses ──────────────────────────────────────────────────────────────────
+
+[licenses]
+# Config schema version. Version 2 is required for `private.ignore` and for
+# the exception/clarify syntax used below.
+version = 2
+
+# Permissive licenses only. Mirrors `allowed` in .license-policy.json.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSD-4-Clause",
+    "ISC",
+    "0BSD",
+    "Unlicense",
+    "CC0-1.0",
+    "BlueOak-1.0.0",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+]
+
+# There is deliberately no explicit deny list. cargo-deny 0.18 removed the key
+# (EmbarkStudios/cargo-deny#611): with an allow list present, every licence
+# that is not listed is rejected, so a copyleft or source-available licence is
+# already refused by omission. The disallowed set in
+# .license-policy.json is therefore the same information as the allow list
+# read from the other direction.
+#
+# The consequence for contributors is worth knowing: a GPL dependency produces
+# a "not in the allow list" error rather than one naming GPL as disallowed.
+# The explicit disallowed list that produces the better message lives in the
+# cargo-license job, which is one reason both jobs run.
+
+# How confident cargo-deny must be in a crate's licence metadata before
+# accepting it. 0.93 rejects anything it cannot positively identify, so a
+# crate with a missing or garbled licence field fails the build rather than
+# passing on a guess. Mirrors the "unknown licence also fails" rule in
+# .license-policy.json.
+confidence-threshold = 0.93
+
+# The workspace crate itself is unpublished and carries no third-party
+# dependencies, so licence checks are meaningless for it.
+[licenses.private]
+ignore = true
+
+# `ring` ships a licence expression ("ISC AND OpenSSL") that is not a valid
+# SPDX identifier, so cargo-deny cannot classify it on its own. The exception
+# below admits it explicitly.
+#
+# cargo-deny offers two mechanisms here and the distinction is worth stating:
+# a `[[licenses.clarify]]` entry re-maps an unparseable expression, and
+# requires a `license-files` hash that is only obtainable from cargo-deny's own
+# error output for a specific build. A `[[licenses.exceptions]]` entry needs no
+# hash and is the right mechanism when the goal is simply to admit a crate
+# whose expression is unparseable but acceptable — which is the case here.
+[[licenses.exceptions]]
+# Mirrors the `ring` entry under `explicit_exceptions` in
+# .license-policy.json: legal reviewed and approved for internal use.
+crate = "ring"
+allow = ["ISC", "OpenSSL"]
+
+# ── Everything below is out of scope for the license policy ──────────────────
+#
+# The sections are present so that a bare `cargo deny check` does not fail on
+# missing configuration, but they are deliberately left permissive. The
+# licence allowlist is the only policy this repository has committed to
+# enforcing here; narrowing advisories, bans, or sources is a separate
+# decision and should be its own change with its own review.
+
+[graph]
+all-features = true
+
+[sources]
+# The project has no vendored dependencies and does not build from a private
+# registry, so unknown git sources are unexpected rather than routine.
+unknown-git = "deny"
+unknown-registry = "deny"

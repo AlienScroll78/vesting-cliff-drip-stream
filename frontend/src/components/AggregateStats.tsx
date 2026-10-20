@@ -1,6 +1,7 @@
 "use client";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
+import { AnalyticsSummarySkeleton } from "./Skeletons";
 import styles from "./AggregateStats.module.css";
 
 interface AggregateStatsProps {

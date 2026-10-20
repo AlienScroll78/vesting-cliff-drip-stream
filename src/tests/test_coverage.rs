@@ -20,6 +20,12 @@ fn test_create_deposit_overflow_from_rate_mul() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -38,6 +44,12 @@ fn test_create_deposit_overflow_from_cliff_add() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -61,6 +73,12 @@ fn test_create_deposit_overflow_from_total_add() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -81,6 +99,12 @@ fn test_cancel_at_end_ledger_zero_sponsor_refund() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -94,7 +118,7 @@ fn test_cancel_at_end_ledger_zero_sponsor_refund() {
 
     // Advance exactly to end_ledger (20 ledgers).
     advance_ledger(&env, 20);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     // All 200 tokens go to recipient; sponsor gets 0.
     assert_eq!(token_client.balance(&recipient), 200);
@@ -108,6 +132,9 @@ fn test_claimable_amount_no_schedule_returns_zero() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     let nobody = Address::generate(&env);
     assert_eq!(client.claimable_amount(&nobody), 0);
@@ -119,6 +146,9 @@ fn test_is_cliff_passed_no_schedule_returns_false() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
 
     let nobody = Address::generate(&env);
     assert!(!client.is_cliff_passed(&nobody));

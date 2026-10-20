@@ -31,7 +31,7 @@ fn test_claim_vested_acquires_and_releases_lock() {
     advance_ledger(&env, 60);
 
     // Should succeed — no pre-existing lock.
-    let claimed = client.claim_vested(&recipient);
+    let claimed = client.claim_vested(&recipient, &None);
     assert_eq!(claimed, 600, "expected 60 ledgers × 10 rate = 600");
 
     // Schedule still present (stream not fully consumed).
@@ -49,7 +49,7 @@ fn test_cancel_stream_lock_released() {
 
     // Cancel before cliff — full refund to sponsor.
     advance_ledger(&env, 10);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     // Schedule removed.
     assert!(client.get_schedule(&recipient).is_none());
@@ -65,15 +65,15 @@ fn test_sequential_claims_all_succeed() {
     create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
 
     advance_ledger(&env, 60); // past cliff
-    let c1 = client.claim_vested(&recipient);
+    let c1 = client.claim_vested(&recipient, &None);
     assert_eq!(c1, 600);
 
     advance_ledger(&env, 40);
-    let c2 = client.claim_vested(&recipient);
+    let c2 = client.claim_vested(&recipient, &None);
     assert_eq!(c2, 400);
 
     advance_ledger(&env, 200); // past end_ledger
-    let c3 = client.claim_vested(&recipient);
+    let c3 = client.claim_vested(&recipient, &None);
     assert_eq!(c3, 1_000); // remaining dust collected
 
     // Stream fully consumed — schedule auto-cleaned.
@@ -102,7 +102,7 @@ fn test_cancel_after_cliff_both_transfers_succeed() {
 
     // Advance 100 ledgers past cliff (cliff at 150, now 200).
     advance_ledger(&env, 100);
-    client.cancel_stream(&sponsor, &recipient);
+    client.cancel_stream(&sponsor, &recipient, &0);
 
     // Recipient gets accrued 50 ledgers × 10 = 500 (from cliff to cancel).
     assert_eq!(token_client.balance(&recipient), 500);

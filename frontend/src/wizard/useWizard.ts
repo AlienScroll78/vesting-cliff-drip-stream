@@ -148,6 +148,7 @@ export function useWizard() {
       setHash(WIZARD_STEPS[nextIdx] as WizardStep)
       return nextIdx
     })
+    setFurthestStep(f => Math.min(f + 1, totalSteps - 1))
   }, [totalSteps])
 
   const back = useCallback(() => {

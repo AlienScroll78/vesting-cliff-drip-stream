@@ -1,10 +1,18 @@
 "use client";
+/**
+ * Sponsor dashboard — #776
+ *
+ * Shows all vesting streams the connected wallet has sponsored.
+ * Includes the full cancel stream flow: preview modal → address confirmation →
+ * transaction signing → optimistic status update with rollback on failure.
+ */
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useWallet } from "@/contexts/WalletContext";
 import { VestingStream } from "@/types";
 import { AggregateStats } from "@/components/AggregateStats";
 import { SponsorStreamTable } from "@/components/SponsorStreamTable";
+import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { generateStreamsCsv, downloadCsv } from "@/utils/exportCsv";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import styles from "./sponsor.module.css";
@@ -29,6 +37,7 @@ export default function SponsorPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Mock data - replace with API call
   const MOCK_SPONSOR_STREAMS: VestingStream[] = [
@@ -105,6 +114,7 @@ export default function SponsorPage() {
     }
 
     fetchStreams();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, page]);
 
   const handleExportCsv = useCallback(() => {
@@ -139,7 +149,8 @@ export default function SponsorPage() {
     return (
       <div className={styles.container}>
         <h1 className={styles.title}>My Sponsored Streams</h1>
-        <SponsorStreamListEmpty />
+        <SponsorStreamListEmpty onCreateStream={() => setShowCreate(true)} />
+        {showCreate && <CreateStreamWizard onClose={() => setShowCreate(false)} />}
       </div>
     );
   }
@@ -177,6 +188,15 @@ export default function SponsorPage() {
         onCancelStream={handleCancelStream}
         onViewDetails={handleViewDetails}
       />
+
+      {/* Cancel stream confirmation modal — rendered portal-style at page root */}
+      {cancelTargetStream && (
+        <CancelStreamModal
+          stream={cancelTargetStream}
+          onSuccess={handleCancelSuccess}
+          onClose={handleCancelClose}
+        />
+      )}
     </div>
   );
 }

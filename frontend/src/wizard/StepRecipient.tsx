@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { recipientSchema } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData
@@ -35,14 +36,18 @@ export function StepRecipient({ data, update, touch, touched, onNext }: Props) {
       </p>
 
       <label style={styles.label}>
-        <span>Recipient address</span>
+        <span>Recipient address <span aria-hidden="true" style={{ color: "var(--color-cancelled)" }}>*</span></span>
         <input
+          id="wizard-recipient-input"
           type="text"
           placeholder="G…"
           value={data.recipient}
           onChange={e => handleChange(e.target.value.trim())}
           onBlur={handleBlur}
+          required
+          aria-required="true"
           aria-invalid={!!error}
+          aria-describedby={error ? "wizard-recipient-error" : undefined}
           data-testid="wizard-recipient"
           style={{
             ...styles.input,
@@ -54,7 +59,7 @@ export function StepRecipient({ data, update, touch, touched, onNext }: Props) {
           Stellar addresses start with <strong>G</strong> and are 56 characters long.
         </span>
         {error && (
-          <span role="alert" style={styles.error} data-testid="recipient-error">
+          <span id="wizard-recipient-error" role="alert" style={styles.error} data-testid="recipient-error">
             {error}
           </span>
         )}

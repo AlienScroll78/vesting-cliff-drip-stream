@@ -97,9 +97,25 @@ aws rds delete-db-instance \
   --skip-final-snapshot
 ```
 
-## Staging Restore Test
+## Automated Restore Verification
 
-Run this procedure monthly against staging to validate recoverability:
+Recoverability is now checked on a schedule, so the manual test below is only
+needed when something about the setup changes.
+
+Every Sunday at 03:00 UTC the `backup-verify` function restores the newest
+automated snapshot into a throwaway instance, counts the rows in the
+application tables, publishes `VestingApp/BackupRestoreSuccess`, and deletes the
+instance. A failure pages PagerDuty through the
+`<environment>-vesting-backup-verify-alerts` topic.
+
+See [Backup Restore Verification](./backup-restore-verification.md) for how to
+run one on demand, how to confirm the alarm path, and what each failure message
+means.
+
+## Manual Staging Restore Test
+
+Worth repeating by hand after a schema change, an engine major version upgrade,
+or a networking change, since the automated check only looks at row counts:
 
 1. Trigger the RDS Backup workflow manually with suffix `staging-test`.
 2. Follow steps 2–3 above targeting the `vesting-staging` instance.

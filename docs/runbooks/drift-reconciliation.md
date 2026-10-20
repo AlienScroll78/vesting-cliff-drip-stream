@@ -1,8 +1,13 @@
 # Runbook: Terraform Drift Reconciliation
 
-**Trigger:** A GitHub issue labelled `infrastructure` + `drift` has been opened by the automated
+**Trigger:** A GitHub issue labelled `infrastructure` + `drift` has been opened or updated by the automated
 [drift-detection workflow](../../.github/workflows/drift-detection.yml), and a Slack notification
 has been sent to `#ops`.
+
+> The workflow keeps **one open workflow-managed drift issue**. It is identified by the
+> `<!-- terraform-drift-workflow:managed -->` marker in the issue body; the issue is updated in place on
+> every run while drift persists, and it is closed automatically by the first run that reports a clean
+> plan. Issues opened by humans are never modified or closed by the workflow.
 
 ---
 
@@ -32,8 +37,9 @@ Every drift event must be triaged and resolved within **one business day**. The 
 
 ## Step 2 — Review the Plan Output
 
-The full `terraform plan` output is attached to the GitHub issue and uploaded as a CI artifact
-(`drift-plan-<run-id>`) retained for 90 days.
+The issue body contains the plan summary plus a truncated copy of the plan; the full output is uploaded
+as a CI artifact (`drift-plan-<environment>-<run-id>`) retained for 90 days, and the issue links
+directly to it.
 
 Key things to look for:
 
@@ -47,9 +53,9 @@ Key things to look for:
 Download the artifact to inspect locally:
 
 ```bash
-# Replace <run-id> with the value from the GitHub issue
-gh run download <run-id> --name drift-plan-<run-id>
-cat drift-plan-<run-id>/drift-plan.txt
+# Replace <run-id> and <environment> with the values from the GitHub issue
+gh run download <run-id> --name drift-plan-<environment>-<run-id>
+cat drift-plan-<environment>-<run-id>/drift-plan.txt
 ```
 
 ---
@@ -84,14 +90,17 @@ preference when the change was accidental or undocumented.
 
 ```bash
 cd terraform
+export TF_DATA_DIR="$PWD/.terraform/production"
+terraform init -input=false -backend-config=envs/production.backend.hcl
 
 # Always plan first — confirm only the drifted resource is in scope
 terraform plan \
+  -lock-timeout=5m \
   -var-file=envs/production.tfvars \
   -out=reconcile.tfplan
 
 # Review the plan carefully, then apply
-terraform apply reconcile.tfplan
+terraform apply -lock-timeout=5m reconcile.tfplan
 ```
 
 Verify the apply succeeded and no errors were reported.
@@ -104,7 +113,7 @@ then apply to reconcile state.
 1. Edit the relevant `.tf` file(s) to reflect the live state.
 2. Run `terraform plan` to confirm the diff collapses to zero changes:
    ```bash
-   terraform plan -var-file=envs/production.tfvars -detailed-exitcode
+   terraform plan -lock-timeout=5m -detailed-exitcode -var-file=envs/production.tfvars
    # Expected exit code: 0 (no changes)
    ```
 3. Commit the change with a message referencing the drift issue:
@@ -120,6 +129,7 @@ Some resources may need to be accepted while others are reverted. Use `-target` 
 ```bash
 # Revert only the drifted ECS service, leave other changes untouched
 terraform apply \
+  -lock-timeout=5m \
   -var-file=envs/production.tfvars \
   -target=module.compute.aws_ecs_service.backend
 ```
@@ -137,6 +147,7 @@ After applying:
 # Confirm plan now shows no changes
 terraform plan \
   -detailed-exitcode \
+  -lock-timeout=5m \
   -var-file=envs/production.tfvars \
   -no-color 2>&1 | tail -5
 # Expected: "No changes. Your infrastructure matches the configuration."
@@ -148,6 +159,9 @@ Run the application smoke test to confirm the service is healthy:
 curl -sf https://api.vesting.example.com/healthz
 ```
 
+Once a plan is clean, the next scheduled drift run comments on and closes the workflow-managed
+issue automatically. Re-running the workflow manually is the fastest way to close it after a fix.
+
 ---
 
 ## Step 6 — Close the Issue
@@ -158,7 +172,8 @@ Add a comment to the GitHub issue with:
 - Resolution chosen (reject / accept / partial)
 - Any follow-up actions (e.g. add a change-management gate, improve alerting)
 
-Close the issue with the label `resolved`.
+Close the issue with the label `resolved`. The drift workflow only closes issues that carry its
+managed marker, so a human-closed or human-opened issue is never closed behind your back.
 
 Post a brief update in `#ops`:
 
@@ -174,6 +189,8 @@ Post a brief update in `#ops`:
 |-----------|--------|
 | Drift is in a security-sensitive resource (IAM, SGs, KMS) | Page the security lead immediately via PagerDuty |
 | Drift cannot be safely reverted without downtime | Follow [emergency override procedure](./emergency-override.md) |
+| The plan fails with `Error acquiring the state lock` | Follow the stale-lock section of the [Terraform Bootstrap runbook](./terraform-bootstrap.md) |
+| Drift is caused by a corrupted or missing state file | Follow the state recovery section of the [Terraform Bootstrap runbook](./terraform-bootstrap.md) |
 | Drift recurs more than twice in one week for the same resource | Open a separate ticket to add a preventative control (AWS Config rule, SCP, or Terraform sentinel policy) |
 | Drift cause is unknown after 2 hours of investigation | Escalate to IC in `#incidents` |
 
@@ -182,6 +199,10 @@ Post a brief update in `#ops`:
 ## Appendix — Useful Commands
 
 ```bash
+cd terraform
+export TF_DATA_DIR="$PWD/.terraform/production"
+terraform init -input=false -backend-config=envs/production.backend.hcl
+
 # Show current state of a specific resource
 terraform state show module.compute.aws_ecs_service.backend
 

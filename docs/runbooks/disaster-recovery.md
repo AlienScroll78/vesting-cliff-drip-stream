@@ -4,7 +4,7 @@
 
 | Service | RTO | RPO | Definition |
 |---------|-----|-----|------------|
-| **PostgreSQL (RDS)** | 2 hours | 5 minutes | PITR replays WAL to a chosen recovery time within 35 days |
+| **PostgreSQL (RDS)** | 2 hours | < 1 minute (WAL-streaming replica failover) / 5 minutes (PITR) | Cross-AZ read replica streams WAL continuously; PITR replays archived WAL to a chosen recovery time within 35 days |
 | **Redis cluster** | 30 minutes | 0 (cache only) | Ephemeral cache; rebuilds automatically from indexer on restart |
 | **Backend API (ECS)** | 15 minutes | 0 | Stateless; redeploy from task definition |
 | **Kubernetes workloads** | 15 minutes | 0 | Stateless; rollback via kubectl or Helm |
@@ -12,12 +12,42 @@
 | **Smart contract** | 1 hour | 0 | On-chain; immutable once deployed |
 | **Secrets (AWS SM)** | 30 minutes | 0 | Rotation restores access; old secrets are invalidated |
 
+**Primary targets:**
+
+| Target | Value | How it is met |
+|--------|-------|---------------|
+| API availability RTO | **< 15 minutes** | Stateless ECS redeploy (Scenario 9) or rollback to the last stable task definition |
+| Data-loss RPO | **< 1 minute** | Continuous WAL streaming to the cross-AZ read replica; promote the replica (Scenario 1, fast path) |
+
 **Overall RTO:** 2 hours (worst case: database restore + full redeploy)
-**Overall RPO:** 5 minutes (database WAL replay window)
+**Overall RPO:** < 1 minute with replica failover (Scenario 1 fast path); 5 minutes when replaying archived WAL via PITR; cross-region failover RPO is higher (snapshot replication) — see Scenario 11
 
 ---
 
 ## Scenario 1 — Database Restore
+
+### Fast path — failover to the read replica (RTO < 15 min)
+
+Use when the primary RDS instance is unavailable but the cross-AZ read replica is healthy. WAL streams to the replica continuously, so data loss is < 1 minute.
+
+1. Confirm the primary is really down (not a network blip) and check replica health:
+   ```bash
+   aws rds describe-db-instances --db-instance-identifier $RDS_INSTANCE_ID \
+     --query 'DBInstances[0].DBInstanceStatus'
+   aws rds describe-db-instances --db-instance-identifier $RDS_REPLICA_ID \
+     --query 'DBInstances[0].StatusInfos'   # includes replication lag
+   ```
+2. Promote the replica:
+   ```bash
+   aws rds promote-read-replica --db-instance-identifier $RDS_REPLICA_ID \
+     --backup-retention-period 7
+   aws rds wait db-instance-available --db-instance-identifier $RDS_REPLICA_ID
+   ```
+3. Point the application at the promoted instance: update `DATABASE_URL` in AWS Secrets Manager, then force an ECS redeploy (steps 4–5 of the snapshot procedure below).
+4. Run the smoke test (step 6 below) and post the incident summary (step 8 below).
+5. Follow-up (same day): provision a new read replica for the promoted primary — do not run production without one.
+
+### Last resort — restore from snapshot
 
 Full snapshot procedure is in [rds-restore.md](./rds-restore.md). DR-specific steps:
 
@@ -53,6 +83,19 @@ Full snapshot procedure is in [rds-restore.md](./rds-restore.md). DR-specific st
 ## Scenario 2 — Indexer Re-sync from Ledger X
 
 Use when the indexer DB is corrupted or out of sync with the Stellar network.
+
+**Manual cursor reset (no data wipe).** If the indexer is stalled but its tables are intact, reset the cursor instead of truncating:
+
+1. Note the last successfully indexed ledger:
+   ```bash
+   psql "$DATABASE_URL" -c "SELECT MAX(ledger_sequence) FROM ledger_entries;"
+   ```
+2. Trigger a targeted reindex from that ledger via the admin API (no truncation):
+   ```bash
+   curl -X POST "https://admin.vesting.example.com/admin/indexer/reindex?from_ledger=$LAST_LEDGER" \
+     -u "$ADMIN_USER:$ADMIN_PASS"
+   ```
+3. Watch `indexer_lag_seconds` return to < 60 s on Grafana. If it does not recover, proceed with the full re-sync below.
 
 1. Stop the indexer task:
    ```bash
@@ -392,14 +435,120 @@ Use when secrets (database credentials, API keys, JWT signing keys) are compromi
 
 ---
 
+## Scenario 9 — API Server Failure (All ECS Tasks Crashed)
+
+Use when every `vesting-backend` task is stopped or crash-looping and the API is fully down.
+
+1. Check the service state and recent events:
+   ```bash
+   aws ecs describe-services --cluster vesting-prod --services vesting-backend \
+     --query 'services[0].{desired:desiredCount,running:runningCount,events:events[0:3]}'
+   ```
+2. Read the task logs for the crash cause (OOM kill, failed startup probe, bad secret):
+   ```bash
+   aws logs tail /ecs/vesting-backend --since 15m | tail -100
+   ```
+3. If tasks crash-loop on a bad task definition, roll back to the last stable revision:
+   ```bash
+   aws ecs update-service --cluster vesting-prod --service vesting-backend \
+     --task-definition vesting-backend:<previous-revision> --force-new-deployment
+   ```
+4. If OOM-killed, bump CPU/memory in the task definition and redeploy.
+5. If the service was simply scaled to zero, restore the desired count:
+   ```bash
+   aws ecs update-service --cluster vesting-prod --service vesting-backend --desired-count 2
+   ```
+6. Wait for stability and verify (target RTO < 15 minutes from first page):
+   ```bash
+   aws ecs wait services-stable --cluster vesting-prod --services vesting-backend
+   curl -sf https://api.vesting.example.com/healthz
+   ```
+
+---
+
+## Scenario 10 — Soroban RPC Unavailable (All RPC Nodes Offline)
+
+Use when the primary RPC **and** the backup provider are both failing — contract reads/writes fail across the board. For a single-provider outage see the [alert-response playbook](./alert-response.md#4-rpc-node-unhealthy-p2).
+
+1. Confirm scope — the RPC health call fails while DB checks pass:
+   ```bash
+   curl -sf "$SOROBAN_RPC_URL" -X POST -H 'Content-Type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'
+   ```
+2. Fail over to the public Stellar RPC as a temporary measure:
+   ```bash
+   aws secretsmanager update-secret \
+     --secret-id vesting/production/rpc-url \
+     --secret-string "https://soroban-testnet.stellar.org"   # mainnet: https://soroban.stellar.org
+   aws ecs update-service --cluster vesting-prod --service vesting-backend --force-new-deployment
+   ```
+   The public node is rate-limited: expect degraded latency and do **not** run scheduled jobs or backfills against it.
+3. Throttle non-critical RPC consumers: pause backfill / bulk-claim jobs via the admin API until a proper provider is restored.
+4. Chase the provider incident (status page / support) and record timestamps and error payloads in the incident thread.
+5. When a paid provider recovers, switch the secret back, redeploy, verify health, and resume the paused jobs.
+
+---
+
+## Scenario 11 — Complete AWS Region Failure (Multi-Region Failover)
+
+Use when the primary AWS region is unavailable. Highest-RTO scenario: data is replicated cross-region by snapshot, not by live WAL.
+
+1. Declare a region-level incident; the IC decides to fail over (this is a business decision, not an engineering one).
+2. Restore the database in the secondary region — promote a cross-region replica if one exists, otherwise restore the latest replicated snapshot / PITR target:
+   ```bash
+   aws rds restore-db-instance-to-point-in-time \
+     --source-db-instance-identifier $RDS_INSTANCE_ID \
+     --db-instance-identifier vesting-prod-dr \
+     --use-latest-restorable-time \
+     --region us-west-2
+   ```
+3. Verify secrets exist in the secondary region (they must be replicated there in advance — Secrets Manager does not replicate automatically):
+   ```bash
+   aws secretsmanager list-secrets --region us-west-2
+   ```
+4. Register/run the ECS services in the secondary region (task definitions must already be registered there):
+   ```bash
+   aws ecs create-service --cluster vesting-prod --service vesting-backend \
+     --task-definition vesting-backend --desired-count 2 --region us-west-2
+   ```
+5. Restart the indexer from the last indexed ledger — Scenario 2, manual cursor reset.
+6. Point DNS at the secondary region (Route 53 failover record):
+   ```bash
+   aws route53 change-resource-record-sets --hosted-zone-id $ZONE_ID --change-batch file://failover.json
+   ```
+7. Run smoke tests and open the status page to "degraded / secondary region".
+
+**Expected RPO:** snapshot replication interval (target < 15 min; a live cross-region replica reduces it to < 1 min at higher cost).
+**Expected RTO:** 1–2 hours. **Failback:** once the primary region recovers, re-seed replicas from the secondary, switch DNS back, re-sync the indexer, then decommission the secondary deployment.
+
+---
+
+## Scenario 12 — Contract Compromise (Emergency Freeze / Upgrade)
+
+Use when the contract, its admin key, or its deployer key is compromised, or a critical vulnerability is discovered. Detailed upgrade mechanics: [contract-upgrade.md](./contract-upgrade.md).
+
+1. **Stop the bleeding first.** Page the contract lead + IC immediately (P1). This scenario overrides normal change control.
+2. Freeze off-chain exposure: stop write-path services so users cannot submit transactions against the compromised contract:
+   ```bash
+   aws ecs update-service --cluster vesting-prod --service vesting-backend --desired-count 0
+   aws ecs update-service --cluster vesting-prod --service vesting-indexer --desired-count 0
+   ```
+3. Rotate compromised Stellar keys (Scenario 8, step 7) and revoke the compromised key's authority wherever possible.
+4. Assess exposure from the indexer DB: active streams, locked value per token, recent unexpected claims/cancellations.
+5. Deploy a patched contract and run the upgrade/migration per [contract-upgrade.md](./contract-upgrade.md) — or use the token issuer's SAC admin powers (clawback / re-issue) if the asset allows it as a network-level freeze.
+6. Migrate/re-create streams under the new contract, restore services, run smoke tests.
+7. Publish an incident report within 72 h and notify affected sponsors/recipients with the migration plan.
+
+---
+
 ## Tabletop Exercise Checklist
 
-Run quarterly (or after any real incident).
+Run quarterly (or after any real incident). The runbook is only valid if it has been **tested in a DR drill** — record each drill (date, participants, gaps found) using the post-mortem template below.
 
 | Step | Owner | Action |
 |------|-------|--------|
 | 1 | IC | Announce exercise in `#incidents`, confirm participants |
-| 2 | On-call engineer | Walk through scenarios 1–8 verbally, narrate decisions |
+| 2 | On-call engineer | Walk through scenarios 1–12 verbally, narrate decisions |
 | 3 | DB lead | Verify RDS snapshot exists and is restorable in staging |
 | 4 | Backend lead | Confirm ECS task definitions are current |
 | 5 | SRE | Verify Redis failover and k8s rollback procedures work |
@@ -409,6 +558,8 @@ Run quarterly (or after any real incident).
 | 9 | Contract lead | Confirm deployer key is funded and WASM builds cleanly |
 | 10 | IC | Time each scenario — confirm within per-service RTO budget |
 | 11 | All | Note gaps → create follow-up tickets |
+| 12 | SRE | Verify the Soroban RPC fallback switch works against the public node (Scenario 10) |
+| 13 | Contract lead | Walk through the emergency freeze decision tree (Scenario 12) |
 
 ### Post-Mortem Template
 
@@ -432,6 +583,19 @@ What needs improvement:
 Action items:
   [ ] Owner — Task — Due date
 ```
+
+### Escalation contacts & on-call rotation
+
+| Role | Responsibility | How to reach |
+|------|----------------|--------------|
+| Incident Commander (IC) | Runs the incident, owns all decisions | PagerDuty schedule `vesting-ic` |
+| Primary on-call | First responder for every alert in [alert-response.md](./alert-response.md) | PagerDuty schedule `vesting-oncall` |
+| Backend lead | API, ECS, indexer, RPC | `#incidents` / direct page |
+| DB lead | RDS, failover, restores, pool exhaustion | `#incidents` / direct page |
+| Contract lead | Contract freezes, upgrades, key rotation | `#incidents` / direct page |
+| Security | Key compromise, vulnerability reports | [SECURITY.md](../../SECURITY.md) reporting channel |
+
+Escalation rule: if no IC acknowledges a P1 page within **15 minutes**, escalate via PagerDuty to the secondary rotation (see [runbooks README](./README.md#alerting-channels)).
 
 ### Communications
 
