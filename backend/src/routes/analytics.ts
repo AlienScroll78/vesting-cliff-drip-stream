@@ -92,29 +92,30 @@ export async function sponsorAnalyticsHandler(req: Request, res: Response): Prom
   // The sub-query is rewritten as a lateral join so it can use the composite
   // covering index on claims(recipient, token) rather than a full GROUP-BY
   // pass over the entire table.
-  const byTokenRows = await pool.query<{
-    token: string;
-    active_streams: string;
-    total_locked: string;
-    total_claimed: string;
-  }>(
-    `SELECT
-       s.token,
-       COUNT(*)::TEXT                                    AS active_streams,
-       COALESCE(SUM(s.total_deposit), 0)::TEXT          AS total_locked,
-       COALESCE(SUM(c.claimed), 0)::TEXT                AS total_claimed
-     FROM schedules s
-     LEFT JOIN LATERAL (
-       SELECT SUM(amount) AS claimed
-       FROM claims
-       WHERE recipient = s.recipient
-         AND token     = s.token
-     ) c ON true
-     WHERE s.sponsor = $1
-       AND s.status  = 'active'
-     GROUP BY s.token`,
-    [address]
-  );
+  try {
+    const byTokenRows = await pool.query<{
+      token: string;
+      active_streams: string;
+      total_locked: string;
+      total_claimed: string;
+    }>(
+      `SELECT
+         s.token,
+         COUNT(*)::TEXT                                    AS active_streams,
+         COALESCE(SUM(s.total_deposit), 0)::TEXT          AS total_locked,
+         COALESCE(SUM(c.claimed), 0)::TEXT                AS total_claimed
+       FROM schedules s
+       LEFT JOIN LATERAL (
+         SELECT SUM(amount) AS claimed
+         FROM claims
+         WHERE recipient = s.recipient
+           AND token     = s.token
+       ) c ON true
+       WHERE s.sponsor = $1
+         AND s.status  = 'active'
+       GROUP BY s.token`,
+      [address]
+    );
 
     const by_token = byTokenRows.rows;
 
