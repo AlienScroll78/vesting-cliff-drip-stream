@@ -16,7 +16,6 @@ output "ecs_cluster_name" {
 output "ecs_task_role_arn" {
   description = "ARN of the ECS task execution role"
   value       = aws_iam_role.ecs_exec.arn
-  sensitive   = true
 }
 
 output "fargate_spot_capacity_provider_name" {
@@ -31,7 +30,17 @@ output "indexer_service_name" {
 
 output "alb_security_group_id" {
   description = "Security group ID of the ALB"
-  value       = one(aws_lb.main.security_groups)
+  value       = aws_security_group.alb.id
+}
+
+output "backend_security_group_id" {
+  description = "Security group ID of the ECS backend service"
+  value       = aws_security_group.backend.id
+}
+
+output "indexer_security_group_id" {
+  description = "Security group ID of the ECS indexer service"
+  value       = aws_security_group.indexer.id
 }
 
 output "ecs_service_name" {
