@@ -12,6 +12,7 @@ mod test_cancel_event;
 mod test_claim;
 mod test_clawback;
 mod test_cliff_ratio;
+mod test_cliff_boundary;
 mod test_config;
 mod test_coverage;
 mod test_create;
