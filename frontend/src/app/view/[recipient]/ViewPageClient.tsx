@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { CopyButton } from "@/components/CopyButton";
+import { CopyableAddress } from "@/components/CopyableAddress";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VestingStream } from "@/types";
 
@@ -65,8 +65,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-              {stream.recipient}
-              <CopyButton text={stream.recipient} label="Copy recipient address" />
+              <CopyableAddress value={stream.recipient} />
             </div>
             <div style={{ marginTop: "0.25rem" }}>
               <StatusBadge status={stream.status} />
@@ -85,8 +84,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
           <dd>{stream.rate} tokens / ledger</dd>
           <dt style={{ color: "#6b7280" }}>Sponsor</dt>
           <dd style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "monospace" }}>
-            {stream.sponsor}
-            <CopyButton text={stream.sponsor} label="Copy sponsor address" />
+            <CopyableAddress value={stream.sponsor} />
           </dd>
         </dl>
       </section>

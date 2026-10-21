@@ -10,7 +10,7 @@ import { SegmentedProgressBar } from "@/components/SegmentedProgressBar";
 import { TxProvider, useTx } from "@/components/TxDrawer";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
 import { StreamListSkeleton } from "@/components/Skeletons";
-import { CopyButton } from "@/components/CopyButton";
+import { CopyableAddress } from "@/components/CopyableAddress";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { analytics } from "@/analytics";
@@ -92,8 +92,7 @@ function StreamList() {
             <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  {s.recipient}
-                  <CopyButton text={s.recipient} label="Copy recipient address" />
+                  <CopyableAddress value={s.recipient} />
                 </div>
                 <div style={{ marginTop: "0.25rem" }}>
                   <StatusBadge status={s.status} />

@@ -150,6 +150,14 @@ body {
 .copy-btn:hover, .copy-btn:focus-visible {
   color: var(--color-active); background: #eff6ff; outline: 2px solid var(--color-active);
 }
+.copyable-identifier {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  min-width: 0; font-family: monospace; white-space: nowrap;
+}
+.copyable-identifier-explorer {
+  color: var(--color-active); text-decoration: none; font-family: sans-serif;
+}
+.copyable-identifier-explorer:hover { text-decoration: underline; }
 
 /* ── Network selector (#62) ── */
 .network-selector select {

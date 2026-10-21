@@ -1,8 +1,7 @@
 "use client";
 import { TxType } from "@/types";
 import { useTransactions } from "@/hooks/useTransactions";
-
-const STELLAR_EXPERT = "https://stellar.expert/explorer/testnet/tx";
+import { CopyableAddress } from "@/components/CopyableAddress";
 
 const TYPE_LABELS: Record<TxType | "all", string> = {
   all: "All",
@@ -104,15 +103,7 @@ export default function TransactionHistoryPage() {
                     <time dateTime={tx.timestamp}>{localDate(tx.timestamp)}</time>
                   </td>
                   <td style={tdStyle}>
-                    <a
-                      href={`${STELLAR_EXPERT}/${tx.hash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`View transaction ${tx.hash.slice(0, 8)} on Stellar Expert`}
-                      style={{ color: "var(--color-active)", fontFamily: "monospace", fontSize: "0.78rem" }}
-                    >
-                      {tx.hash.slice(0, 8)}… ↗
-                    </a>
+                    <CopyableAddress value={tx.hash} kind="transaction" />
                   </td>
                 </tr>
               ))}
