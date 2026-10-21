@@ -5,14 +5,14 @@ import { rateLimitMiddleware } from './middleware/tokenBucketRateLimit.js';
 import { adminRouter } from './admin/index.js';
 import { healthHandler, readyHandler } from './routes/health.js';
 import { streamDetailsRouter } from './routes/streamDetails.js';
+import { streamBalanceRouter } from './routes/streamBalance.js';
 import { createScheduleController } from './controllers/schedules.js';
-import { validate } from './middleware/validate.js';
 import { sponsorStreamsRouter } from './routes/streams.js';
-import { adminRouter } from './admin/index.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
 import { metricsMiddleware } from './middleware/metricsMiddleware.js';
 import { prometheusMetricsHandler } from './routes/metrics.js';
+import { corsMiddleware } from './middleware/cors.js';
 
 const app = express();
 
@@ -36,6 +36,9 @@ app.get('/ready', readyHandler);
 app.use(rateLimitMiddleware);
 
 app.use('/api/streams', streamDetailsRouter);
+
+// Stream balance — GET /api/streams/:recipient/balance (Issue #996)
+app.use('/api/streams', streamBalanceRouter);
 
 app.get(
   '/api/v1/schedules/:recipient',

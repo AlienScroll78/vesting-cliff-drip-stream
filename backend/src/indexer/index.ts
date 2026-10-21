@@ -24,3 +24,12 @@ export type {
   FetchPageResult,
   HorizonEventRecord,
 } from './types.js';
+
+// Issue #996 — Stream balance tracking
+export {
+  incrementClaimedTotal,
+  initStreamBalance,
+  getStreamBalance,
+  recomputeBalance,
+} from './balanceTracker.js';
+export type { StreamBalance, BalanceUpdateResult } from './balanceTracker.js';
