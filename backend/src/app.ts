@@ -1,14 +1,14 @@
 import express, { type Request, type Response, NextFunction } from 'express';
 import { RecipientParamsSchema } from './validation.js';
 import { validate } from './middleware/validate.js';
+import { corsMiddleware } from './middleware/cors.js';
 import { rateLimitMiddleware } from './middleware/tokenBucketRateLimit.js';
 import { adminRouter } from './admin/index.js';
 import { healthHandler, readyHandler } from './routes/health.js';
 import { streamDetailsRouter } from './routes/streamDetails.js';
 import { createScheduleController } from './controllers/schedules.js';
-import { validate } from './middleware/validate.js';
-import { sponsorStreamsRouter } from './routes/streams.js';
-import { adminRouter } from './admin/index.js';
+import { analyticsSummaryHandler } from './routes/analyticsSummary.js';
+import { buildClaimTxRouter } from './routes/buildClaimTx.js';
 // @ts-ignore — no type declarations for the JS logger module
 import { requestLoggerMiddleware } from './requestLogger.js';
 import { metricsMiddleware } from './middleware/metricsMiddleware.js';

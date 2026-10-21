@@ -34,15 +34,17 @@ let previousKey: RsaKeyPair | null = null;
 // ---------------------------------------------------------------------------
 
 function generateKeyPair(): RsaKeyPair {
+  // Generate as KeyObjects (no publicKeyEncoding/privateKeyEncoding) so the
+  // returned values satisfy the RsaKeyPair type and support .export().
+  // Previously these were generated as PEM *strings*, which made the
+  // `.export({ format: "der" })` call below throw
+  // "publicKey.export is not a function".
   const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
 
   // Derive a stable kid from the public key's DER fingerprint
-  const pubDer = publicKey
-    .export({ type: "spki", format: "der" });
+  const pubDer = publicKey.export({ type: "spki", format: "der" });
   const kid = crypto
     .createHash("sha256")
     .update(pubDer as Buffer)
@@ -51,8 +53,8 @@ function generateKeyPair(): RsaKeyPair {
 
   return {
     kid,
-    privateKey: privateKey as unknown as crypto.KeyObject,
-    publicKey: publicKey as unknown as crypto.KeyObject,
+    privateKey,
+    publicKey,
     createdAt: Date.now(),
   };
 }
