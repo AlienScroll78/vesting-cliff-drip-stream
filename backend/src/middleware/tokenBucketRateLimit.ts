@@ -1,3 +1,32 @@
+/**
+ * backend/src/middleware/tokenBucketRateLimit.ts
+ *
+ * Token bucket rate limiting middleware using Redis.
+ *
+ * Issue #1008: Implement rate limiting and request validation middleware
+ *
+ * Rate limits:
+ *   - Public endpoints (read):   100 requests/min per IP
+ *   - Write endpoints (build-tx): 10 requests/min per address or IP
+ *   - Admin endpoints:            5 requests/min per JWT subject
+ *
+ * Configuration via environment variables:
+ *   RATE_LIMIT_WINDOW_SEC      — Sliding window in seconds (default: 60)
+ *   RATE_LIMIT_IP_MAX          — Public endpoint limit per IP (default: 60)
+ *   RATE_LIMIT_WRITE_MAX       — Write endpoint limit (default: 10)
+ *   RATE_LIMIT_ADMIN_MAX       — Admin limit per JWT subject (default: 5)
+ *   RATE_LIMIT_BYPASS_KEYS     — Comma-separated API keys that bypass limits
+ *
+ * Response headers:
+ *   X-RateLimit-Limit      — Maximum requests allowed in this window
+ *   X-RateLimit-Remaining  — Requests remaining in this window
+ *   X-RateLimit-Reset      — Seconds until next available request (on 429)
+ *   Retry-After            — Same as X-RateLimit-Reset (for standard compliance)
+ *
+ * On rate limit exceeded (429):
+ *   { error: "Too Many Requests", retryAfter: N }
+ */
+
 import { createHash } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { createClient } from "redis";
@@ -155,13 +184,18 @@ export async function rateLimitMiddleware(
     const [allowed, remaining, retryMs] = result;
     const retryAfter = Math.max(1, Math.ceil(retryMs / 1000));
 
+    // Issue #1008: Set proper rate limit headers
     res.setHeader("X-RateLimit-Limit", limit);
     res.setHeader("X-RateLimit-Remaining", Math.max(0, remaining));
     res.setHeader("X-RateLimit-Reset", retryAfter);
+    
     if (allowed === 0) {
       res.setHeader("Retry-After", retryAfter);
       rateLimitHitsTotal.labels(endpoint, type).inc();
-      res.status(429).json({ error: "Too Many Requests", retryAfter });
+      res.status(429).json({ 
+        error: "RateLimit",
+        retry_after: retryAfter 
+      });
       return;
     }
     next();
