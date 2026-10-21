@@ -112,7 +112,17 @@ async function streamDetailsHandler(req: Request, res: Response): Promise<void> 
          )::text AS total_deposited,
          COALESCE(stream_totals.total_claimed, 0)::text AS total_claimed,
          vs.status,
-         vs.created_at
+         vs.created_at,
+         vs.cancelled_at,
+         vs.cancelled_at_ledger,
+         vs.refunded_amount::text AS sponsor_refund,
+         vs.cancellation_tx_hash,
+         vs.cancellation_recipient_payout::text AS recipient_payout,
+         vs.clawed_at_ledger,
+         vs.clawback_sponsor,
+         vs.clawback_amount::text AS clawback_amount,
+         vs.clawback_reason,
+         vs.clawback_tx_hash
        FROM vesting_streams vs
        LEFT JOIN LATERAL (
          SELECT
@@ -130,22 +140,65 @@ async function streamDetailsHandler(req: Request, res: Response): Promise<void> 
       return;
     }
 
-    let claimableNow: string;
-    try {
-      claimableNow = await getClaimableAmount(recipient);
-    } catch (error) {
-      console.error("[streams] Soroban claimable_amount failed", error);
-      res.status(503).json({ error: "claimable amount temporarily unavailable" });
-      return;
+    const row = result.rows[0];
+
+    // Build the terminal event details object based on the current status
+    let terminal_event: Record<string, unknown> | null = null;
+    if (row.status === "cancelled") {
+      terminal_event = {
+        type: "StreamCancelled",
+        cancelled_at_ledger: row.cancelled_at_ledger,
+        sponsor_refund: jsonInteger(row.sponsor_refund ?? "0"),
+        recipient_payout: jsonInteger(row.recipient_payout ?? "0"),
+        tx_hash: row.cancellation_tx_hash,
+        cancelled_at: row.cancelled_at,
+      };
+    } else if (row.status === "clawedback") {
+      terminal_event = {
+        type: "StreamClawedBack",
+        clawed_at_ledger: row.clawed_at_ledger,
+        sponsor: row.clawback_sponsor,
+        amount: jsonInteger(row.clawback_amount ?? "0"),
+        reason: row.clawback_reason,
+        tx_hash: row.clawback_tx_hash,
+      };
+    } else if (row.status === "drained") {
+      // StreamDrained is also a terminal event; details can be fetched
+      // from stream_events if needed.
+      terminal_event = {
+        type: "StreamDrained",
+      };
     }
 
-    const row = result.rows[0];
+    // For terminal streams, skip the RPC claimable_amount call
+    // (no claimable tokens remain in a terminal state).
+    let claimableNow: string;
+    const isTerminal = ["cancelled", "drained", "clawedback"].includes(row.status);
+    if (isTerminal) {
+      claimableNow = "0";
+    } else {
+      try {
+        claimableNow = await getClaimableAmount(recipient);
+      } catch (error) {
+        console.error("[streams] Soroban claimable_amount failed", error);
+        res.status(503).json({ error: "claimable amount temporarily unavailable" });
+        return;
+      }
+    }
+
     res.status(200).json({
-      ...row,
+      recipient: row.recipient,
+      sponsor: row.sponsor,
+      token: row.token,
       rate: jsonInteger(row.rate),
+      cliff_ledger: row.cliff_ledger,
+      end_ledger: row.end_ledger,
       total_deposited: jsonInteger(row.total_deposited),
       total_claimed: jsonInteger(row.total_claimed),
+      status: row.status,
+      created_at: row.created_at,
       claimable_now: jsonInteger(claimableNow),
+      terminal_event: terminal_event,
     });
   } catch (error) {
     console.error("[streams] database query failed", error);
