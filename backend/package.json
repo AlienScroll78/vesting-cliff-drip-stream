@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
+    "backfill": "tsx scripts/backfill_stream_events.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
     "test:ws-e2e": "vitest run --config vitest.ws-e2e.config.ts",
     "migrate": "node-pg-migrate up --migration-file-language ts",
