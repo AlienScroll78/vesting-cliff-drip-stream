@@ -49,6 +49,11 @@ jobs:
         run: npm run migrate
       - name: Run backend tests
         run: npm test
+      # Issue #1062 — API response snapshot tests.
+      # Fails with a readable diff when a response shape changes.
+      # Update intentionally with `npm run test:snapshots:update`.
+      - name: Run API snapshot tests
+        run: npm run test:snapshots
 
   # ── lint ────────────────────────────────────────────────────────────────────
   # Required status check: "lint"
