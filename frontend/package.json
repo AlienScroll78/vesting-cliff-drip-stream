@@ -16,6 +16,7 @@
     "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.20",
     "@hookform/resolvers": "^5.5.7",
     "@stellar/freighter-api": "^6.0.1",
     "framer-motion": "^12.42.0",

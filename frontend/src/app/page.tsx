@@ -22,7 +22,6 @@ import { StreamComparisonView } from "@/components/StreamComparisonView";
 // #820 — first-time-user onboarding tour
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { ReplayTourButton } from "@/components/ReplayTourButton";
-import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
