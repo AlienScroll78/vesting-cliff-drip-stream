@@ -224,21 +224,25 @@ Updates the minimum total deposit threshold in instance storage. Default is 100 
 | 9 | `TransferFailed` | Token transfer failed |
 | 10 | `DrainDelayNotExpired` | The 1-year drain delay after `end_ledger` has not passed |
 | 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
-| 12 | `InvalidCliffDuration` | `cliff_duration` is zero |
-| 13 | `AlreadyInitialized` | `initialize` has already been called |
-| 14 | `RecipientNotAllowed` | Recipient not on the configured allowlist |
-| 15 | `StreamPaused` | Claim attempted on a paused stream |
-| 16 | `BatchTooLarge` | Batch size exceeds the maximum of 20 |
-| 17 | `RateTooLow` | `rate × total_duration` is below the configured minimum |
-| 18 | `NotInitialized` | `initialize` has not yet been called |
-| 19 | `InvalidSegments` | Variable-rate segments are invalid (empty, out-of-order, or bad rate) |
+| 12 | `InvalidToken` | Token address is not a valid SAC |
 | 20 | `MetadataTooLong` | `metadata` exceeds 256 UTF-8 bytes |
-| 21 | `Unauthorized` | Caller is not the contract admin or original sponsor |
-| 22 | `DepositBelowMinimum` | Total deposit is below the configured minimum |
-| 23 | `StreamAlreadyPaused` | Stream is already paused |
-| 24 | `StreamNotPaused` | `resume_stream` called on a non-paused stream |
-| 25 | `VersionOverflow` | Version counter has reached `u32::MAX` |
-| 26 | `ClawbackNotSupported` | Token does not support the SAC clawback flag |
+| 21 | `TokenDoesNotSupportClawback` | Token does not have the SAC clawback flag enabled |
+| 22 | `ReasonTooLong` | Clawback `reason` string exceeds 256 bytes |
+| 17 | `RateTooLow` | **Fast-path check**: `rate > 0` but `rate × total_duration < min_deposit`. Returned before the fixed-point scaling step. |
+| 23 | `DepositBelowMinimum` | **Overflow-safe fallback**: `calculate_total_deposit` returned `Ok` but the scaled result is still below `min_deposit`. |
+
+> **Clarification — codes 17 vs 23 (`RateTooLow` vs `DepositBelowMinimum`)**
+>
+> Both errors indicate the stream is too small. The distinction is *where in the validation pipeline* the check fires:
+>
+> | Code | Condition | When it fires |
+> |------|-----------|---------------|
+> | 17 `RateTooLow` | `rate × total_duration < min_deposit` (no overflow) | Before `calculate_total_deposit`; fast integer multiply succeeds |
+> | 23 `DepositBelowMinimum` | `calculate_total_deposit(rate, total_duration) < min_deposit` | After fixed-point scaling by `RATE_DECIMALS`; scaling may reduce the value below the minimum even when the raw product was ≥ minimum |
+>
+> **User action for both:** increase `rate` or `total_duration` so the deposit meets the minimum.
+>
+> **Note:** prior versions of the README listed code 22 as `DepositBelowMinimum`. Code 22 is `ReasonTooLong` (clawback reason length). `DepositBelowMinimum` is code 23.
 
 ---
 

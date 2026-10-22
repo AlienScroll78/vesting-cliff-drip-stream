@@ -53,6 +53,22 @@ pub enum VestingError {
     /// **Code 12** — The token address is not a valid SAC (Stellar Asset Contract). Try calling try_balance before storing the schedule.
     InvalidToken = 12,
 
+    /// **Code 17** — `rate` is positive but `rate × total_duration < min_deposit`.
+    ///
+    /// This error fires **before** the overflow check when the arithmetic succeeds
+    /// (no overflow) but the resulting deposit is still below the configured minimum.
+    ///
+    /// # Distinction from `DepositBelowMinimum` (code 23)
+    ///
+    /// | Code | When returned |
+    /// |------|---------------|
+    /// | 17 `RateTooLow` | `rate > 0`, multiplication succeeds, result < `min_deposit` |
+    /// | 23 `DepositBelowMinimum` | Overflow-safe path: `calculate_total_deposit` returned `Ok` but value < `min_deposit` |
+    ///
+    /// In practice both codes indicate the same user-visible condition (stream is
+    /// too small). Callers should treat either code as "increase rate or duration".
+    RateTooLow = 17,
+
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
 
@@ -68,4 +84,21 @@ pub enum VestingError {
     /// Reason strings are stored on-chain in the emitted event. Trim the reason
     /// to at most 256 UTF-8 bytes before retrying.
     ReasonTooLong = 22,
+
+    /// **Code 23** — Total deposit is below the configured minimum.
+    ///
+    /// Returned from the overflow-safe `calculate_total_deposit` code path when
+    /// `rate × total_duration` succeeds without overflow but the result is still
+    /// less than the value set by `set_min_deposit` (default: 100).
+    ///
+    /// # Distinction from `RateTooLow` (code 17)
+    ///
+    /// | Code | When returned |
+    /// |------|---------------|
+    /// | 17 `RateTooLow` | `rate > 0`, simple multiplication < `min_deposit` |
+    /// | 23 `DepositBelowMinimum` | Result of `calculate_total_deposit` < `min_deposit` |
+    ///
+    /// Both codes signal that the stream parameters produce an insufficiently
+    /// small deposit. Increase `rate` or `total_duration` to resolve either error.
+    DepositBelowMinimum = 23,
 }
