@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ChangeEvent, type FocusEvent } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface FormValues {
   recipient: string;
@@ -58,7 +59,7 @@ interface Props {
   onSubmit?: (values: FormValues) => void;
 }
 
-export function StreamCreateForm({ onSubmit }: Props) {
+function StreamCreateFormContent({ onSubmit }: Props) {
   const [values, setValues] = useState<FormValues>({
     recipient: "",
     rate: "",
@@ -160,6 +161,10 @@ export function StreamCreateForm({ onSubmit }: Props) {
       </button>
     </form>
   );
+}
+
+export function StreamCreateForm(props: Props) {
+  return <ErrorBoundary><StreamCreateFormContent {...props} /></ErrorBoundary>;
 }
 
 // ── Field sub-component ───────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VestingStream } from "@/types";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Stub lookup — replace with real contract read
 async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
@@ -18,7 +19,7 @@ async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
   };
 }
 
-export default function ViewPageClient({ recipient }: { recipient: string }) {
+function ViewPageContent({ recipient }: { recipient: string }) {
   const [stream, setStream] = useState<VestingStream | null | undefined>(undefined);
   const [urlCopied, setUrlCopied] = useState(false);
 
@@ -92,4 +93,8 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
       </section>
     </main>
   );
+}
+
+export default function ViewPageClient({ recipient }: { recipient: string }) {
+  return <ErrorBoundary><ViewPageContent recipient={recipient} /></ErrorBoundary>;
 }

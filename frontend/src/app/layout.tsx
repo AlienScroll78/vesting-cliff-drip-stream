@@ -2,6 +2,8 @@ import "./globals.css";
 import { WalletProvider } from "@/contexts/WalletContext";
 import { I18nProvider } from "@/components/I18nProvider";
 import { AnalyticsInit } from "@/components/AnalyticsInit";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GlobalErrorHandler } from "@/components/GlobalErrorHandler";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,7 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <I18nProvider>
           <AnalyticsInit />
-          <WalletProvider>{children}</WalletProvider>
+          <WalletProvider>
+            <GlobalErrorHandler />
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </WalletProvider>
         </I18nProvider>
       </body>
     </html>

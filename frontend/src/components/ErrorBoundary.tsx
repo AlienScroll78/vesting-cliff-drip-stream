@@ -9,6 +9,13 @@ interface Props {
 
 interface State {
   error: Error | null;
+  correlationId: string | null;
+}
+
+function makeCorrelationId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `err-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -17,45 +24,50 @@ interface State {
  * shows a fallback UI with a "Try Again" reset button.
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, correlationId: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, correlationId: makeCorrelationId() };
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
-    console.error("[ErrorBoundary] Uncaught error:", error, info.componentStack);
+    const correlationId = this.state.correlationId;
+    console.error("[ErrorBoundary] Uncaught error:", { correlationId, error, componentStack: info.componentStack });
 
     // Optional Sentry integration — only active when DSN env var is present.
     if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SENTRY_DSN) {
       import("@sentry/react")
-        .then(({ captureException }) => captureException(error, { extra: info }))
+        .then(({ captureException }) => captureException(error, { tags: { correlationId: correlationId ?? "unknown" }, extra: { ...info, correlationId } }))
         .catch(() => {/* Sentry unavailable — fail silently */});
     }
   }
 
-  reset = () => this.setState({ error: null });
+  reset = () => this.setState({ error: null, correlationId: null });
 
   render() {
     const { error } = this.state;
     if (error) {
       return this.props.fallback
         ? this.props.fallback(this.reset, error)
-        : <DefaultFallback reset={this.reset} />;
+        : <DefaultFallback reset={this.reset} error={error} correlationId={this.state.correlationId} />;
     }
     return this.props.children;
   }
 }
 
-function DefaultFallback({ reset }: { reset: () => void }) {
+function DefaultFallback({ reset, error, correlationId }: { reset: () => void; error: Error; correlationId: string | null }) {
   return (
     <div role="alert" style={styles.container}>
       <h1 style={styles.heading}>Something went wrong</h1>
       <p style={styles.body}>
-        An unexpected error occurred. Our team has been notified.
+        An unexpected error occurred. Reload the page to continue.
       </p>
-      <button type="button" onClick={reset} style={styles.button}>
-        Try Again
+      {correlationId && <small>Reference: {correlationId}</small>}
+      {process.env.NODE_ENV !== "production" && (
+        <details><summary>Error details</summary><pre>{error.message}</pre></details>
+      )}
+      <button type="button" onClick={() => window.location.reload()} style={styles.button}>
+        Reload
       </button>
       <a href="/" style={styles.link}>Go to home page</a>
     </div>

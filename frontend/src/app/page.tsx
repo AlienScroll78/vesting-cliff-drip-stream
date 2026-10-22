@@ -16,6 +16,7 @@ import { AnalyticsOptOut } from "@/components/AnalyticsOptOut";
 import { analytics } from "@/analytics";
 import { VestingStream } from "@/types";
 import { formatAmount } from "@/utils/formatAmount";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Stub data – replace with contract reads. Use [] to see empty state.
 const MOCK_STREAMS: VestingStream[] = [
@@ -162,7 +163,7 @@ export default function Home() {
           </div>
         </header>
         <StatusLegend />
-        <StreamList />
+        <ErrorBoundary><StreamList /></ErrorBoundary>
         <footer style={{ marginTop: "2rem", fontSize: "0.75rem", color: "#6b7280", textAlign: "center" }}>
           <AnalyticsOptOut />
         </footer>
