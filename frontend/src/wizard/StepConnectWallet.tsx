@@ -1,4 +1,5 @@
 import { useWallet } from '../contexts/WalletContext'
+import { useTranslation } from 'react-i18next'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function StepConnectWallet({ data, update, onNext }: Props) {
+  const { t } = useTranslation()
   const { address, connect } = useWallet()
 
   async function handleConnect() {
@@ -23,9 +25,9 @@ export function StepConnectWallet({ data, update, onNext }: Props) {
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.heading}>Connect your wallet</h2>
+      <h2 style={styles.heading}>{t('wizard.connectWallet')}</h2>
       <p style={styles.sub}>
-        You need a Freighter wallet to sign and pay for the stream deposit.
+        {t('wizard.walletDescription')}
       </p>
       {resolved ? (
         <div style={styles.connected}>
@@ -41,7 +43,7 @@ export function StepConnectWallet({ data, update, onNext }: Props) {
           onClick={handleConnect}
           data-testid="wizard-connect-btn"
         >
-          Connect Freighter
+          {t('wizard.connectFreighter')}
         </button>
       )}
 
@@ -58,7 +60,7 @@ export function StepConnectWallet({ data, update, onNext }: Props) {
         }}
         data-testid="wizard-next-btn"
       >
-        Continue →
+        {t('wizard.continue')} →
       </button>
     </div>
   )

@@ -1,14 +1,15 @@
 "use client";
 import { TxType } from "@/types";
 import { useTransactions } from "@/hooks/useTransactions";
+import { useTranslation } from "react-i18next";
 
 const STELLAR_EXPERT = "https://stellar.expert/explorer/testnet/tx";
 
 const TYPE_LABELS: Record<TxType | "all", string> = {
-  all: "All",
-  claim: "Claim",
-  create: "Create",
-  cancel: "Cancel",
+  all: "all",
+  claim: "claim",
+  create: "create",
+  cancel: "cancel",
 };
 
 const TYPE_EMOJI: Record<TxType, string> = {
@@ -18,14 +19,15 @@ const TYPE_EMOJI: Record<TxType, string> = {
 };
 
 /** Format an ISO timestamp in the user's local timezone. */
-function localDate(iso: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+function localDate(iso: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(iso));
 }
 
 export default function TransactionHistoryPage() {
+  const { t, i18n } = useTranslation();
   const { transactions, total, page, pageSize, loading, error, setPage, filter, setFilter } =
     useTransactions();
 
@@ -34,23 +36,23 @@ export default function TransactionHistoryPage() {
   return (
     <main className="page">
       <header className="header">
-        <h1>Transaction History</h1>
+        <h1>{t("history.title")}</h1>
         <a href="/" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
-          ← Back
+          ← {t("history.back")}
         </a>
       </header>
 
       {/* Type filter */}
-      <div role="group" aria-label="Filter by type" style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
-        {(["all", "claim", "create", "cancel"] as (TxType | "all")[]).map((t) => (
+      <div role="group" aria-label={t("history.filterByType")} style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        {(["all", "claim", "create", "cancel"] as (TxType | "all")[]).map((filterType) => (
           <button
-            key={t}
-            onClick={() => setFilter(t)}
-            className={`btn ${filter === t ? "btn-primary" : "btn-outline"}`}
+            key={filterType}
+            onClick={() => setFilter(filterType)}
+            className={`btn ${filter === filterType ? "btn-primary" : "btn-outline"}`}
             style={{ padding: "0.35rem 1rem", fontSize: "0.875rem" }}
-            aria-pressed={filter === t}
+            aria-pressed={filter === filterType}
           >
-            {TYPE_LABELS[t]}
+            {t(`history.${TYPE_LABELS[filterType]}`)}
           </button>
         ))}
       </div>
@@ -63,25 +65,25 @@ export default function TransactionHistoryPage() {
 
       {loading ? (
         <p aria-busy="true" style={{ textAlign: "center", padding: "2rem 0", color: "#6b7280" }}>
-          Loading…
+          {t("history.loading")}
         </p>
       ) : transactions.length === 0 ? (
         <p style={{ textAlign: "center", padding: "2rem 0", color: "#6b7280" }}>
-          No transactions found.
+          {t("history.empty")}
         </p>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table
             style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}
-            aria-label="Transaction history"
+            aria-label={t("history.transactionHistory")}
           >
             <thead>
               <tr style={{ borderBottom: "2px solid var(--color-border)", textAlign: "left" }}>
-                <th style={thStyle}>Type</th>
-                <th style={thStyle}>Amount</th>
-                <th style={thStyle}>Counterparty</th>
-                <th style={thStyle}>Date</th>
-                <th style={thStyle}>Tx</th>
+                <th style={thStyle}>{t("history.type")}</th>
+                <th style={thStyle}>{t("history.amount")}</th>
+                <th style={thStyle}>{t("history.counterparty")}</th>
+                <th style={thStyle}>{t("history.date")}</th>
+                <th style={thStyle}>{t("history.tx")}</th>
               </tr>
             </thead>
             <tbody>
@@ -92,16 +94,16 @@ export default function TransactionHistoryPage() {
                 >
                   <td style={tdStyle}>
                     <span aria-hidden="true">{TYPE_EMOJI[tx.type]}</span>{" "}
-                    {TYPE_LABELS[tx.type]}
+                    {t(`history.${TYPE_LABELS[tx.type]}`)}
                   </td>
                   <td style={tdStyle}>
-                    {tx.amount.toLocaleString()} {tx.token}
+                    {tx.amount.toLocaleString(i18n.language)} {tx.token}
                   </td>
                   <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: "0.8rem" }}>
                     {tx.counterparty}
                   </td>
                   <td style={tdStyle}>
-                    <time dateTime={tx.timestamp}>{localDate(tx.timestamp)}</time>
+                    <time dateTime={tx.timestamp}>{localDate(tx.timestamp, i18n.language)}</time>
                   </td>
                   <td style={tdStyle}>
                     <a
@@ -124,7 +126,7 @@ export default function TransactionHistoryPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <nav
-          aria-label="Pagination"
+          aria-label={t("history.pagination")}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.75rem", marginTop: "1.5rem" }}
         >
           <button
@@ -132,19 +134,17 @@ export default function TransactionHistoryPage() {
             style={{ padding: "0.35rem 0.875rem" }}
             onClick={() => setPage(page - 1)}
             disabled={page === 1}
-            aria-label="Previous page"
+            aria-label={t("history.previous")}
           >
             ‹
           </button>
-          <span style={{ fontSize: "0.875rem" }}>
-            Page {page} of {totalPages}
-          </span>
+          <span style={{ fontSize: "0.875rem" }}>{t("history.page", { page, pages: totalPages })}</span>
           <button
             className="btn btn-outline"
             style={{ padding: "0.35rem 0.875rem" }}
             onClick={() => setPage(page + 1)}
             disabled={page === totalPages}
-            aria-label="Next page"
+            aria-label={t("history.next")}
           >
             ›
           </button>

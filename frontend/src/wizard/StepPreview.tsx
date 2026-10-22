@@ -1,4 +1,5 @@
 import { ledgersToDuration } from './useWizard'
+import { useTranslation } from 'react-i18next'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function StepPreview({ data, onNext, onBack }: Props) {
+  const { t } = useTranslation()
   const cliff = Number(data.cliffDuration)
   const total = Number(data.totalDuration)
   const rate  = Number(data.rate)
@@ -25,11 +27,11 @@ export function StepPreview({ data, onNext, onBack }: Props) {
         <Row label="Rate"          value={`${rate.toLocaleString()} tokens / ledger`} />
         <Row
           label="Cliff"
-          value={`${cliff.toLocaleString()} ledgers ≈ ${ledgersToDuration(cliff)}`}
+          value={`${cliff.toLocaleString()} ledgers ≈ ${ledgersToDuration(cliff, t)}`}
         />
         <Row
           label="Total duration"
-          value={`${total.toLocaleString()} ledgers ≈ ${ledgersToDuration(total)}`}
+          value={`${total.toLocaleString()} ledgers ≈ ${ledgersToDuration(total, t)}`}
         />
         <Row
           label="Total deposit"

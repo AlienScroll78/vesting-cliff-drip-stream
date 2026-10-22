@@ -10,12 +10,8 @@ const LANGS = [
 export function LanguageSwitcher() {
   const { i18n, t } = useTranslation();
 
-  // RTL stub: set dir attribute for future AR/HE support
   const handleChange = (lng: string) => {
-    i18n.changeLanguage(lng);
-    const rtlLangs = ["ar", "he"];
-    document.documentElement.dir = rtlLangs.includes(lng) ? "rtl" : "ltr";
-    document.documentElement.lang = lng;
+    void i18n.changeLanguage(lng);
   };
 
   return (

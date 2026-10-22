@@ -1,17 +1,17 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
-
-import en from "./locales/en.json";
-import es from "./locales/es.json";
-import zh from "./locales/zh.json";
+import Backend from "i18next-http-backend";
 
 i18n
+  .use(Backend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     fallbackLng: "en",
-    resources: { en: { translation: en }, es: { translation: es }, zh: { translation: zh } },
+    supportedLngs: ["en", "es", "zh"],
+    load: "languageOnly",
+    backend: { loadPath: "/locales/{{lng}}.json" },
     interpolation: { escapeValue: false },
   });
 

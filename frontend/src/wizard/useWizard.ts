@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import type { TFunction } from 'i18next'
 
 export const WIZARD_STEPS = [
   'connect-wallet',
@@ -36,12 +37,16 @@ const INITIAL_DATA: WizardFormData = {
 const LEDGERS_PER_SECOND = 0.2 // ~5 s per ledger
 
 /** Convert a ledger count to a human-readable duration string. */
-export function ledgersToDuration(ledgers: number): string {
+export function ledgersToDuration(ledgers: number, t: TFunction): string {
   const seconds = ledgers / LEDGERS_PER_SECOND
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`
-  return `${Math.round(seconds / 86400)}d`
+  const [unit, value] = seconds < 60
+    ? ['seconds', Math.round(seconds)]
+    : seconds < 3600
+      ? ['minutes', Math.round(seconds / 60)]
+      : seconds < 86400
+        ? ['hours', Math.round(seconds / 3600)]
+        : ['days', Math.round(seconds / 86400)]
+  return t(`duration.${unit}`, { count: value, value })
 }
 
 export function useWizard() {

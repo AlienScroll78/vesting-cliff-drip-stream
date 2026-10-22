@@ -36,7 +36,7 @@ function computeCancelAmounts(s: VestingStream) {
 }
 
 function StreamList() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { setPending, setConfirmed, setFailed } = useTx();
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
@@ -101,7 +101,7 @@ function StreamList() {
               </div>
               <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.4rem" }}>
                 <div style={{ fontWeight: 700 }}>
-                  {s.claimableAmount.toLocaleString()} {s.token}
+                  {s.claimableAmount.toLocaleString(i18n.language)} {s.token}
                 </div>
                 {s.status === "active" && (
                   <button

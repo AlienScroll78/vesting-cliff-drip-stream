@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "check-translations": "node scripts/check-translations.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "framer-motion": "^12.42.0",
     "i18next": "^26.3.2",
     "i18next-browser-languagedetector": "^8.2.1",
+    "i18next-http-backend": "^4.0.4",
     "intro.js": "^8.3.2",
     "posthog-js": "^1.393.5",
     "react": "^19.2.7",

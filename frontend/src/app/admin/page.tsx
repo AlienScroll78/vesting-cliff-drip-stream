@@ -32,7 +32,7 @@ async function triggerReindex(_token: string): Promise<void> {
 }
 
 export default function AdminPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [token, setToken] = useState<string>(() =>
     typeof window !== "undefined" ? (localStorage.getItem(ADMIN_TOKEN_KEY) ?? "") : ""
   );
@@ -101,7 +101,7 @@ export default function AdminPage() {
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
             {t("admin.autoRefresh")}
-            {lastRefresh && <> — {lastRefresh.toLocaleTimeString()}</>}
+            {lastRefresh && <> — {lastRefresh.toLocaleTimeString(i18n.language)}</>}
           </span>
           <button
             type="button"
@@ -115,7 +115,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {loading && !stats && <p>Loading…</p>}
+      {loading && !stats && <p>{t("admin.loading")}</p>}
 
       {stats && (
         <>
@@ -125,7 +125,7 @@ export default function AdminPage() {
                 {stats.status.toUpperCase()}
               </span>
             </StatCard>
-            <StatCard label={t("admin.lastLedger")}>{stats.lastLedger.toLocaleString()}</StatCard>
+            <StatCard label={t("admin.lastLedger")}>{stats.lastLedger.toLocaleString(i18n.language)}</StatCard>
             <StatCard label={t("admin.errorRate")}>{stats.errorRate}</StatCard>
           </div>
 
@@ -134,7 +134,7 @@ export default function AdminPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
               <thead>
                 <tr>
-                  {["Type", "Ledger", "Time"].map((h) => (
+                  {[t("admin.type"), t("admin.ledger"), t("admin.time")].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>{h}</th>
                   ))}
                 </tr>
@@ -142,9 +142,9 @@ export default function AdminPage() {
               <tbody>
                 {stats.recentEvents.map((ev) => (
                   <tr key={ev.id}>
-                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>{ev.type}</td>
-                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)", fontFamily: "monospace" }}>{ev.ledger.toLocaleString()}</td>
-                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>{new Date(ev.ts).toLocaleString()}</td>
+                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>{t(`adminEvents.${ev.type}`, { defaultValue: ev.type })}</td>
+                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)", fontFamily: "monospace" }}>{ev.ledger.toLocaleString(i18n.language)}</td>
+                    <td style={{ padding: "0.5rem", borderBottom: "1px solid var(--color-border)" }}>{new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "short" }).format(new Date(ev.ts))}</td>
                   </tr>
                 ))}
               </tbody>

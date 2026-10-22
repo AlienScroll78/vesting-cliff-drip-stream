@@ -1,7 +1,9 @@
 "use client";
 import { useWallet } from "@/contexts/WalletContext";
+import { useTranslation } from "react-i18next";
 
 export function WalletButton() {
+  const { t } = useTranslation();
   const { address, connect, disconnect } = useWallet();
 
   if (address) {
@@ -11,7 +13,7 @@ export function WalletButton() {
           {address.slice(0, 6)}…{address.slice(-4)}
         </span>
         <button onClick={disconnect} className="btn btn-outline">
-          Disconnect
+          {t("disconnectWallet")}
         </button>
       </div>
     );
@@ -19,7 +21,7 @@ export function WalletButton() {
 
   return (
     <button onClick={connect} className="btn btn-primary" data-testid="connect-wallet">
-      Connect Wallet
+      {t("connectWallet")}
     </button>
   );
 }

@@ -14,8 +14,10 @@ import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animatio
 import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
+import { useTranslation } from 'react-i18next'
 
 function App() {
+  const { t } = useTranslation()
   const [count, setCount] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   // demo: simulate an error code returned from the contract
@@ -24,7 +26,7 @@ function App() {
   // #120 — start tour for first-time users
   useOnboardingTour()
 
-  const errorInfo = errorCode != null ? getErrorInfo(errorCode) : null
+  const errorInfo = errorCode != null ? getErrorInfo(errorCode, t) : null
 
   return (
     // #121 — page fade-in on mount
