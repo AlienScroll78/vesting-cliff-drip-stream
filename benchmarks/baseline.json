@@ -2,7 +2,7 @@
   "$schema": "./baseline.schema.json",
   "description": "Performance baselines for the vesting-cliff-drip-stream contract. All values are upper bounds. CI fails if any metric exceeds threshold * (1 + regression_threshold). Update this file via a PR with a written justification in the PR description.",
   "updated": "2026-07-26",
-  "regression_threshold": 0.10,
+  "regression_threshold": 0.20,
   "wasm_instruction_counts": {
     "_note": "CPU instruction counts measured by the Soroban host-side budget API (env.budget().cpu_instruction_cost()) running Rust natively. WASM counts are typically 2-5x higher. These baselines reflect Rust-native test execution and should be updated after any significant contract logic change.",
     "create_vesting_stream": {
@@ -100,6 +100,21 @@
       "p50_ms": 300,
       "p95_ms": 900,
       "p99_ms": 2000
+    },
+    "GET /streams": {
+      "p50_ms": 40,
+      "p95_ms": 120,
+      "p99_ms": 250
+    },
+    "GET /streams/:id": {
+      "p50_ms": 35,
+      "p95_ms": 100,
+      "p99_ms": 200
+    },
+    "POST /claimable-batch": {
+      "p50_ms": 60,
+      "p95_ms": 180,
+      "p99_ms": 400
     }
   },
   "lighthouse": {

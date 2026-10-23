@@ -152,3 +152,16 @@ jobs:
                 body,
               });
             }
+
+      # ── Update README badge with actual coverage percentage ──────────────────
+      - name: Update README coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          PCT="${{ steps.cov.outputs.pct }}"
+          sed -i "s|coverage-[0-9.]*%25|coverage-${PCT}%25|" README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: update coverage badge to ${PCT}%"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

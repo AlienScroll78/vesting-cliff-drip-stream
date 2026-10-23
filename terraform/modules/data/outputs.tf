@@ -25,6 +25,11 @@ output "db_username" {
   sensitive   = true
 }
 
+output "rds_security_group_id" {
+  description = "Security group ID of the RDS PostgreSQL instance"
+  value       = aws_security_group.rds.id
+}
+
 output "redis_endpoint" {
   description = "Redis ElastiCache endpoint (host:port)"
   value       = aws_elasticache_cluster.redis.cache_nodes[0].address

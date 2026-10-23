@@ -7,6 +7,7 @@ import {
   useReducer,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export function useTx() {
 const STELLAR_EXPERT = "https://stellar.expert/explorer/testnet/tx";
 
 function TxDrawer() {
+  const { t } = useTranslation();
   const { tx, dismiss } = useTx();
   const titleId = useId();
 
@@ -117,7 +119,7 @@ function TxDrawer() {
           id={titleId}
           style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--color-text, #111827)" }}
         >
-          {title(status)}
+          {title(status, t)}
         </p>
 
         {status === "confirmed" && hash && (
@@ -151,7 +153,7 @@ function TxDrawer() {
         {(status === "confirmed" || status === "failed") && (
           <button
             onClick={dismiss}
-            aria-label="Dismiss transaction notification"
+            aria-label={t("tx.dismiss")}
             style={{
               background: "none",
               border: "none",
@@ -186,10 +188,10 @@ function icon(status: TxStatus) {
   return "⏳";
 }
 
-function title(status: TxStatus) {
-  if (status === "confirmed") return "Transaction confirmed";
-  if (status === "failed")    return "Transaction failed";
-  return "Transaction pending…";
+function title(status: TxStatus, t: (key: string) => string) {
+  if (status === "confirmed") return t("txConfirmed");
+  if (status === "failed")    return t("txFailed");
+  return t("txPending");
 }
 
 function Spinner() {
