@@ -1,0 +1,33 @@
+name: Dredd API Contract Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contract-tests:
+    name: OpenAPI Contract Tests (Dredd)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          npm --prefix backend ci
+          npm install -g dredd@14.1.0
+
+      - name: Run Dredd Contract Tests
+        run: |
+          dredd --config ./dredd.yml
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-contract-test-secret

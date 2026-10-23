@@ -527,3 +527,288 @@ export const NoNotificationsEmpty = NotificationsEmpty;
 export const NoSearchResultsEmpty = SearchResultsEmpty;
 export const StreamCompleteEmpty = ExpiredFullyClaimedState;
 export type { StreamCompletionEvidence };
+
+// ─── New empty-state components (5 required scenarios) ───────────────────────
+
+/** Illustration: inbox tray with a person walking toward a stream source */
+function RecipientNoStreamsIllustration() {
+  return (
+    <Illustration
+      label="An inbox with no streams and a person walking toward a flow source"
+      testId="empty-illustration-recipient-no-streams"
+    >
+      {/* background glow */}
+      <circle cx="60" cy="50" r="44" fill={COLORS.primary} fillOpacity="0.09" />
+      {/* inbox tray */}
+      <rect x="22" y="46" width="52" height="28" rx="5" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <path d="M22 58H40L44 52H52L56 58H74" stroke={COLORS.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {/* empty lines inside tray */}
+      <path d="M32 64H44M52 64H64" stroke={COLORS.muted} strokeWidth="1.5" strokeLinecap="round" />
+      {/* flowing stream / arrow */}
+      <path d="M60 22C60 22 68 30 68 38" stroke={COLORS.accent} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="4 3" />
+      <polyline points="63,35 68,38 73,35" stroke={COLORS.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* person figure */}
+      <circle cx="35" cy="28" r="7" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <path d="M28 46C28 38 35 34 35 34C35 34 42 38 42 46" stroke={COLORS.primary} strokeWidth="2" strokeLinecap="round" />
+      {/* dashed path toward stream */}
+      <path d="M42 40C48 38 54 36 60 36" stroke={COLORS.muted} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3" />
+    </Illustration>
+  );
+}
+
+/** Illustration: rocket launching from a launch pad */
+function SponsorCreateStreamIllustration() {
+  return (
+    <Illustration
+      label="A rocket launching from a pad, representing creating a new vesting stream"
+      testId="empty-illustration-sponsor-create-stream"
+    >
+      {/* background glow */}
+      <circle cx="60" cy="50" r="44" fill={COLORS.primary} fillOpacity="0.09" />
+      {/* launch pad */}
+      <rect x="44" y="76" width="32" height="6" rx="3" fill={COLORS.muted} />
+      <rect x="52" y="72" width="16" height="6" rx="2" fill={COLORS.secondary} />
+      {/* rocket body */}
+      <path d="M60 24L70 52H50L60 24Z" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" strokeLinejoin="round" />
+      {/* rocket window */}
+      <circle cx="60" cy="42" r="5" fill={COLORS.surface} stroke={COLORS.accent} strokeWidth="2" />
+      {/* fins */}
+      <path d="M50 52L44 62H50V52Z" fill={COLORS.primary} fillOpacity="0.5" />
+      <path d="M70 52L76 62H70V52Z" fill={COLORS.primary} fillOpacity="0.5" />
+      {/* exhaust flame */}
+      <path d="M55 72C55 72 58 80 60 82C62 80 65 72 65 72" fill={COLORS.warning} fillOpacity="0.9" />
+      <path d="M57 72C57 72 59 76 60 78C61 76 63 72 63 72" fill={COLORS.danger} fillOpacity="0.7" />
+      {/* stars */}
+      <circle cx="28" cy="28" r="2" fill={COLORS.accent} />
+      <circle cx="92" cy="34" r="2" fill={COLORS.warning} />
+      <circle cx="86" cy="20" r="1.5" fill={COLORS.accent} fillOpacity="0.7" />
+    </Illustration>
+  );
+}
+
+/** Illustration: timeline / event log with a clock and a "just started" marker */
+function EventHistoryNewIllustration() {
+  return (
+    <Illustration
+      label="A timeline with a clock showing a stream was just created"
+      testId="empty-illustration-event-history-new"
+    >
+      {/* background glow */}
+      <circle cx="60" cy="50" r="44" fill={COLORS.accent} fillOpacity="0.08" />
+      {/* vertical timeline axis */}
+      <line x1="40" y1="22" x2="40" y2="80" stroke={COLORS.muted} strokeWidth="2" strokeLinecap="round" />
+      {/* single event dot at top — the stream creation event */}
+      <circle cx="40" cy="30" r="6" fill={COLORS.surface} stroke={COLORS.accent} strokeWidth="2" />
+      <circle cx="40" cy="30" r="2.5" fill={COLORS.accent} />
+      {/* event label line */}
+      <path d="M48 30H72" stroke={COLORS.secondary} strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="72" y="22" width="28" height="16" rx="4" fill={COLORS.surface} stroke={COLORS.accent} strokeWidth="1.5" />
+      <path d="M76 30H96" stroke={COLORS.muted} strokeWidth="1.5" strokeLinecap="round" />
+      {/* future dots (faded) */}
+      <circle cx="40" cy="50" r="5" fill={COLORS.surface} stroke={COLORS.muted} strokeWidth="1.5" strokeDasharray="3 2" />
+      <circle cx="40" cy="68" r="5" fill={COLORS.surface} stroke={COLORS.muted} strokeWidth="1.5" strokeDasharray="3 2" />
+      {/* clock */}
+      <circle cx="88" cy="72" r="14" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <path d="M88 63V72L93 77" stroke={COLORS.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Illustration>
+  );
+}
+
+/** Illustration: magnifying glass with a funnel and a cross */
+function SearchFilterIllustration() {
+  return (
+    <Illustration
+      label="A magnifying glass overlapping a filter funnel with a cross, representing no filter matches"
+      testId="empty-illustration-search-filter"
+    >
+      {/* background glow */}
+      <circle cx="60" cy="50" r="44" fill={COLORS.warning} fillOpacity="0.07" />
+      {/* filter funnel */}
+      <path d="M22 26H58L46 46V68L34 62V46Z" fill={COLORS.surface} stroke={COLORS.secondary} strokeWidth="2" strokeLinejoin="round" />
+      <path d="M26 32H54" stroke={COLORS.muted} strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M30 38H50" stroke={COLORS.muted} strokeWidth="1.5" strokeLinecap="round" />
+      {/* magnifying glass */}
+      <circle cx="80" cy="52" r="18" fill={COLORS.surface} stroke={COLORS.danger} strokeWidth="2.5" />
+      <line x1="93" y1="65" x2="104" y2="76" stroke={COLORS.danger} strokeWidth="3" strokeLinecap="round" />
+      {/* X inside lens */}
+      <line x1="73" y1="45" x2="87" y2="59" stroke={COLORS.danger} strokeWidth="2.5" strokeLinecap="round" />
+      <line x1="87" y1="45" x2="73" y2="59" stroke={COLORS.danger} strokeWidth="2.5" strokeLinecap="round" />
+    </Illustration>
+  );
+}
+
+/** Illustration: wallet with a lock and a connection plug */
+function WalletDisconnectedIllustration() {
+  return (
+    <Illustration
+      label="A wallet with a lock and a disconnected plug, representing a wallet not connected"
+      testId="empty-illustration-wallet-disconnected"
+    >
+      {/* background glow */}
+      <circle cx="60" cy="50" r="44" fill={COLORS.warning} fillOpacity="0.09" />
+      {/* wallet body */}
+      <rect x="24" y="36" width="56" height="38" rx="7" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="2" />
+      <rect x="24" y="36" width="56" height="16" rx="7" fill={COLORS.primary} fillOpacity="0.15" />
+      {/* wallet pocket */}
+      <rect x="64" y="48" width="20" height="14" rx="5" fill={COLORS.surface} stroke={COLORS.primary} strokeWidth="1.5" />
+      <circle cx="74" cy="55" r="3" fill={COLORS.primary} fillOpacity="0.4" />
+      {/* lock badge */}
+      <circle cx="38" cy="34" r="12" fill={COLORS.surface} stroke={COLORS.warning} strokeWidth="2" />
+      <path d="M33 34C33 31.2 35.2 29 38 29C40.8 29 43 31.2 43 34H33Z" fill={COLORS.warning} />
+      <rect x="32" y="34" width="12" height="8" rx="2" fill={COLORS.warning} />
+      <circle cx="38" cy="38" r="1.5" fill={COLORS.contrast} />
+      {/* disconnected plug cable */}
+      <path d="M72 22V30" stroke={COLORS.muted} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="3 3" />
+      <path d="M68 28H76" stroke={COLORS.muted} strokeWidth="2.5" strokeLinecap="round" />
+    </Illustration>
+  );
+}
+
+// ── RecipientEmpty ────────────────────────────────────────────────────────────
+
+/** Recipient dashboard: no active streams yet */
+export function RecipientEmpty() {
+  return (
+    <EmptyState
+      testId="empty-state"
+      stateId="recipient-no-streams"
+      illustration={<RecipientNoStreamsIllustration />}
+      heading="You have no active streams."
+      subtext="Share your address with a sponsor to get started."
+    />
+  );
+}
+
+// ── SponsorEmpty ──────────────────────────────────────────────────────────────
+
+export interface SponsorEmptyCreateProps {
+  onCreateStream?: () => void;
+}
+
+/** Sponsor dashboard: no streams created yet */
+export function SponsorEmpty({ onCreateStream }: SponsorEmptyCreateProps = {}) {
+  const cta = onCreateStream ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      onClick={onCreateStream}
+      data-testid="sponsor-empty-create-stream"
+    >
+      Create your first vesting stream
+    </button>
+  ) : (
+    <a
+      href="/"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      data-testid="sponsor-empty-create-stream"
+    >
+      Create your first vesting stream
+    </a>
+  );
+
+  return (
+    <EmptyState
+      testId="empty-state"
+      stateId="sponsor-no-streams"
+      illustration={<SponsorCreateStreamIllustration />}
+      heading="No vesting streams yet."
+      subtext="Start rewarding your contributors with predictable, cliff-locked vesting."
+      cta={cta}
+    />
+  );
+}
+
+// ── EventHistoryEmpty ─────────────────────────────────────────────────────────
+
+/** Stream event history: stream was just created, no events recorded yet */
+export function EventHistoryEmpty() {
+  return (
+    <EmptyState
+      testId="empty-state"
+      stateId="event-history-empty"
+      illustration={<EventHistoryNewIllustration />}
+      heading="Stream just created — events will appear as activity occurs."
+      subtext="Claims, cancellations, and other on-chain actions will show up here once they happen."
+    />
+  );
+}
+
+// ── SearchEmpty ───────────────────────────────────────────────────────────────
+
+export interface SearchEmptyFilterProps {
+  onClearFilters?: () => void;
+}
+
+/** Search / filter panel: active filters returned no results */
+export function SearchEmpty({ onClearFilters }: SearchEmptyFilterProps = {}) {
+  const cta = onClearFilters ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-outline btn--secondary`}
+      onClick={onClearFilters}
+      data-testid="search-empty-clear-filters"
+    >
+      Clear filters
+    </button>
+  ) : (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-outline btn--secondary`}
+      data-testid="search-empty-clear-filters"
+      disabled
+    >
+      Clear filters
+    </button>
+  );
+
+  return (
+    <EmptyState
+      testId="empty-state"
+      stateId="search-no-results"
+      illustration={<SearchFilterIllustration />}
+      heading="No streams match your filters."
+      subtext="Try adjusting or removing your filters to see more results."
+      cta={cta}
+    />
+  );
+}
+
+// ── WalletNotConnectedEmpty ───────────────────────────────────────────────────
+
+export interface WalletNotConnectedEmptyProps {
+  onConnect?: () => void;
+}
+
+/** Wallet not connected: prompt the user to connect */
+export function WalletNotConnectedEmpty({ onConnect }: WalletNotConnectedEmptyProps = {}) {
+  const cta = onConnect ? (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      onClick={onConnect}
+      data-testid="wallet-empty-connect"
+    >
+      Connect wallet
+    </button>
+  ) : (
+    <button
+      type="button"
+      className={`${styles.action} btn btn-primary btn--primary`}
+      data-testid="wallet-empty-connect"
+      disabled
+    >
+      Connect wallet
+    </button>
+  );
+
+  return (
+    <EmptyState
+      testId="empty-state"
+      stateId="wallet-not-connected"
+      illustration={<WalletDisconnectedIllustration />}
+      heading="Connect your wallet to view your streams."
+      subtext="Connect your Stellar wallet to see your vesting streams and claim your tokens."
+      cta={cta}
+    />
+  );
+}

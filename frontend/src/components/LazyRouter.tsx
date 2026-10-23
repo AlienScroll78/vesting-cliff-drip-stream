@@ -17,7 +17,7 @@
  */
 
 import React, { lazy, Suspense, useEffect, useState } from "react";
-import { RouteErrorBoundary, useRouteResetKey } from "@/components/ErrorBoundary";
+import { ErrorBoundary, useRouteResetKey } from "@/components/ErrorBoundary";
 import {
   DashboardSkeleton,
   StreamListSkeleton,
@@ -120,7 +120,7 @@ function routeSkeleton(route: string): React.ReactElement {
 
 /**
  * LazyRouter renders the correct page component for the current URL, wrapping
- * each in a RouteErrorBoundary and Suspense with appropriate skeleton fallback.
+ * each in an ErrorBoundary and Suspense with appropriate skeleton fallback.
  *
  * Preloads the streams chunk once the wallet context mounts (dashboard users
  * are very likely to visit /streams next).
@@ -137,11 +137,13 @@ export function LazyRouter() {
   }, []);
 
   return (
-    <RouteErrorBoundary routeKey={routeKey}>
+    <ErrorBoundary key={routeKey}>
       <Suspense fallback={routeSkeleton(match.route)}>
-        <RouteContent match={match} />
+        <div key={pathname} className="mobile-route-transition">
+          <RouteContent match={match} />
+        </div>
       </Suspense>
-    </RouteErrorBoundary>
+    </ErrorBoundary>
   );
 }
 

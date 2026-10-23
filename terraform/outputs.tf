@@ -18,19 +18,24 @@ output "alb_dns_name" {
   value       = module.compute.alb_dns_name
 }
 
-output "waf_web_acl_arn" {
-  description = "Regional WAF Web ACL ARN"
-  value       = module.compute.waf_web_acl_arn
+output "alb_security_group_id" {
+  description = "Security group ID of the Application Load Balancer"
+  value       = module.compute.alb_security_group_id
 }
 
-output "waf_log_group_name" {
-  description = "CloudWatch log group receiving WAF decisions"
-  value       = module.compute.waf_log_group_name
+output "backend_security_group_id" {
+  description = "Security group ID of the ECS backend API tasks"
+  value       = module.compute.backend_security_group_id
 }
 
-output "waf_dashboard_name" {
-  description = "CloudWatch dashboard name for WAF metrics"
-  value       = module.compute.waf_dashboard_name
+output "indexer_security_group_id" {
+  description = "Security group ID of the ECS event indexer tasks"
+  value       = module.compute.indexer_security_group_id
+}
+
+output "rds_security_group_id" {
+  description = "Security group ID of the PostgreSQL RDS instance"
+  value       = module.data.rds_security_group_id
 }
 
 output "ecs_cluster_name" {
@@ -46,6 +51,21 @@ output "ecs_service_name" {
 output "ecs_task_definition_arn" {
   description = "Current ECS API task definition ARN"
   value       = module.compute.ecs_task_definition_arn
+}
+
+output "fargate_spot_capacity_provider" {
+  description = "Capacity provider backing the Spot indexer"
+  value       = module.compute.fargate_spot_capacity_provider_name
+}
+
+output "indexer_service_name" {
+  description = "ECS service running the indexer on Fargate Spot"
+  value       = module.compute.indexer_service_name
+}
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN assumed by GitHub Actions workflows via OIDC"
+  value       = aws_iam_role.github_actions.arn
 }
 
 output "codedeploy_application_name" {
@@ -124,7 +144,7 @@ output "cost_alert_topic_arn" {
 
 output "cost_allocation_tag" {
   description = "Cost allocation tag activated in Cost Explorer."
-  value       = "${var.project_name}"
+  value       = var.project_name
 }
 
 output "monthly_cost_report_function" {
@@ -135,14 +155,4 @@ output "monthly_cost_report_function" {
 output "monthly_cost_report_schedule" {
   description = "EventBridge Scheduler schedule that triggers the monthly report."
   value       = aws_scheduler_schedule.monthly_cost_report.name
-}
-
-output "fargate_spot_capacity_provider" {
-  description = "Capacity provider backing the Spot indexer."
-  value       = aws_capacity_provider.fargate_spot.name
-}
-
-output "indexer_service_name" {
-  description = "ECS service running the indexer on Fargate Spot."
-  value       = aws_ecs_service.indexer.name
 }

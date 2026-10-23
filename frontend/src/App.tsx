@@ -9,11 +9,13 @@ import { Tooltip } from './Tooltip'
 // #122 — error message map
 import { getErrorInfo } from './errorMessages'
 // #121 — Framer Motion animations
-import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animations'
+import { PageTransition, AnimatedProgressBar } from './animations'
 // #120 — onboarding tour
 import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
+// #532 — real-time claimable amount display
+import { ClaimableAmountDisplay } from './components/ClaimableAmountDisplay'
 
 // #539 — register service worker for offline support
 function registerServiceWorker() {
@@ -32,6 +34,7 @@ function registerServiceWorker() {
 }
 
 function App() {
+  const { t } = useTranslation()
   const [count, setCount] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   // demo: simulate an error code returned from the contract
@@ -40,7 +43,7 @@ function App() {
   // #120 — start tour for first-time users
   useOnboardingTour()
 
-  const errorInfo = errorCode != null ? getErrorInfo(errorCode) : null
+  const errorInfo = errorCode != null ? getErrorInfo(errorCode, t) : null
 
   return (
     // #121 — page fade-in on mount
@@ -61,13 +64,10 @@ function App() {
           </p>
         </div>
 
-        {/* #121 — animated claimable balance */}
+        {/* #532 — real-time auto-refreshing claimable balance */}
         <p style={{ marginTop: '12px', color: 'var(--text)' }}>
           Claimable balance:{' '}
-          <strong>
-            <AnimatedBalance value={count * 100} />
-          </strong>{' '}
-          tokens
+          <ClaimableAmountDisplay recipient="GABC1...XYZ" intervalMs={5000} />
         </p>
 
         {/* #121 — animated progress bar */}

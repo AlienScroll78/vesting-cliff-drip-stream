@@ -74,11 +74,12 @@ module "compute" {
 }
 
 module "data" {
-  source                = "./modules/data"
-  environment           = var.environment
-  vpc_id                = module.network.vpc_id
-  private_subnet_ids    = module.network.private_subnet_ids
-  db_password           = var.db_password
-  db_instance_class     = var.db_instance_class
-  backup_failure_emails = var.cost_alert_emails
+  source                 = "./modules/data"
+  environment            = var.environment
+  vpc_id                 = module.network.vpc_id
+  private_subnet_ids     = module.network.private_subnet_ids
+  ecs_security_group_ids = [module.compute.backend_security_group_id, module.compute.indexer_security_group_id]
+  db_password            = var.db_password
+  db_instance_class      = var.db_instance_class
+  backup_failure_emails  = var.cost_alert_emails
 }

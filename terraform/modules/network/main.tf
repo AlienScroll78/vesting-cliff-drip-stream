@@ -1,7 +1,7 @@
 data "aws_availability_zones" "available" {}
 
 locals {
-  az_count = 2
+  az_count = 3
 }
 
 resource "aws_vpc" "main" {

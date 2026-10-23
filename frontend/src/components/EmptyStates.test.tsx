@@ -2,11 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  EventHistoryEmpty,
   ExpiredFullyClaimedState,
   NewUserEmpty,
   NotificationsEmpty,
+  RecipientEmpty,
+  SearchEmpty,
   SearchResultsEmpty,
+  SponsorEmpty,
   SponsorStreamListEmpty,
+  WalletNotConnectedEmpty,
   isExpiredAndFullyClaimed,
 } from "./EmptyStates";
 
@@ -150,5 +155,141 @@ describe("isExpiredAndFullyClaimed", () => {
         totalReceived: 0,
       }),
     ).toBe(false);
+  });
+});
+
+describe("RecipientEmpty", () => {
+  it("shows exact required copy and illustration", () => {
+    render(<RecipientEmpty />);
+    expect(
+      screen.getByRole("heading", { name: "You have no active streams." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Share your address with a sponsor to get started."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /inbox with no streams/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the recipient-no-streams data-state", () => {
+    const { container } = render(<RecipientEmpty />);
+    expect(container.querySelector('[data-state="recipient-no-streams"]')).toBeTruthy();
+  });
+});
+
+describe("SponsorEmpty", () => {
+  it("shows exact required copy and illustration", () => {
+    render(<SponsorEmpty />);
+    expect(
+      screen.getByRole("heading", { name: "No vesting streams yet." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /rocket launching/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a 'Create your first vesting stream' CTA button", () => {
+    render(<SponsorEmpty />);
+    expect(
+      screen.getByRole("link", { name: "Create your first vesting stream" }),
+    ).toBeInTheDocument();
+  });
+
+  it("invokes the onCreateStream callback when provided", async () => {
+    const onCreateStream = vi.fn();
+    render(<SponsorEmpty onCreateStream={onCreateStream} />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create your first vesting stream" }),
+    );
+    expect(onCreateStream).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EventHistoryEmpty", () => {
+  it("shows exact required copy and illustration", () => {
+    render(<EventHistoryEmpty />);
+    expect(
+      screen.getByRole("heading", {
+        name: "Stream just created — events will appear as activity occurs.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /timeline with a clock/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the event-history-empty data-state", () => {
+    const { container } = render(<EventHistoryEmpty />);
+    expect(container.querySelector('[data-state="event-history-empty"]')).toBeTruthy();
+  });
+});
+
+describe("SearchEmpty", () => {
+  it("shows exact required copy and illustration", () => {
+    render(<SearchEmpty />);
+    expect(
+      screen.getByRole("heading", { name: "No streams match your filters." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /magnifying glass overlapping a filter funnel/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a 'Clear filters' button", () => {
+    render(<SearchEmpty />);
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+  });
+
+  it("invokes onClearFilters when the button is clicked", async () => {
+    const onClearFilters = vi.fn();
+    render(<SearchEmpty onClearFilters={onClearFilters} />);
+    await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("WalletNotConnectedEmpty", () => {
+  it("shows exact required copy and illustration", () => {
+    render(<WalletNotConnectedEmpty />);
+    expect(
+      screen.getByRole("heading", { name: "Connect your wallet to view your streams." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /wallet with a lock/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a 'Connect wallet' CTA button", () => {
+    render(<WalletNotConnectedEmpty />);
+    expect(screen.getByRole("button", { name: "Connect wallet" })).toBeInTheDocument();
+  });
+
+  it("invokes onConnect when the button is clicked", async () => {
+    const onConnect = vi.fn();
+    render(<WalletNotConnectedEmpty onConnect={onConnect} />);
+    await userEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(onConnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("All 5 new empty states render distinct accessible illustrations", () => {
+  it("each illustration has a unique accessible label", () => {
+    render(
+      <>
+        <RecipientEmpty />
+        <SponsorEmpty />
+        <EventHistoryEmpty />
+        <SearchEmpty />
+        <WalletNotConnectedEmpty />
+      </>,
+    );
+
+    const illustrations = screen.getAllByRole("img");
+    // at minimum the 5 new ones exist (there may be more from other states)
+    expect(illustrations.length).toBeGreaterThanOrEqual(5);
+    const labels = illustrations.map((el) => el.getAttribute("aria-label") ?? "");
+    const unique = new Set(labels);
+    expect(unique.size).toBe(labels.length);
   });
 });

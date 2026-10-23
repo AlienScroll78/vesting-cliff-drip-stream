@@ -34,25 +34,24 @@ let previousKey: RsaKeyPair | null = null;
 // ---------------------------------------------------------------------------
 
 function generateKeyPair(): RsaKeyPair {
+  // No encoding options: they make generateKeyPairSync return PEM strings
+  // instead of KeyObjects, breaking .export() calls below.
   const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
-    publicKeyEncoding: { type: "spki", format: "pem" },
-    privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
 
   // Derive a stable kid from the public key's DER fingerprint
-  const pubDer = publicKey
-    .export({ type: "spki", format: "der" });
+  const pubDer = publicKey.export({ type: "spki", format: "der" }) as Buffer;
   const kid = crypto
     .createHash("sha256")
-    .update(pubDer as Buffer)
+    .update(pubDer)
     .digest("hex")
     .slice(0, 16);
 
   return {
     kid,
-    privateKey: privateKey as unknown as crypto.KeyObject,
-    publicKey: publicKey as unknown as crypto.KeyObject,
+    privateKey,
+    publicKey,
     createdAt: Date.now(),
   };
 }

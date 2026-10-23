@@ -25,11 +25,10 @@ export type {
   HorizonEventRecord,
 } from './types.js';
 
-// Issue #996 — Stream balance tracking
+// Issue #997 — Terminal event handlers (StreamCancelled, StreamClawedBack)
 export {
-  incrementClaimedTotal,
-  initStreamBalance,
-  getStreamBalance,
-  recomputeBalance,
-} from './balanceTracker.js';
-export type { StreamBalance, BalanceUpdateResult } from './balanceTracker.js';
+  handleStreamCancelled,
+  handleStreamClawedBack,
+  handleTerminalEvent,
+} from './terminalEventHandlers.js';
+export type { TerminalEventResult } from './terminalEventHandlers.js';

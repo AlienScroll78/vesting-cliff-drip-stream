@@ -31,6 +31,29 @@
 - [ ] Inline `///` doc comments added for all public functions and types
 - [ ] README updated if the public API or Quick Start steps changed
 
+## Accessibility
+
+> Skip this section only for PRs that touch no UI code (e.g. pure Rust contract changes, infra-only, docs).
+> Full requirements: [docs/accessibility-audit.md](../docs/accessibility-audit.md)
+
+### Automated (CI)
+
+- [ ] `npm run test:a11y` passes — zero axe-core `critical` or `serious` violations on all affected routes
+- [ ] No new `:focus { outline: none }` or `*:focus { outline: 0 }` in CSS
+
+### Manual checks (required for any component add/change)
+
+- [ ] Keyboard: tab through all interactive elements — focus order is logical and no focus traps introduced
+- [ ] Keyboard: skip-to-main link is first tab stop and moves focus into `<main>` correctly
+- [ ] Keyboard: all modals/dialogs close on `Escape` and return focus to the trigger element
+- [ ] Colour: every state change conveyed by colour also has an icon, label, or ARIA attribute (1.4.1)
+- [ ] Contrast: new text/background combinations are ≥ 4.5:1 normal text, ≥ 3:1 large text and UI components (1.4.3, 1.4.11)
+- [ ] Motion: new animations/transitions skip or instant-cut under `prefers-reduced-motion: reduce`
+- [ ] Screen reader: all dynamic state changes (toasts, errors, live balances) are announced via the correct live region policy (`polite` or `assertive`)
+- [ ] Forms: every input has a visible `<label>`, `aria-describedby` for hints/errors, and `aria-invalid="true"` on validation failure
+- [ ] Icons: all icon-only buttons have `aria-label`; all decorative icons have `aria-hidden="true"`
+- [ ] Timers: countdown timers (cliff countdown) use `aria-live="off"` — one-off milestone announcements use `role="alert"`
+
 ## Security
 
 - [ ] `require_auth()` used correctly for all state-mutating entry points

@@ -16,6 +16,9 @@ import {
 } from "./routes/authV2.js";
 import { adminContractRouter } from "./routes/adminContract.js";
 import { initKeyStore } from "./auth/keyStore.js";
+import { vestingRouter } from "./routes/vesting.js";
+import { claimableBatchRouter } from "./routes/claimableBatch.js";
+import { attachWebSocketServer } from "./ws.js";
 
 // Initialise RSA key store on startup
 initKeyStore();
@@ -48,6 +51,10 @@ app.use("/api/admin", adminContractRouter);
 
 // Issue #26 — REST API for vesting schedule queries
 app.use("/api", vestingRouter);
+
+// Issue #1062 — Batch claimable amounts (mirrors the on-chain view)
+app.use("/api", claimableBatchRouter);
+app.use("/", claimableBatchRouter);
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 const httpServer = http.createServer(app);
