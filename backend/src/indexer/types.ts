@@ -123,4 +123,11 @@ export interface IndexerConfig {
   finalityDepth: number;
   /** TCP port on which the Prometheus /metrics endpoint is served. */
   metricsPort: number;
+  /**
+   * Fallback paging cursor used when the cursor table has no saved row
+   * (e.g. fresh database or a corrupted / missing `indexer_cursors` entry).
+   * Accepts a Horizon paging token or a ledger sequence number; empty string
+   * means "start from genesis". Configurable via `INDEXER_DEFAULT_START_LEDGER`.
+   */
+  defaultStartLedger: string;
 }

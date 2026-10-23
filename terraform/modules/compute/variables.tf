@@ -18,6 +18,36 @@ variable "container_image" {
   default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
 }
 
+variable "container_name" {
+  description = "Name of the application container"
+  type        = string
+  default     = "vesting-backend"
+}
+
+variable "container_cpu" {
+  description = "CPU units for the backend container (1 vCPU = 1024)"
+  type        = number
+  default     = 256
+}
+
+variable "container_memory" {
+  description = "Memory for the backend container in MiB"
+  type        = number
+  default     = 512
+}
+
+variable "container_port" {
+  description = "Port exposed by the backend container"
+  type        = number
+  default     = 8080
+}
+
+variable "indexer_container_image" {
+  description = "Container image for the event indexer service"
+  type        = string
+  default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
+}
+
 variable "secrets" {
   description = "Map of environment variable name to the Secrets Manager valueFrom selector used to populate it."
   type        = map(string)
@@ -43,8 +73,8 @@ variable "alb_idle_timeout" {
 }
 
 variable "app_log_group_name" {
-  type = string
-
+  type        = string
+  default     = "/ecs/vesting-backend"
   description = <<-EOT
     CloudWatch log group the API server ships to, e.g. /ecs/api-server. Both the
     app container's awslogs driver and the Fluent Bit sidecar write here.
@@ -52,8 +82,8 @@ variable "app_log_group_name" {
 }
 
 variable "app_log_group_arns" {
-  type = list(string)
-
+  type        = list(string)
+  default     = ["*"]
   description = <<-EOT
     ARNs the task role may write log streams to. Scoping this to the application
     log groups is what keeps the sidecar from being an account-wide log writer.
@@ -70,18 +100,6 @@ variable "fluentbit_image" {
   description = "Fluent Bit image used as the log shipper sidecar."
   type        = string
   default     = "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
-}
-
-variable "container_image" {
-  description = "Container image used by the ECS task definition"
-  type        = string
-  default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
-}
-
-variable "container_name" {
-  description = "Name of the application container"
-  type        = string
-  default     = "vesting-backend"
 }
 
 variable "codedeploy_bake_minutes" {

@@ -60,6 +60,7 @@ export const VESTING_ERROR_CODES = {
   StreamNotPaused: 24,
   VersionOverflow: 25,
   ClawbackNotSupported: 26,
+  InvalidToken: 27,
 } as const;
 
 export type VestingErrorName = keyof typeof VESTING_ERROR_CODES;
@@ -358,6 +359,20 @@ export const errorMessages: Record<number, ErrorInfo> = {
     retryable: false,
     faqUrl: "#token-support",
     i18nKey: key("ClawbackNotSupported"),
+  },
+
+  // ── Token validation ───────────────────────────────────────────────────────
+
+  27: {
+    title: "That token address isn't valid",
+    explanation:
+      "The token address doesn't appear to be a valid Stellar Asset Contract (SAC). A balance probe failed during stream creation.",
+    action:
+      "Double-check the token address. It must be a deployed SAC contract, not a raw asset code or a non-token contract.",
+    category: "contract",
+    retryable: false,
+    faqUrl: "#token-support",
+    i18nKey: key("InvalidToken"),
   },
 };
 

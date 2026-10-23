@@ -21,6 +21,7 @@ import pt from "./locales/pt.json";
 export const LANG_STORAGE_KEY = "vesting-language";
 
 i18n
+  .use(Backend)
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({

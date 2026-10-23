@@ -44,10 +44,10 @@ function generateKeyPair(): RsaKeyPair {
   });
 
   // Derive a stable kid from the public key's DER fingerprint
-  const pubDer = publicKey.export({ type: "spki", format: "der" });
+  const pubDer = publicKey.export({ type: "spki", format: "der" }) as Buffer;
   const kid = crypto
     .createHash("sha256")
-    .update(pubDer as Buffer)
+    .update(pubDer)
     .digest("hex")
     .slice(0, 16);
 

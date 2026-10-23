@@ -80,7 +80,7 @@ const LEDGERS_PER_SECOND = 0.2
 export const I128_MAX = BigInt('170141183460469231731687303715884105727')
 
 /** Convert a ledger count to a human-readable duration string. */
-export function ledgersToDuration(ledgers: number): string {
+export function ledgersToDuration(ledgers: number, t: TFunction): string {
   const seconds = ledgers / LEDGERS_PER_SECOND
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`

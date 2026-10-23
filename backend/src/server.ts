@@ -16,7 +16,45 @@ import { adminContractRouter } from "./routes/adminContract.js";
 import { vestingRouter } from "./routes/vesting.js";
 import { attachWebSocketServer } from "./ws.js";
 import { initKeyStore } from "./auth/keyStore.js";
-import { runMigrationsOrExit } from "./migrate.js";
+import { vestingRouter } from "./routes/vesting.js";
+import { claimableBatchRouter } from "./routes/claimableBatch.js";
+import { attachWebSocketServer } from "./ws.js";
+
+// Initialise RSA key store on startup
+initKeyStore();
+
+const app = express();
+app.use(express.json());
+
+// Rate limiting on all public routes (#32)
+app.use(rateLimitMiddleware);
+
+// Apply idempotency middleware to mutating endpoints
+app.use(["/api/streams", "/api/claim", "/api/cancel"], idempotencyMiddleware);
+
+// Health / readiness probes (#35)
+app.get("/health", healthHandler);
+app.get("/ready", readyHandler);
+
+// Analytics (#34)
+app.get("/analytics/sponsor/:address", sponsorAnalyticsHandler);
+
+// Issue #742 — Auth endpoints (RS256 JWT + Stellar wallet signature)
+app.post("/api/auth/challenge", challengeHandler);
+app.post("/api/auth/token", tokenHandler);
+app.post("/api/auth/refresh", refreshHandler);
+// JWKS endpoint for public-key discovery
+app.get("/.well-known/jwks.json", jwksHandler);
+
+// Issue #742 — Protected admin contract endpoints (require admin JWT)
+app.use("/api/admin", adminContractRouter);
+
+// Issue #26 — REST API for vesting schedule queries
+app.use("/api", vestingRouter);
+
+// Issue #1062 — Batch claimable amounts (mirrors the on-chain view)
+app.use("/api", claimableBatchRouter);
+app.use("/", claimableBatchRouter);
 
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
 

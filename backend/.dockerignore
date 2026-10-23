@@ -1,0 +1,56 @@
+# .dockerignore — backend/
+#
+# Excludes files that must not be in the production image:
+#   - Development dependencies installed locally
+#   - TypeScript output (built inside the container, not copied in)
+#   - Test fixtures and test files
+#   - Local environment variable files containing secrets
+#   - Version control metadata
+#   - Editor and CI artifacts
+
+# ── Node modules ─────────────────────────────────────────────────────────────
+node_modules/
+.npm/
+.pnpm-store/
+
+# ── Build output (generated inside the container) ────────────────────────────
+dist/
+*.js.map
+*.d.ts
+
+# ── Test files ───────────────────────────────────────────────────────────────
+tests/
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+vitest.config.ts
+vitest.*.config.ts
+coverage/
+.nyc_output/
+
+# ── Environment and secrets ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Version control ───────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── Editor metadata ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── CI / tooling ──────────────────────────────────────────────────────────────
+.github/
+Makefile
+*.md
+!package.json
+!package-lock.json
+!tsconfig.json

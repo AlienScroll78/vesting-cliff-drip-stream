@@ -24,3 +24,11 @@ export type {
   FetchPageResult,
   HorizonEventRecord,
 } from './types.js';
+
+// Issue #997 — Terminal event handlers (StreamCancelled, StreamClawedBack)
+export {
+  handleStreamCancelled,
+  handleStreamClawedBack,
+  handleTerminalEvent,
+} from './terminalEventHandlers.js';
+export type { TerminalEventResult } from './terminalEventHandlers.js';
