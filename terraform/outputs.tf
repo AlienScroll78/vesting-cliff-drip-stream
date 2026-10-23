@@ -182,3 +182,30 @@ output "production_alarm_names" {
     aws_cloudwatch_metric_alarm.service_down.alarm_name,
   ]
 }
+
+# ─── CloudFront / Frontend (#1092) ────────────────────────────────────────────
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for the frontend static site"
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
+output "cloudfront_distribution_domain" {
+  description = "CloudFront distribution domain name (*.cloudfront.net)"
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}
+
+output "frontend_url" {
+  description = "Public HTTPS URL for the frontend application"
+  value       = "https://${local.frontend_domain}"
+}
+
+output "frontend_s3_bucket" {
+  description = "S3 bucket name backing the CloudFront origin"
+  value       = aws_s3_bucket.frontend.bucket
+}
+
+output "frontend_waf_web_acl_arn" {
+  description = "WAF WebACL ARN attached to the CloudFront distribution"
+  value       = aws_wafv2_web_acl.frontend.arn
+}
