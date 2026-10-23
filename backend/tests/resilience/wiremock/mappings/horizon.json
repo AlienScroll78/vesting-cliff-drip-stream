@@ -1,0 +1,26 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "GET",
+        "urlPattern": "/__admin/health"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\"status\":\"ok\"}",
+        "headers": { "Content-Type": "application/json" }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "urlPattern": "/accounts/.*"
+      },
+      "response": {
+        "status": 200,
+        "body": "{\"id\":\"test-account\"}",
+        "headers": { "Content-Type": "application/json" }
+      }
+    }
+  ]
+}

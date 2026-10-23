@@ -1,0 +1,14 @@
+{
+  "event": "StreamClawedBack",
+  "topics": {
+    "0": { "type": "Symbol", "value": "vc_claw" },
+    "1": { "type": "Address", "description": "recipient address" }
+  },
+  "data": {
+    "0": { "type": "Address", "description": "sponsor address" },
+    "1": { "type": "Address", "description": "token address" },
+    "2": { "type": "i128",    "description": "amount clawed back to sponsor" },
+    "3": { "type": "String",  "description": "compliance reason (max 256 chars)" }
+  },
+  "changelog": []
+}

@@ -1,0 +1,14 @@
+{
+  "event": "StreamDrained",
+  "topics": {
+    "0": { "type": "Symbol", "value": "vc_drain" },
+    "1": { "type": "Address", "description": "recipient address" }
+  },
+  "data": {
+    "0": { "type": "Address", "description": "caller address (permissionless)" },
+    "1": { "type": "Address", "description": "sponsor address (receives tokens)" },
+    "2": { "type": "Address", "description": "token address" },
+    "3": { "type": "i128",    "description": "amount drained to sponsor" }
+  },
+  "changelog": []
+}

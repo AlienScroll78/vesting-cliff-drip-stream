@@ -1,0 +1,280 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "TerraformStateReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": [
+        "arn:aws:s3:::vestingdrips-terraform-state-staging",
+        "arn:aws:s3:::vestingdrips-terraform-state-staging/*",
+        "arn:aws:s3:::vestingdrips-terraform-state-production",
+        "arn:aws:s3:::vestingdrips-terraform-state-production/*"
+      ]
+    },
+    {
+      "Sid": "TerraformStateLockAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/vestingdrips-terraform-locks-staging",
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/vestingdrips-terraform-locks-production"
+      ]
+    },
+    {
+      "Sid": "EC2ReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:Describe*",
+        "ec2:Get*",
+        "ec2:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:Describe*",
+        "ecs:List*",
+        "ecs:Get*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "RDSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "rds:Describe*",
+        "rds:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ElastiCacheReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "elasticache:Describe*",
+        "elasticache:List*",
+        "elasticache:Get*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ElasticLoadBalancingReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:Describe*",
+        "cloudwatch:Get*",
+        "cloudwatch:List*",
+        "logs:Describe*",
+        "logs:List*",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "KMSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKey",
+        "kms:GetKeyPolicy",
+        "kms:ListAliases",
+        "kms:ListKeys"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SNSReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "sns:ListTopics",
+        "sns:GetTopicAttributes",
+        "sns:ListSubscriptionsByTopic",
+        "sns:GetSubscriptionAttributes",
+        "sns:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Route53ReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZones",
+        "route53:GetHostedZone",
+        "route53:GetHostedZoneCount",
+        "route53:ListResourceRecordSets",
+        "route53:GetChange",
+        "route53:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CostExplorerReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "ce:Describe*",
+        "ce:Get*",
+        "ce:List*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BudgetsReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "budgets:ViewBudget",
+        "budgets:DescribeBudgets",
+        "budgets:GetBudget"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetPolicy",
+        "lambda:ListFunctions",
+        "lambda:ListTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TagReadAccess",
+      "Effect": "Allow",
+      "Action": [
+        "tag:GetResources",
+        "tag:DescribeTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManagerDescribeOnly",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecrets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManagerGetValueDenyAll",
+      "Effect": "Deny",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyApplicationResourceWrites",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:Create*",
+        "ec2:Delete*",
+        "ec2:Modify*",
+        "ec2:Run*",
+        "ec2:Start*",
+        "ec2:Stop*",
+        "ec2:Terminate*",
+        "ec2:Attach*",
+        "ec2:Detach*",
+        "ec2:Associate*",
+        "ec2:Disassociate*",
+        "ecs:Create*",
+        "ecs:Delete*",
+        "ecs:DeregisterContainerInstance",
+        "ecs:DeregisterTaskDefinition",
+        "ecs:RegisterTaskDefinition",
+        "ecs:RunTask",
+        "ecs:StartTask",
+        "ecs:StopTask",
+        "ecs:SubmitContainerStateChange",
+        "ecs:SubmitTaskStateChange",
+        "ecs:UpdateContainerAgent",
+        "ecs:UpdateContainerInstancesState",
+        "ecs:UpdateService",
+        "rds:Create*",
+        "rds:Delete*",
+        "rds:Modify*",
+        "rds:Restore*",
+        "elasticache:Create*",
+        "elasticache:Delete*",
+        "elasticache:Modify*",
+        "iam:Create*",
+        "iam:Delete*",
+        "iam:Attach*",
+        "iam:Detach*",
+        "iam:Put*",
+        "iam:Update*",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "elasticloadbalancing:Create*",
+        "elasticloadbalancing:Delete*",
+        "elasticloadbalancing:Modify*",
+        "elasticloadbalancing:Register*",
+        "elasticloadbalancing:Deregister*",
+        "secretsmanager:Create*",
+        "secretsmanager:Delete*",
+        "secretsmanager:Put*",
+        "secretsmanager:Update*",
+        "secretsmanager:RotateSecret",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "s3:PutBucketVersioning"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyDynamoDBApplicationWrites",
+      "Effect": "Deny",
+      "Action": [
+        "dynamodb:Create*",
+        "dynamodb:Delete*",
+        "dynamodb:Update*",
+        "dynamodb:PutItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource"
+      ],
+      "NotResource": [
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/vestingdrips-terraform-locks-staging",
+        "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/vestingdrips-terraform-locks-production"
+      ]
+    }
+  ]
+}

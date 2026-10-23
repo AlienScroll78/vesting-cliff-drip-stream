@@ -1,0 +1,271 @@
+name: Contract CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Run weekly on Sunday at midnight UTC for mutation tests
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  MSRV: "1.84"
+  COVERAGE_THRESHOLD: "90"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: Build contract (wasm32-unknown-unknown) across stable Rust and MSRV
+  # ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: build (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, "1.84"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.rust }}
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-build-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-build-
+
+      - name: Build contract WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Run unit / native tests across stable Rust and MSRV
+  # ─────────────────────────────────────────────────────────────────────────────
+  test:
+    name: test (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, "1.84"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-test-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-test-
+
+      - name: Run native cargo tests
+        run: cargo test --features testutils
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Soroban WASM runner test across stable Rust and MSRV
+  # ─────────────────────────────────────────────────────────────────────────────
+  test-wasm:
+    name: test-wasm (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, "1.84"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.rust }}
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-wasm-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-wasm-
+
+      - name: Build WASM artifact
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Run Soroban WASM runner tests
+        run: cargo test --test contract_spec --features contract-spec-tests
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: Lint with clippy across stable Rust and MSRV
+  # ─────────────────────────────────────────────────────────────────────────────
+  lint:
+    name: lint (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, "1.84"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy, rustfmt
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-lint-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lint-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-lint-
+
+      - name: Run Clippy
+        run: cargo clippy --deny warnings --all-targets --all-features
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 5: Test coverage with cargo llvm-cov and threshold enforcement (90%)
+  # ─────────────────────────────────────────────────────────────────────────────
+  coverage:
+    name: coverage (cargo llvm-cov)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust stable with llvm-tools
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate coverage reports and enforce 90% threshold
+        run: |
+          mkdir -p docs/coverage/html
+          cargo llvm-cov \
+            --features testutils \
+            --html \
+            --output-dir docs/coverage/html \
+            --lcov \
+            --output-path docs/coverage/lcov.info \
+            --ignore-filename-regex 'src/tests/.*' \
+            --fail-under-lines ${{ env.COVERAGE_THRESHOLD }}
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.6.1
+        with:
+          name: contract-coverage-report
+          path: docs/coverage/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 6: Mutation testing with cargo mutants (schedule only)
+  # ─────────────────────────────────────────────────────────────────────────────
+  mutants:
+    name: mutants (cargo mutants)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo dependencies and target
+        uses: actions/cache@d4323d4505794420042551e83867c1990e938205 # v4.2.2
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mutants-
+
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked --version "24.9.0"
+
+      - name: Run cargo mutants
+        run: |
+          cargo mutants --features testutils \
+            --file src/contract.rs \
+            --file src/storage.rs \
+            --output mutants.out \
+            --jobs 2
+
+      - name: Upload mutation testing results
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.6.1
+        with:
+          name: contract-mutation-results
+          path: mutants.out/
+          retention-days: 14

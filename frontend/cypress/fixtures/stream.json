@@ -1,0 +1,13 @@
+{
+  "id": "stream-1",
+  "recipient": "GABC1EXAMPLERECIPIENTADDRESSXYZ",
+  "sponsor": "GSPONSOR_ADDRESS_EXAMPLE_XYZ",
+  "token": "USDC",
+  "rate": 10,
+  "claimableAmount": 1500,
+  "status": "active",
+  "startLedger": 51027200,
+  "cliffLedger": 51113600,
+  "endLedger": 57248000,
+  "totalDeposit": 63072000
+}

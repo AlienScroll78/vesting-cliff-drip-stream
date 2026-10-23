@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { WizardFormData } from './useWizard'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 type State = 'idle' | 'submitting' | 'success' | 'error'
 
 export function StepConfirm({ data, onBack, onDone }: Props) {
+  const { t } = useTranslation()
   const [state, setState] = useState<State>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
@@ -21,7 +23,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
       await new Promise(r => setTimeout(r, 1200))
       setState('success')
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Transaction failed')
+      setErrorMsg(e instanceof Error ? e.message : t('txFailed'))
       setState('error')
     }
   }
@@ -30,9 +32,9 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
     return (
       <div style={{ ...styles.card, alignItems: 'center', textAlign: 'center' }}>
         <div style={styles.successIcon}>✓</div>
-        <h2 style={styles.heading}>Stream created!</h2>
+        <h2 style={styles.heading}>{t('wizard.streamCreated')}</h2>
         <p style={styles.sub}>
-          Tokens are now locked. The recipient can claim after the cliff.
+          {t('wizard.streamCreatedDescription')}
         </p>
         <button
           type="button"
@@ -40,7 +42,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
           onClick={onDone}
           data-testid="wizard-done-btn"
         >
-          Done
+          {t('wizard.done')}
         </button>
       </div>
     )
@@ -48,14 +50,13 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.heading}>Confirm &amp; sign</h2>
+      <h2 style={styles.heading}>{t('wizard.confirmSign')}</h2>
       <p style={styles.sub}>
-        Clicking <strong>Sign &amp; Submit</strong> will open Freighter for your approval.
+        {t('wizard.signDescription')}
       </p>
 
       <p style={styles.warn}>
-        ⚠️ Once submitted you cannot undo the deposit (you may cancel the stream later, but fees
-        are non-refundable).
+        {t('wizard.depositWarning')}
       </p>
 
       {state === 'error' && (
@@ -72,7 +73,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
           disabled={state === 'submitting'}
           data-testid="wizard-back-btn"
         >
-          ← Back
+          ← {t('history.back')}
         </button>
         <button
           type="button"
@@ -81,7 +82,7 @@ export function StepConfirm({ data, onBack, onDone }: Props) {
           onClick={submit}
           data-testid="wizard-submit-btn"
         >
-          {state === 'submitting' ? 'Signing…' : 'Sign & Submit'}
+          {state === 'submitting' ? t('wizard.signing') : t('wizard.signSubmit')}
         </button>
       </div>
     </div>

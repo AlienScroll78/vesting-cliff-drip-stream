@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# invoke_create.sh – Create a vesting stream via the CLI
+# invoke_create.sh – Create a fixed-rate vesting stream via the CLI
+#
+# Prerequisites:
+#   The contract must have been initialized via deploy.sh (which calls
+#   `initialize` automatically). If you deployed manually, run:
+#
+#     stellar contract invoke --id $VESTING_CONTRACT --source $SPONSOR \
+#       --network testnet -- initialize \
+#       --admin <ADMIN_ADDRESS> --fee_bps 0 --treasury <TREASURY_ADDRESS>
 #
 # Required env vars:
 #   VESTING_CONTRACT  – deployed contract ID

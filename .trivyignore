@@ -1,0 +1,3 @@
+# Trivy ignore entries must include a CVE and a written justification.
+# Keep this file empty until a finding is reviewed and accepted as a false positive.
+# Example: CVE-YYYY-NNNN: Accepted false positive; explain the affected component and compensating control.

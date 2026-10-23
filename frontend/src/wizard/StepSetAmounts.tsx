@@ -1,4 +1,5 @@
 import { Tooltip } from '../Tooltip'
+import { useTranslation } from 'react-i18next'
 import { ledgersToDuration } from './useWizard'
 import type { WizardFormData } from './useWizard'
 
@@ -9,14 +10,14 @@ interface Props {
   onBack: () => void
 }
 
-function fieldError(data: WizardFormData): string | null {
+function fieldError(data: WizardFormData, t: (key: string) => string): string | null {
   const rate = Number(data.rate)
   const cliff = Number(data.cliffDuration)
   const total = Number(data.totalDuration)
-  if (data.rate && rate <= 0) return 'Rate must be a positive integer.'
+  if (data.rate && rate <= 0) return t('wizard.invalidRate')
   if (data.cliffDuration && data.totalDuration && cliff >= total)
-    return 'Cliff duration must be less than total duration.'
-  if (data.totalDuration && total <= 0) return 'Total duration must be positive.'
+    return t('wizard.invalidCliff')
+  if (data.totalDuration && total <= 0) return t('wizard.invalidTotal')
   return null
 }
 
@@ -28,17 +29,18 @@ function totalDeposit(data: WizardFormData): string {
 }
 
 export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
-  const error = fieldError(data)
+  const { t } = useTranslation()
+  const error = fieldError(data, t)
   const canContinue =
     !!data.rate && !!data.cliffDuration && !!data.totalDuration && !!data.recipient && !error
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.heading}>Set amounts &amp; durations</h2>
+      <h2 style={styles.heading}>{t('wizard.setAmounts')}</h2>
 
       <Field
-        label="Recipient address"
-        tooltip="Stellar account (G…) that will receive streamed tokens."
+        label={t('home.recipientAddress')}
+        tooltip={t('wizard.recipientHelp')}
         testId="wizard-recipient"
       >
         <input
@@ -51,8 +53,8 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
       </Field>
 
       <Field
-        label="Rate (tokens / ledger)"
-        tooltip="How many tokens drip to the recipient per ledger (~5 s). Must be a positive integer."
+        label={t('rate')}
+        tooltip={t('wizard.rateHelp')}
         testId="wizard-rate"
       >
         <input
@@ -66,8 +68,8 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
       </Field>
 
       <Field
-        label={`Cliff duration (ledgers)${data.cliffDuration ? ` ≈ ${ledgersToDuration(Number(data.cliffDuration))}` : ''}`}
-        tooltip="Number of ledgers before any tokens unlock. At the cliff, all accrued tokens release instantly. Must be less than total duration."
+        label={`${t('cliffDuration')}${data.cliffDuration ? ` ≈ ${ledgersToDuration(Number(data.cliffDuration), t)}` : ''}`}
+        tooltip={t('wizard.cliffHelp')}
         testId="wizard-cliff"
       >
         <input
@@ -81,8 +83,8 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
       </Field>
 
       <Field
-        label={`Total duration (ledgers)${data.totalDuration ? ` ≈ ${ledgersToDuration(Number(data.totalDuration))}` : ''}`}
-        tooltip="Total length of the vesting stream in ledgers. Remaining tokens drip linearly after the cliff until this end point."
+        label={`${t('totalDuration')}${data.totalDuration ? ` ≈ ${ledgersToDuration(Number(data.totalDuration), t)}` : ''}`}
+        tooltip={t('wizard.totalHelp')}
         testId="wizard-total"
       >
         <input
@@ -96,7 +98,7 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
       </Field>
 
       <p style={styles.deposit}>
-        Total deposit: <strong data-testid="wizard-deposit">{totalDeposit(data)}</strong>{' '}
+        {t('wizard.totalDeposit')}: <strong data-testid="wizard-deposit">{totalDeposit(data)}</strong>{' '}
         {data.tokenSymbol || 'tokens'}
       </p>
 
@@ -104,7 +106,7 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
 
       <div style={styles.actions}>
         <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
-          ← Back
+          ← {t('history.back')}
         </button>
         <button
           type="button"
@@ -113,7 +115,7 @@ export function StepSetAmounts({ data, update, onNext, onBack }: Props) {
           onClick={onNext}
           data-testid="wizard-next-btn"
         >
-          Preview →
+          {t('wizard.preview')} →
         </button>
       </div>
     </div>

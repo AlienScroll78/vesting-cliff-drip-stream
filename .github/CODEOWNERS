@@ -1,0 +1,57 @@
+# CODEOWNERS
+#
+# Each line is a file pattern followed by one or more owners.
+# Owners are matched in order; the last matching rule takes precedence.
+# Teams must be referenced as @org/team-slug.
+# Individuals as @username.
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ── Default fallback (catches anything not matched below) ─────────────────────
+*                               @your-org/maintainers
+
+# ── Smart contract (Rust / Soroban) ──────────────────────────────────────────
+/src/                           @contract-team
+/Cargo.toml                     @contract-team
+/Cargo.lock                     @contract-team
+/.cargo/                        @contract-team
+
+# ── Contract test suite ───────────────────────────────────────────────────────
+/src/tests/                     @qa-team
+/tests/                         @qa-team
+
+# ── Backend (Node.js / TypeScript) ────────────────────────────────────────────
+/backend/                       @your-org/backend-reviewers
+
+# ── Frontend (React / Vite) ───────────────────────────────────────────────────
+/frontend/                      @your-org/frontend-reviewers
+/ui/                            @your-org/frontend-reviewers
+/design-system/                 @your-org/frontend-reviewers
+/public/                        @your-org/frontend-reviewers
+
+# ── DevOps / Infrastructure ───────────────────────────────────────────────────
+/terraform/                     @infra-team
+/k8s/                           @infra-team
+/helm/                          @infra-team
+/infra/                         @infra-team
+/Dockerfile                     @infra-team
+/docker-compose*.yml            @infra-team
+
+# ── CI / GitHub Actions ───────────────────────────────────────────────────────
+/.github/workflows/             @infra-team
+/.github/                       @your-org/maintainers
+
+# ── Scripts ───────────────────────────────────────────────────────────────────
+/scripts/                       @infra-team
+
+# ── Security-sensitive files (require maintainer sign-off) ───────────────────
+/SECURITY.md                    @your-org/maintainers
+/audit.toml                     @your-org/maintainers
+/.github/CODEOWNERS             @your-org/maintainers
+/scripts/apply_branch_protection.sh  @your-org/maintainers
+
+# ── Documentation ─────────────────────────────────────────────────────────────
+/docs/                          @docs-team
+/README.md                      @docs-team
+/CHANGELOG.md                   @docs-team
+/CONTRIBUTING.md                @docs-team

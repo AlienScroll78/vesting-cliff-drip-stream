@@ -47,11 +47,11 @@ describe("mapHorizonBalances", () => {
         balance: "1000.0000000",
       },
     ]);
-    expect(result[0].assetCode).toBe("USDC");
-    expect(result[0].contractAddress).toBe(
+    expect(result[0]!.assetCode).toBe("USDC");
+    expect(result[0]!.contractAddress).toBe(
       "USDC:GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
     );
-    expect(result[0].balance).toBe("1000.0000000");
+    expect(result[0]!.balance).toBe("1000.0000000");
   });
 
   test("filters out liquidity_pool_shares entries", () => {
@@ -60,7 +60,7 @@ describe("mapHorizonBalances", () => {
       { asset_type: "native", balance: "10.0000000" },
     ]);
     expect(result).toHaveLength(1);
-    expect(result[0].assetCode).toBe("XLM");
+    expect(result[0]!.assetCode).toBe("XLM");
   });
 
   test("returns empty array for empty input", () => {

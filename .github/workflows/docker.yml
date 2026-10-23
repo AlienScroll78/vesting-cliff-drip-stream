@@ -1,15 +1,46 @@
 name: Docker Build & Push
 
+# Builds optimised multi-stage images for the backend API and event indexer,
+# scans them with Trivy (critical/high CVEs block merge), and pushes to ghcr.io.
+#
+# Triggers:
+#   push to main — builds, scans, and pushes both images
+#   pull_request  — builds and scans only (no push), acts as a merge gate
+
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/docker.yml"
+      - "docker-compose.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/docker.yml"
+      - "docker-compose.yml"
 
 jobs:
-  build:
+  build-and-scan:
+    name: Build, scan & push (${{ matrix.service }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            dockerfile: backend/Dockerfile
+            context: backend
+            image: backend
+          - service: indexer
+            dockerfile: backend/Dockerfile.indexer
+            context: backend
+            image: indexer
 
     steps:
       - name: Checkout
@@ -22,28 +53,100 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to ghcr.io
+        if: github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      # Build the production stage only (not `deps` or `build`) so the image
+      # scanned and pushed is the minimal production artifact.
+      - name: Build ${{ matrix.service }} image for scanning
+        uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: prod
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ matrix.image }}:scan
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            GIT_REVISION=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # Print compressed image size so it's visible in the PR and job summary.
+      - name: Report image size
+        run: |
+          SIZE=$(docker image inspect ${{ matrix.image }}:scan \
+            --format '{{.Size}}' | awk '{printf "%.1f MB", $1/1024/1024}')
+          echo "### Image size: ${{ matrix.service }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Compressed size: **${SIZE}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image size for ${{ matrix.service }}: ${SIZE}"
+
+      # Gate: fail on unfixed critical/high CVEs (exit-code 1 triggers failure).
+      - name: Trivy scan — ${{ matrix.service }} (gate)
+        id: trivy_gate
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ matrix.image }}:scan
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      # SARIF upload always runs so the Security tab shows results even if the
+      # gate fails.
+      - name: Trivy scan — ${{ matrix.service }} (SARIF)
+        if: always()
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ matrix.image }}:scan
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          exit-code: "0"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-docker-${{ matrix.service }}
+
+      # Enforce the gate: if Trivy found unfixed critical/high CVEs, fail now.
+      - name: Enforce Trivy vulnerability gate
+        if: steps.trivy_gate.outcome == 'failure'
+        run: |
+          echo "::error::Trivy found unfixed HIGH/CRITICAL CVEs in ${{ matrix.service }}. Merge blocked."
+          exit 1
+
+      # Build multi-arch and push only on pushes to main (not on PRs).
+      - name: Build and push ${{ matrix.service }}
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: prod
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Scan image for vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.20.0
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.image }}:latest
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            GIT_REVISION=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
