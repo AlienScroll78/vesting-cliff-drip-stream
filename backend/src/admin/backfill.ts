@@ -7,8 +7,8 @@
  * Endpoint:
  *   POST /admin/backfill?from_ledger=N&to_ledger=M
  *
- * Security: protected by the requireAdminAuth Bearer-token middleware
- * (ADMIN_API_KEY environment variable), mounted via the admin router.
+ * Security: protected by the JWT admin auth middleware (RS256 bearer token
+ * with role='admin'), mounted via the admin router (issue #1003).
  *
  * Behaviour:
  *   1. Validates from_ledger / to_ledger query params.
