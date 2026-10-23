@@ -156,6 +156,13 @@ See [ADR-0006](adr/0006-checked-arithmetic-strategy.md) for the full strategy.
 
 ### Clawback
 
+A compliance mechanism allowing the original [sponsor](#sponsor) to recover all remaining tokens from a vesting stream, regardless of [cliff](#cliff) status. Only available on tokens that support the [SAC](#sac-stellar-asset-contract) [clawback flag](#clawback-flag). Used for regulatory compliance scenarios such as AML violations, sanctions list matches, or court orders. Invoked via [`clawback_stream`](api-reference.md#clawback_stream) with a mandatory reason string for audit trails.
+
+---
+
+### Clawback Flag
+
+An authorization setting on a classic Stellar asset that lets the issuing account freeze balances or reclaim tokens via the [SAC (Stellar Asset Contract)](#sac-stellar-asset-contract). One-sentence definition: the clawback flag is the on-chain switch that makes [clawback](#clawback) possible. Sponsors must issue or select a token with this flag enabled before calling [`clawback_stream`](api-reference.md#clawback_stream); without it, clawback attempts fail with `ClawbackNotSupported`. See [docs/events.md](events.md#streamclawedback) for the `StreamClawedBack` event an indexer should watch.
 A compliance mechanism allowing the original [sponsor](#sponsor) to recover all
 remaining tokens from a vesting stream, regardless of [cliff](#cliff) status.
 Only available on tokens that support the SAC (Stellar Asset Contract) clawback
@@ -269,6 +276,12 @@ strategy.
 
 **Related:** [Checked Arithmetic](#checked-arithmetic), [Overflow](#overflow),
 [Deposit](#deposit)
+
+---
+
+### Drain
+
+The sweeping of unclaimed dust from an expired stream back to the [sponsor](#sponsor) via [`drain_expired_stream`](api-reference.md#drain_expired_stream). One-sentence definition: a drain removes leftover tokens after expiry so no value stays locked in the contract's [vault](#vault). Drains are only permitted past `end_ledger` plus the [drain delay](#drain-delay), emit a `StreamDrained` event (see [docs/events.md](events.md#streamdrained)), and return dust-format amounts in the token's base unit. Related: [Emergency Drain](#emergency-drain), [TTL](#ttl-time-to-live).
 
 ---
 
@@ -693,6 +706,10 @@ for the full platform reference.
 **Related:** [WASM (WebAssembly)](#wasm-webassembly), [Ledger](#ledger),
 [Persistent Storage](#persistent-storage), [Instance Storage](#instance-storage)
 
+### Soroban RPC
+
+The JSON-RPC service an app or indexer calls to submit transactions, simulate contract calls, and fetch events from a [Soroban](#soroban) network. One-sentence definition: Soroban RPC is the gateway between off-chain clients and on-chain contracts. The REST backend uses it for view simulations, and indexers use its `getEvents` filter (contract address plus topic, see [docs/events.md](events.md#indexer-implementation-notes)) to track this contract. Related: [Horizon](#horizon), [XDR](#xdr-external-data-representation).
+
 ---
 
 ### Sponsor
@@ -718,6 +735,12 @@ but claims are blocked until [`cliff_ledger`](#cliff_ledger). Stored in
 
 **Related:** [`cliff_ledger`](#cliff_ledger), [`end_ledger`](#end_ledger),
 [Accrual](#accrual)
+
+---
+
+### Stellar
+
+A decentralized payments and smart-contract network secured by the Stellar Consensus Protocol (SCP). One-sentence definition: Stellar is the layer-1 network this project runs on. Ledgers close roughly every 5 seconds, and all contract time is measured in [ledgers](#ledger). Develop contracts with [Soroban](#soroban), inspect accounts and transactions with [Horizon](#horizon), and deploy with the [Stellar CLI](#stellar-cli-stellar). See the [Stellar Network](#stellar-network) entry and the [Quick Start](../README.md#quick-start).
 
 ---
 

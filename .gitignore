@@ -25,6 +25,9 @@ frontend/.next/
 frontend/playwright-report/
 frontend/test-results/
 
+# Storybook / Chromatic build output
+storybook-static/
+
 # Terraform
 **/.terraform/
 .terraform.lock.hcl

@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useDarkMode } from "./useDarkMode";
+import { useDarkMode, applyTheme } from "./useDarkMode";
 
 const STORAGE_KEY = "vesting-dark-mode";
 
@@ -68,5 +68,32 @@ describe("useDarkMode", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe("true");
     act(() => result.current[1]());
     expect(localStorage.getItem(STORAGE_KEY)).toBe("false");
+  });
+
+  // #536 — the CSS-variable path is driven by the data-theme attribute.
+  it("mirrors the dark state onto the data-theme attribute", () => {
+    const { result } = renderHook(() => useDarkMode());
+    expect(document.documentElement.dataset.theme).toBe("light");
+    act(() => result.current[1]());
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    act(() => result.current[1]());
+    expect(document.documentElement.dataset.theme).toBe("light");
+  });
+});
+
+describe("applyTheme", () => {
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    delete document.documentElement.dataset.theme;
+  });
+
+  it("sets both the legacy class and the data-theme attribute", () => {
+    applyTheme(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    applyTheme(false);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 });

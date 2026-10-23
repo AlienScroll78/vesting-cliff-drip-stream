@@ -1,4 +1,6 @@
 "use client";
+import { useState, type ChangeEvent, type FocusEvent } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { useEffect, useState, type ChangeEvent, type FocusEvent, type FormEvent, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { useWallet } from "@/contexts/WalletContext";
@@ -510,7 +512,13 @@ export function StreamCreateForm({ onSuccess }: Props) {
   );
 }
 
-interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
+export function StreamCreateForm(props: Props) {
+  return <ErrorBoundary><StreamCreateFormContent {...props} /></ErrorBoundary>;
+}
+
+// ── Field sub-component ───────────────────────────────────────────────────────
+
+interface FieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   id: string;
   label: string;
   error?: string;

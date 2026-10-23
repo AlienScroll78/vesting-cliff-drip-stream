@@ -19,7 +19,10 @@
 
 locals {
   backup_verify_log_group = "/aws/lambda/${var.environment}-vesting-backup-verify"
-  backup_verify_zip       = "${path.module}/.terraform-build/backup-verify.zip"
+  # Lambda source lives in infra/lambda/backup-verify/ (canonical location per
+  # issue #1093). The zip is built by Terraform's archive_file provider.
+  backup_verify_lambda_src = "${path.module}/../infra/lambda/backup-verify"
+  backup_verify_zip        = "${path.module}/.terraform-build/backup-verify.zip"
 
   # Tables that must exist and be countable in the restored copy. These are the
   # application's own tables; the count is the proof that the restore produced
@@ -205,7 +208,7 @@ resource "aws_cloudwatch_log_group" "backup_verify" {
 
 data "archive_file" "backup_verify" {
   type        = "zip"
-  source_dir  = "${path.module}/lambdas/backup-verify"
+  source_dir  = local.backup_verify_lambda_src
   output_path = local.backup_verify_zip
 
   # The test files are several hundred lines of fixtures and have no business in
