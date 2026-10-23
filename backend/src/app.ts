@@ -16,6 +16,7 @@ import { buildClaimTxRouter } from './routes/buildClaimTx.js';
 import { requestLoggerMiddleware } from './requestLogger.js';
 import { metricsMiddleware } from './middleware/metricsMiddleware.js';
 import { prometheusMetricsHandler } from './routes/metrics.js';
+import { corsMiddleware } from './middleware/cors.js';
 
 const app = express();
 
@@ -52,6 +53,9 @@ app.use('/streams', sponsorStreamsRouter);
 
 // Sponsor dashboard — GET /sponsors/:address/streams (Issue #1011)
 app.use('/api', sponsorDashboardRouter);
+
+// Stream balance — GET /api/streams/:recipient/balance (Issue #996)
+app.use('/api/streams', streamBalanceRouter);
 
 app.get(
   '/api/v1/schedules/:recipient',

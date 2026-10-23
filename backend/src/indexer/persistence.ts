@@ -17,7 +17,7 @@
 
 import { Pool } from 'pg';
 import type { DecodedStreamEvent } from './types.js';
-import { handleTerminalEvent } from './terminalEventHandlers.js';
+import { incrementClaimedTotal, initStreamBalance } from './balanceTracker.js';
 
 // ── Cursor management ─────────────────────────────────────────────────────────
 
@@ -94,12 +94,33 @@ export async function upsertStreamEvents(
         ev.transaction_hash,
       ]);
 
-      // Only apply terminal event handlers for rows that were actually
-      // inserted (not duplicates skipped by ON CONFLICT DO NOTHING).
+      // Only update balances for rows that were actually inserted (not
+      // duplicates skipped by ON CONFLICT DO NOTHING).  This ensures
+      // idempotency: re-processing the same event does not double-count.
       if ((result.rowCount ?? 0) > 0) {
-        // ── Terminal events: update stream status & record details ──────
-        if (ev.event_type === 'StreamCancelled' || ev.event_type === 'StreamClawedBack') {
-          await handleTerminalEvent(client, ev);
+        // ── StreamCreated: initialise the balance row ───────────────────
+        if (ev.event_type === 'StreamCreated' && ev.amount) {
+          // amount for StreamCreated is the total_deposit
+          // rate and total_duration are not available in the decoded event;
+          // they can be derived from the vesting_streams table or from the
+          // full event payload.  For now, we store total_deposit and leave
+          // rate/total_duration null — they will be backfilled by the
+          // reconciliation job.
+          await client.query(
+            `INSERT INTO stream_balances
+               (stream_id, total_deposit, claimed_total, remaining, updated_at)
+             VALUES ($1, $2, 0, $2, now())
+             ON CONFLICT (stream_id) DO UPDATE
+               SET total_deposit = EXCLUDED.total_deposit,
+                   remaining     = EXCLUDED.total_deposit - stream_balances.claimed_total,
+                   updated_at    = now()`,
+            [ev.recipient, ev.amount],
+          );
+        }
+
+        // ── TokensClaimed: increment claimed_total ─────────────────────
+        if (ev.event_type === 'TokensClaimed' && ev.amount) {
+          await incrementClaimedTotal(client, ev.recipient, ev.amount);
         }
       }
 
