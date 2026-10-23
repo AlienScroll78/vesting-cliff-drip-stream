@@ -12,7 +12,7 @@ import {
 } from "@/components/EmptyStates";
 import { isExpiredAndFullyClaimed } from "@/utils/streamCompletion";
 import { VestingStream } from "@/types";
-import { useWallet } from "@/contexts/WalletContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Stub lookup — replace with real contract read
 async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
@@ -249,4 +249,8 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
       )}
     </main>
   );
+}
+
+export default function ViewPageClient({ recipient }: { recipient: string }) {
+  return <ErrorBoundary><ViewPageContent recipient={recipient} /></ErrorBoundary>;
 }
