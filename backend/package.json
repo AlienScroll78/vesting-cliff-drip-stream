@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --loader tsx src/server.ts",
+    "dev": "node api.js && node --loader tsx src/server.ts",
     "backfill": "tsx scripts/backfill_stream_events.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
     "test:snapshots": "node scripts/run-snapshot-tests.mjs",

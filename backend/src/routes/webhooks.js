@@ -21,6 +21,7 @@ const {
   listDeliveryLogs,
 } = require("../webhookStore");
 const { SUPPORTED_EVENTS } = require("../webhookWorker");
+const { verifySignature } = require("../webhookSigner");
 
 // Lazy-load Zod schemas to stay CJS-compatible (validation.ts is ESM).
 // We use a dynamic require via the compiled output, or fall back to inline
@@ -55,6 +56,25 @@ function readBody(req) {
 function json(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(payload));
+}
+
+/**
+ * Verify an inbound webhook signature against the shared secret.
+ *
+ * The secret MUST be supplied via the WEBHOOK_HMAC_SECRET environment
+ * variable — never hardcoded.  Returns true when the signature matches,
+ * false otherwise (including when the secret is not configured).
+ */
+function verifyInboundSignature(rawBody, signatureHeader) {
+  const secret = process.env.WEBHOOK_HMAC_SECRET;
+  if (!secret || typeof signatureHeader !== "string" || signatureHeader.length === 0) {
+    return false;
+  }
+  try {
+    return verifySignature(rawBody, signatureHeader, secret);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -104,6 +124,16 @@ async function registerWebhookHandler(req, res) {
     parsed = JSON.parse(body);
   } catch {
     return json(res, 400, { error: "Invalid JSON" });
+  }
+
+  // ── HMAC verification (when a signature header is present) ──────────────────
+  // Only enforce signature verification when the caller supplies a signature;
+  // registration requests without one continue to work as before.
+  const signatureHeader = req.headers["x-webhook-signature"];
+  if (signatureHeader !== undefined) {
+    if (!verifyInboundSignature(body, signatureHeader)) {
+      return json(res, 401, { error: "Invalid webhook signature" });
+    }
   }
 
   // ── Body validation via Zod ─────────────────────────────────────────────────
@@ -210,4 +240,11 @@ module.exports = {
   registerWebhookHandler,
   deleteWebhookHandler,
   listDeliveriesHandler,
+  verifyInboundSignature,
 };
+
+// Test hooks: the exported verifyInboundSignature helper allows unit tests to
+// exercise HMAC verification with a secret sourced from WEBHOOK_HMAC_SECRET
+// (never hardcoded).  Integration tests should mock the webhook target with
+// nock and assert retry/backoff and delivery-history behaviour via the
+// webhookWorker and webhookStore modules.

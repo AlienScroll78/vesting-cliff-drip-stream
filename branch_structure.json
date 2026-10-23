@@ -1,0 +1,18 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "fix/issue-1069-write-tests-for-webhook-delivery-reliability",
+    "main",
+    "origin"
+  ],
+  "parent": {
+    "fix/issue-1069-write-tests-for-webhook-delivery-reliability": "main",
+    "main": null,
+    "origin": "main"
+  },
+  "order": [
+    "main",
+    "fix/issue-1069-write-tests-for-webhook-delivery-reliability",
+    "origin"
+  ]
+}

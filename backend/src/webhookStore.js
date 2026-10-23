@@ -1,4 +1,4 @@
-"use strict";
+"strict";
 
 /**
  * webhookStore.js — in-process storage for webhook registrations and
@@ -8,6 +8,9 @@
  */
 
 const { randomUUID } = require("crypto");
+
+const MAX_ATTEMPS = 3;
+const BACKFILL_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 // Map<id, WebhookRegistration>
 const registrations = new Map();
@@ -28,14 +31,14 @@ const deliveryLogs = new Map();
 /**
  * @typedef {Object} DeliveryLog
  * @property {string}      id           - UUID
- * @property {string}      webhookId    - parent registration id
- * @property {string}      event        - event type
- * @property {string}      payload      - JSON string sent
- * @property {string}      status       - 'pending' | 'success' | 'failed'
+ * @property {string}      webhookId     - parent registration id
+ * @property {string}      event         - event type
+ * @property {string}      payload       - JSON string sent
+ * @property {string}      status        - 'pending' | 'success' | 'failed'
  * @property {number}      attempts     - number of attempts made
- * @property {string|null} lastError    - last error message, if any
+ * @property {string null} lastError    - last error message, if any
  * @property {string}      createdAt    - ISO timestamp
- * @property {string}      updatedAt    - ISO timestamp
+ * @property {string}      updatedAt     - ISO timestamp
  */
 
 async function createRegistration({ sponsorId, url, secret, events }) {
@@ -102,6 +105,14 @@ async function listDeliveryLogs(webhookId) {
   return results.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+/**
+ * Reset all in-memory state. Intended for test isolation only.
+ */
+function _reset() {
+  registrations.clear();
+  deliveryLogs.clear();
+}
+
 module.exports = {
   createRegistration,
   getRegistration,
@@ -111,4 +122,7 @@ module.exports = {
   updateDeliveryLog,
   getDeliveryLog,
   listDeliveryLogs,
+  _reset,
+  MAX_ATTEMPS,
+  BACKFILL_WINDOW_MS,
 };
