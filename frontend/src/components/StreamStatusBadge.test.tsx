@@ -146,6 +146,17 @@ describe("StreamStatusBadge", () => {
     expect(badge.className).toContain("my-custom-class");
   });
 
+  it("transitions the badge and animates the icon when its status changes", () => {
+    const { rerender } = render(<StreamStatusBadge status="pre-cliff" showTooltip={false} />);
+    const lockedBadge = screen.getByTestId("stream-status-badge-pre-cliff");
+    expect(lockedBadge.className).toContain("stream-status-badge");
+
+    rerender(<StreamStatusBadge status="claimable" showTooltip={false} />);
+    const claimableBadge = screen.getByTestId("stream-status-badge-claimable");
+    expect(claimableBadge).toHaveTextContent("Claim Available");
+    expect(claimableBadge.querySelector(".stream-status-badge__icon")).toHaveTextContent("💰");
+  });
+
   // ── Spec label matching ────────────────────────────────────────────────────
 
   it.each([

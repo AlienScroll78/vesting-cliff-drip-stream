@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.BASE_URL ?? "http://localhost:3000";
+const baseOrigin = new URL(baseURL).origin;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -7,8 +10,20 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: process.env.BASE_URL ?? "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: baseOrigin,
+          localStorage: [
+            { name: "vesting_intro_complete", value: "true" },
+            { name: "vesting_onboarding_complete", value: "true" },
+          ],
+        },
+      ],
+    },
   },
   projects: [
     // ── Chromium with Freighter extension (requires real extension & seed) ──
