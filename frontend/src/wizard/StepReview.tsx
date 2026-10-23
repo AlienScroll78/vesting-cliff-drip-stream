@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { ledgersToDuration, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
+import { TransactionReviewSummary } from '@/components/TransactionReviewSummary'
 
 interface Props {
   data: WizardFormData
@@ -114,6 +115,8 @@ export function StepReview({ data, onNext, onBack, onDone }: Props) {
           <span data-testid="preview-total-deposit">{costBreakdown.totalDeposit.toLocaleString()} {data.tokenSymbol}</span>
         </div>
       </div>
+
+      <TransactionReviewSummary kind="create" />
 
       {overflow && (
         <div

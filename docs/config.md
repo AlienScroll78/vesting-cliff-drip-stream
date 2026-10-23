@@ -66,6 +66,8 @@ The backend validates all variables at startup using a Zod schema (`backend/src/
 
 The indexer (`backend/src/indexer.ts`) mirrors on-chain events to PostgreSQL. If `DATABASE_URL` is not set, the indexer is disabled and the server continues without it. All REST endpoints backed by the DB will be unavailable.
 
+The backend applies pending TypeScript migrations before listening and exits if migrations cannot be applied. Set `DB_MIGRATE_DRY_RUN=true` to preview pending migrations; startup still fails if the database is behind. Use `make db-migrate` and `make db-rollback` for manual migration operations.
+
 ### Cache (Redis)
 
 | Variable | Type | Default | Required | Description | Example |
@@ -96,13 +98,13 @@ The auth flow:
 
 | Variable | Type | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `RATE_LIMIT_IP_MAX` | `number` | `100` | No | Maximum requests per IP address per window. | `200` |
-| `RATE_LIMIT_KEY_MAX` | `number` | `1000` | No | Maximum requests per API key per window. | `500` |
-| `RATE_LIMIT_WINDOW_SEC` | `number` | `60` | No | Sliding window size in seconds. | `30` |
-| `RATE_LIMIT_BYPASS_IPS` | `string` | — | No | Comma-separated list of IP addresses that bypass rate limiting (e.g. internal load-balancer health-check IPs). | `10.0.0.1,10.0.0.2` |
-| `RATE_LIMIT_BYPASS_KEYS` | `string` | — | No | Comma-separated API keys that bypass rate limiting. Keep this list short. | `internal-monitor-key` |
+| `RATE_LIMIT_READ_MAX` | `number` | `60` | No | Token-bucket capacity for public read requests per IP per window. | `120` |
+| `RATE_LIMIT_BUILD_TX_MAX` | `number` | `10` | No | Token-bucket capacity for build-transaction requests per Stellar address per window. | `20` |
+| `RATE_LIMIT_ADMIN_MAX` | `number` | `5` | No | Token-bucket capacity for admin requests per JWT subject per window. | `10` |
+| `RATE_LIMIT_WINDOW_SEC` | `number` | `60` | No | Token refill window in seconds. | `30` |
+| `RATE_LIMIT_BYPASS_KEYS` | `string` | — | No | Comma-separated internal service API keys that bypass rate limiting. Keep this list short. | `indexer-service-key` |
 
-Rate limiting is implemented in `backend/src/middleware/rateLimit.ts` and uses Redis for distributed counters. The middleware applies to all public routes.
+Rate limiting is implemented in `backend/src/middleware/tokenBucketRateLimit.ts` with atomic Redis token buckets. Rejected requests increment `rate_limit_hit_total{endpoint,type}`, exposed at the authenticated `/admin/metrics` endpoint. Every 429 response includes `Retry-After`.
 
 ### Webhooks
 

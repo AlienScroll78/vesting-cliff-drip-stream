@@ -1,0 +1,10 @@
+# db-tests/.cargo/config.toml
+#
+# NOTE: This file does NOT override the workspace-root .cargo/config.toml
+# when cargo is invoked from the workspace root.  The db-tests CI job and the
+# local dev command must pass --target explicitly:
+#
+#   cargo test -p db-tests --target x86_64-unknown-linux-gnu
+#
+# The CI workflow handles this automatically via the `target` flag in the
+# "Run DB integration tests" step.

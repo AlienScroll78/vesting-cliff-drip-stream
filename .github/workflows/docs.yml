@@ -1,0 +1,83 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      # Re-deploy whenever docs content or site config changes
+      - "docs/**"
+      - "docs-site/**"
+      - ".github/workflows/docs.yml"
+    tags:
+      # Also trigger on release tags to snapshot a Docusaurus version
+      - "v*"
+  # Allow manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Cancel in-progress deployments when a new run starts on the same ref
+concurrency:
+  group: "docs-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Docusaurus site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history so Docusaurus can show "last updated" timestamps
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: docs-site
+
+      - name: Sync docs from repo docs/ directory
+        run: bash sync-docs.sh
+        working-directory: docs-site
+
+      # On a release tag: snapshot the current docs as a versioned release.
+      # The version label is derived from the tag (e.g. v1.2.3 → 1.2.3).
+      - name: Create Docusaurus version snapshot (release tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Snapshotting docs at version $VERSION"
+          npx docusaurus docs:version "$VERSION"
+        working-directory: docs-site
+
+      - name: Build Docusaurus site
+        run: npm run build
+        working-directory: docs-site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/build
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

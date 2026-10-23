@@ -4,13 +4,19 @@ on:
   push:
     branches: ["**"]
   pull_request:
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
-  WASM_SIZE_LIMIT_KB: "100"
+  # Configurable size budget (KB). Override in repo/org secrets if needed.
+  MAX_WASM_SIZE_KB: "50"
 
 jobs:
-  wasm-size:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: Build + check size on every push / PR branch
+  # ──────────────────────────────────────────────────────────────────────────
+  wasm-size-check:
+    name: Check WASM size ≤ ${{ env.MAX_WASM_SIZE_KB }} KB
     runs-on: ubuntu-latest
 
     steps:
@@ -33,38 +39,203 @@ jobs:
 
       - name: Install Stellar CLI
         run: |
-          curl -sSL https://raw.githubusercontent.com/stellar/stellar-cli/main/install.sh | bash
+          curl -sSfL https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$HOME/.cargo/bin" stellar
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Build WASM
-        run: cargo build --target wasm32-unknown-unknown --release
+      - name: Run make check-wasm-size
+        run: make check-wasm-size MAX_WASM_SIZE_KB=${{ env.MAX_WASM_SIZE_KB }}
 
-      - name: Optimize WASM
+      # Expose the raw size in bytes for the PR-comment job below
+      - name: Export WASM size
+        id: size
         run: |
+          SIZE_BYTES=$(wc -c < target/vesting_cliff_drip_stream.optimized.wasm)
+          SIZE_KB=$(( SIZE_BYTES / 1024 ))
+          echo "bytes=${SIZE_BYTES}" >> "$GITHUB_OUTPUT"
+          echo "kb=${SIZE_KB}"       >> "$GITHUB_OUTPUT"
+
+      # Keep an artifact so the PR-comment job can fetch it even in fork PRs
+      - name: Upload size artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-size
+          path: target/vesting_cliff_drip_stream.optimized.wasm
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: Post (or update) a PR comment showing size delta from main
+  # Runs only on pull_request events so it always has write permissions.
+  # ──────────────────────────────────────────────────────────────────────────
+  wasm-size-comment:
+    name: PR size-delta comment
+    needs: wasm-size-check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history to check out main
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-wasm-
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSfL https://github.com/stellar/stellar-cli/releases/latest/download/stellar-cli-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C "$HOME/.cargo/bin" stellar
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      # ── PR branch size (reuse artifact from job 1) ──────────────────────
+      - name: Download PR WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-size
+          path: /tmp/pr-wasm
+
+      - name: Record PR size
+        id: pr_size
+        run: |
+          SIZE_BYTES=$(wc -c < /tmp/pr-wasm/vesting_cliff_drip_stream.optimized.wasm)
+          SIZE_KB=$(( SIZE_BYTES / 1024 ))
+          echo "bytes=${SIZE_BYTES}" >> "$GITHUB_OUTPUT"
+          echo "kb=${SIZE_KB}"       >> "$GITHUB_OUTPUT"
+
+      # ── main branch size ─────────────────────────────────────────────────
+      - name: Build WASM from main
+        run: |
+          git fetch origin main
+          git stash --include-untracked || true
+          git checkout origin/main -- .
+          cargo build --target wasm32-unknown-unknown --release
           stellar contract optimize \
             --wasm target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm \
-            --wasm-out target/vesting_cliff_drip_stream.optimized.wasm
+            --wasm-out /tmp/main_optimized.wasm
 
-      - name: Check WASM size
+      - name: Record main size
+        id: main_size
         run: |
-          WASM=target/vesting_cliff_drip_stream.optimized.wasm
-          SIZE_BYTES=$(wc -c < "$WASM")
+          SIZE_BYTES=$(wc -c < /tmp/main_optimized.wasm)
           SIZE_KB=$(( SIZE_BYTES / 1024 ))
-          echo "Optimized WASM size: ${SIZE_KB} KB (${SIZE_BYTES} bytes)"
-          LIMIT_KB="${WASM_SIZE_LIMIT_KB}"
-          if [ "$SIZE_KB" -gt "$LIMIT_KB" ]; then
-            echo "::error::WASM size ${SIZE_KB} KB exceeds limit of ${LIMIT_KB} KB"
-            exit 1
-          fi
-          echo "✅ Size check passed: ${SIZE_KB} KB ≤ ${LIMIT_KB} KB"
+          echo "bytes=${SIZE_BYTES}" >> "$GITHUB_OUTPUT"
+          echo "kb=${SIZE_KB}"       >> "$GITHUB_OUTPUT"
 
-      - name: Update wasm-size.md
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      # ── Compute delta and post/update PR comment ──────────────────────────
+      - name: Post size-delta comment
+        uses: actions/github-script@v7
+        env:
+          PR_BYTES: ${{ steps.pr_size.outputs.bytes }}
+          PR_KB: ${{ steps.pr_size.outputs.kb }}
+          MAIN_BYTES: ${{ steps.main_size.outputs.bytes }}
+          MAIN_KB: ${{ steps.main_size.outputs.kb }}
+          MAX_KB: ${{ env.MAX_WASM_SIZE_KB }}
+        with:
+          script: |
+            const prBytes   = parseInt(process.env.PR_BYTES);
+            const prKb      = parseInt(process.env.PR_KB);
+            const mainBytes = parseInt(process.env.MAIN_BYTES);
+            const mainKb    = parseInt(process.env.MAIN_KB);
+            const maxKb     = parseInt(process.env.MAX_KB);
+
+            const deltaBytes = prBytes - mainBytes;
+            const deltaKb    = prKb   - mainKb;
+            const sign       = deltaBytes >= 0 ? '+' : '';
+            const emoji      = prKb > maxKb ? '🔴' : (deltaBytes > 0 ? '🟡' : '🟢');
+
+            const statusLine = prKb > maxKb
+              ? `> ⚠️ **Size budget exceeded!** ${prKb} KB > ${maxKb} KB limit. This PR will fail CI.`
+              : `> ✅ Within budget (${prKb} KB / ${maxKb} KB)`;
+
+            const body = [
+              `<!-- wasm-size-bot -->`,
+              `## ${emoji} WASM Size Report`,
+              ``,
+              statusLine,
+              ``,
+              `| | Size (bytes) | Size (KB) |`,
+              `|---|---:|---:|`,
+              `| **main** | ${mainBytes.toLocaleString()} | ${mainKb} KB |`,
+              `| **this PR** | ${prBytes.toLocaleString()} | ${prKb} KB |`,
+              `| **delta** | ${sign}${deltaBytes.toLocaleString()} | ${sign}${deltaKb} KB |`,
+              ``,
+              `_Threshold: **${maxKb} KB** — set via \`MAX_WASM_SIZE_KB\` in [wasm-size.yml](.github/workflows/wasm-size.yml) or override with \`make check-wasm-size MAX_WASM_SIZE_KB=60\`._`,
+            ].join('\n');
+
+            // Find an existing bot comment and update it, or create a new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('<!-- wasm-size-bot -->')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 3: Append a row to docs/wasm-size-history.md on every merge to main
+  # ──────────────────────────────────────────────────────────────────────────
+  wasm-size-history:
+    name: Update size history
+    needs: wasm-size-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-size
+          path: /tmp/wasm-artifact
+
+      - name: Append row to docs/wasm-size-history.md
         run: |
-          WASM=target/vesting_cliff_drip_stream.optimized.wasm
-          SIZE_BYTES=$(wc -c < "$WASM")
+          SIZE_BYTES=$(wc -c < /tmp/wasm-artifact/vesting_cliff_drip_stream.optimized.wasm)
           SIZE_KB=$(( SIZE_BYTES / 1024 ))
           DATE=$(date -u +"%Y-%m-%d")
           COMMIT=$(git rev-parse --short HEAD)
-          echo "| ${DATE} | ${COMMIT} | ${SIZE_KB} KB | ${SIZE_BYTES} B |" >> docs/wasm-size.md
-          echo "Updated docs/wasm-size.md with size ${SIZE_KB} KB"
+          echo "| ${DATE} | ${COMMIT} | ${SIZE_KB} KB | ${SIZE_BYTES} B |" >> docs/wasm-size-history.md
+
+      - name: Commit and push history update
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/wasm-size-history.md
+          git diff --cached --quiet || git commit -m "chore: update WASM size history [skip ci]"
+          git push

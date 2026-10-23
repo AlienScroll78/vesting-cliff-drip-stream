@@ -1,0 +1,795 @@
+# Event Schema
+
+Complete schema for every contract event, with topic discriminators, field
+names and types, XDR encoding, and JSON examples for indexers.
+
+## StreamCreated
+
+Emitted when a sponsor creates a new vesting stream via
+`create_vesting_stream`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| sponsor | Address | ScAddress | Stream sponsor (topic) |
+| recipient | Address | ScAddress | Stream recipient (topic) |
+| token | Address | ScAddress | SAC token being vested |
+| rate | i128 | ScVal I128 | Tokens released per ledger |
+| start_ledger | u32 | ScVal U32 | Ledger at which vesting starts |
+| cliff_ledger | u32 | ScVal U32 | Ledger at which cliff passes |
+| end_ledger | u32 | ScVal U32 | Ledger at which stream ends |
+| total_deposit | i128 | ScVal I128 | Total tokens deposited upfront |
+
+Topic discriminator: `StreamCreated` (Symbol). Topics: `[StreamCreated, sponsor, recipient]`.
+
+XDR binary: Soroban event topics are encoded as `ScVec[ScSymbol("StreamCreated"), ScAddress(sponsor), ScAddress(recipient)]`. Data is a `ScMap` of the `StreamCreatedData` struct fields.
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamCreated",
+  "topics": ["StreamCreated", "GDSPONSOR...", "GDRECIP..."],
+  "data": {
+    "token": "CDTOKEN...",
+    "rate": "10",
+    "start_ledger": 100,
+    "cliff_ledger": 150,
+    "end_ledger": 300,
+    "total_deposit": "2000"
+  }
+}
+```
+
+Terminal: yes, emitted once per stream (at creation).
+
+## TokensClaimed
+
+Emitted when a recipient successfully claims vested tokens via `claim_vested`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Claiming recipient (topic) |
+| amount | i128 | ScVal I128 | Tokens transferred in this claim |
+| ledger_claimed_through | u32 | ScVal U32 | Ledger up to which tokens were claimed |
+
+Topic discriminator: `vc_claim` (symbol_short). Topics: `[vc_claim, recipient]`.
+
+Example JSON payload:
+
+```json
+{
+  "event": "TokensClaimed",
+  "topics": ["vc_claim", "GDRECIP..."],
+  "data": {
+    "amount": "500",
+    "ledger_claimed_through": 200
+  }
+}
+```
+
+Terminal: no, repeatable on every successful claim until the stream is exhausted.
+
+## StreamCancelled
+
+Emitted when a sponsor cancels a stream via `cancel_stream`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Cancelled stream recipient (topic) |
+| sponsor_refund | i128 | ScVal I128 | Unvested tokens refunded to sponsor |
+
+Topic discriminator: `vc_cancel` (symbol_short). Topics: `[vc_cancel, recipient]`.
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamCancelled",
+  "topics": ["vc_cancel", "GDRECIP..."],
+  "data": {
+    "sponsor_refund": "1000"
+  }
+}
+```
+
+Terminal: yes, a cancelled stream cannot be claimed or resumed.
+
+## StreamClawedBack
+
+Emitted when a sponsor performs a compliance clawback.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Stream recipient (topic) |
+| sponsor | Address | ScAddress | Sponsor performing the clawback |
+| token | Address | ScAddress | SAC token (must support clawback flag) |
+| amount | i128 | ScVal I128 | Tokens recovered by sponsor |
+| reason | String | ScVal String | Compliance reason |
+
+Topic discriminator: `vc_claw` (symbol_short). Topics: `[vc_claw, recipient]`.
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamClawedBack",
+  "topics": ["vc_claw", "GDRECIP..."],
+  "data": {
+    "sponsor": "GDSPONSOR...",
+    "token": "CDTOKEN...",
+    "amount": "1500",
+    "reason": "regulatory-action"
+  }
+}
+```
+
+Terminal: yes, a clawed-back stream is closed.
+
+## StreamDrained
+
+Emitted when an expired stream is drained.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Stream recipient (topic) |
+| caller | Address | ScAddress | Address that triggered the drain |
+| sponsor | Address | ScAddress | Original stream sponsor |
+| token | Address | ScAddress | SAC token |
+| amount | i128 | ScVal I128 | Dust swept from the expired stream |
+
+Topic discriminator: `vc_drain` (symbol_short). Topics: `[vc_drain, recipient]`.
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamDrained",
+  "topics": ["vc_drain", "GDRECIP..."],
+  "data": {
+    "caller": "GDADMIN...",
+    "sponsor": "GDSPONSOR...",
+    "token": "CDTOKEN...",
+    "amount": "3"
+  }
+}
+```
+
+Terminal: yes, drains only an already-expired stream.
+
+## StreamPaused
+
+Emitted when a sponsor pauses a stream via `pause_stream`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Paused stream recipient (topic) |
+| sponsor | Address | ScAddress | Sponsor that paused the stream |
+| paused_at_ledger | u32 | ScVal U32 | Ledger at which the stream paused |
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamPaused",
+  "topics": ["StreamPaused", "GDRECIP..."],
+  "data": {
+    "sponsor": "GDSPONSOR...",
+    "paused_at_ledger": 180
+  }
+}
+```
+
+Terminal: no, the stream can be resumed with `resume_stream`.
+
+## StreamResumed
+
+Emitted when a sponsor resumes a paused stream via `resume_stream`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| recipient | Address | ScAddress | Resumed stream recipient (topic) |
+| sponsor | Address | ScAddress | Sponsor that resumed the stream |
+| end_ledger | u32 | ScVal U32 | Adjusted end ledger after pause |
+
+Example JSON payload:
+
+```json
+{
+  "event": "StreamResumed",
+  "topics": ["StreamResumed", "GDRECIP..."],
+  "data": {
+    "sponsor": "GDSPONSOR...",
+    "end_ledger": 320
+  }
+}
+```
+
+Terminal: no, a stream can be paused and resumed repeatedly.
+
+## MinDepositUpdated
+
+Emitted when the admin updates the minimum deposit via `set_min_deposit`.
+
+| Field | Type | XDR Type | Description |
+|---|---|---|---|
+| admin | Address | ScAddress | Admin that updated the threshold (topic) |
+| min_deposit | i128 | ScVal I128 | New minimum total deposit |
+
+Example JSON payload:
+
+```json
+{
+  "event": "MinDepositUpdated",
+  "topics": ["MinDepositUpdated", "GDADMIN..."],
+  "data": {
+    "min_deposit": "100"
+  }
+}
+```
+
+Terminal: no, the threshold can be updated any number of times.
+
+## Terminal vs repeatable events
+
+- Terminal (emitted at most once per stream): `StreamCreated`,
+  `StreamCancelled`, `StreamClawedBack`, `StreamDrained`.
+- Repeatable: `TokensClaimed`, `StreamPaused`, `StreamResumed`,
+  `MinDepositUpdated`.
+
+## Indexer implementation notes
+
+- Filter events by contract address and event topic. With Soroban RPC,
+  use `getEvents` with `filters: [{ contractIds: ["<CONTRACT_ID>"],
+  topics: [["StreamCreated"]] }]` to capture new streams.
+- Use `vc_cancel`, `vc_claw`, `vc_drain` topic filters to detect terminal
+  state transitions without replaying every claim.
+- Page with `cursor` and persist it per contract so re-indexing resumes
+  without gaps.
+
+## Storage costs and TTL
+
+- Emitted events are retained by the network's event store, not by the
+  contract's own storage, so they do not consume contract rent.
+- The contract's on-chain schedule entries live in persistent storage and
+  have a TTL that is extended (~60 days) on every read and write, keeping
+  active streams alive while expired streams are eventually evicted.
+# VestingDrips Contract Event Schema
+
+This document is the **canonical schema reference** for all events emitted by the
+`VestingDrips` Soroban smart contract. Off-chain indexers (Horizon pollers, event
+workers, webhooks) must use this document to decode event payloads reliably.
+
+> **Indexer note:** When event fields change, this document must be updated in the
+> same pull request. A CI workflow (`.github/workflows/events-doc-check.yml`)
+> enforces this — any PR that modifies `src/events.rs` without also modifying
+> `docs/events.md` will fail.
+
+---
+
+## Table of Contents
+
+1. [How Soroban Events Work](#how-soroban-events-work)
+2. [Primary Events](#primary-events)
+   - [StreamCreated](#1-streamcreated)
+   - [TokensClaimed](#2-tokensclaimed)
+   - [StreamCancelled](#3-streamcancelled)
+   - [StreamClawedBack](#4-streamclawedback)
+   - [StreamDrained](#5-streamdrained)
+3. [Lifecycle Events](#lifecycle-events)
+   - [StreamCompleted](#6-streamcompleted)
+   - [StreamTransferred](#7-streamtransferred)
+   - [ContractInitialized](#8-contractinitialized)
+4. [Variable-Rate Stream Events](#variable-rate-stream-events)
+   - [VariableStreamCreated](#9-variablestreamcreated)
+   - [VariableTokensClaimed](#10-variabletokensclaimed)
+5. [Multi-Token Stream Events](#multi-token-stream-events)
+   - [MultiStreamCreated](#11-multistreamcreated)
+   - [MultiTokensClaimed](#12-multitokensclaimed)
+   - [MultiStreamCompleted](#13-multistreamcompleted)
+   - [MultiStreamCancelled](#14-multistreamcancelled)
+6. [Event Versioning](#event-versioning)
+7. [CI Enforcement](#ci-enforcement)
+
+---
+
+## How Soroban Events Work
+
+Soroban events are structured as:
+
+```json
+{
+  "topics": [ "topic_0", "topic_1", "..." ],
+  "data":   "<single XDR SCVal>"
+}
+```
+
+- **Topic 0** is always a `Symbol` (the event discriminator). Indexers filter by this value.
+- **Topic 1–3** are typically `Address` values (recipient, sponsor, etc.) for indexed lookup.
+- **Data** contains the event payload encoded as an XDR `SCVal`. Struct types are encoded
+  as a `Vec<SCVal>` in field-declaration order.
+
+All addresses are Stellar `Address` XDR (Ed25519 public key or contract ID).
+All token amounts are `i128` (`Int128Parts` XDR).
+All ledger sequences are `u32` (`Uint32` XDR).
+
+To decode from Horizon's `/events` endpoint, base64-decode each topic and the data
+field and parse as XDR `SCVal`.
+
+---
+
+## Primary Events
+
+### 1. StreamCreated
+
+Emitted by `create_vesting_stream` when a new flat-rate vesting stream is created.
+
+**Topic discriminator:** `"StreamCreated"` (full-length Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"StreamCreated"` |
+| topics[1] | `sponsor` | `Address` | Address that funded the stream |
+| topics[2] | `recipient` | `Address` | Beneficiary address |
+
+**Data payload** — `StreamCreatedData` struct (`Vec<SCVal>` in field order):
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `token` | `Address` | SAC token contract address |
+| 1 | `rate` | `Int128Parts` | Tokens released per ledger |
+| 2 | `start_ledger` | `Uint32` | Ledger when stream starts |
+| 3 | `cliff_ledger` | `Uint32` | Ledger at which cliff is reached |
+| 4 | `end_ledger` | `Uint32` | Ledger at which stream ends |
+| 5 | `total_deposit` | `Int128Parts` | `rate × (end_ledger − start_ledger)` |
+
+**Example JSON payload:**
+
+```json
+{
+  "type": "contract",
+  "id": "<CONTRACT_ID>",
+  "topic": [
+    { "type": "symbol",  "value": "StreamCreated" },
+    { "type": "address", "value": "GSPONSOR..." },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": {
+    "token":         { "type": "address", "value": "CTOKEN..." },
+    "rate":          { "type": "i128",    "value": "10" },
+    "start_ledger":  { "type": "u32",     "value": 100 },
+    "cliff_ledger":  { "type": "u32",     "value": 150 },
+    "end_ledger":    { "type": "u32",     "value": 300 },
+    "total_deposit": { "type": "i128",    "value": "2000" }
+  }
+}
+```
+
+**Indexer notes:**
+- Use `sponsor` and `recipient` topics for indexed lookups without decoding data.
+- `total_deposit = rate × (end_ledger − start_ledger)` can be recomputed off-chain.
+- The optional `metadata` field is stored in the schedule but **not** emitted in
+  this event (to stay within the 4-topic limit). Fetch it via `get_schedule` if needed.
+
+---
+
+### 2. TokensClaimed
+
+Emitted by `claim_vested` when a recipient successfully claims vested tokens.
+
+**Topic discriminator:** `"vc_claim"` (short Symbol, ≤ 8 chars)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_claim"` |
+| topics[1] | `recipient` | `Address` | Claiming address |
+
+**Data payload** — tuple `(amount, ledger_claimed_through)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `amount` | `Int128Parts` | Tokens transferred to recipient |
+| 1 | `ledger_claimed_through` | `Uint32` | Last ledger included in this claim window |
+
+**Example JSON payload:**
+
+```json
+{
+  "topic": [
+    { "type": "symbol",  "value": "vc_claim" },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": {
+    "amount":                 { "type": "i128", "value": "500" },
+    "ledger_claimed_through": { "type": "u32",  "value": 150 }
+  }
+}
+```
+
+**Indexer notes:**
+- `ledger_claimed_through` marks the end of this claim window. The next claim
+  starts from `ledger_claimed_through + 1`.
+- Amount is always positive (`NothingToClaim` error prevents zero-amount events).
+
+---
+
+### 3. StreamCancelled
+
+Emitted by `cancel_stream` when a sponsor cancels a stream.
+
+**Topic discriminator:** `"vc_cancel"`
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_cancel"` |
+| topics[1] | `recipient` | `Address` | Stream recipient |
+
+**Data payload** — single `i128` value:
+
+| Field | XDR Type | Description |
+|-------|----------|-------------|
+| `refunded_amount` | `Int128Parts` | Tokens returned to the sponsor |
+
+**Example JSON payload:**
+
+```json
+{
+  "topic": [
+    { "type": "symbol",  "value": "vc_cancel" },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": { "type": "i128", "value": "2000" }
+}
+```
+
+**Indexer notes:**
+- Pre-cliff cancellation: `refunded_amount` = full deposit.
+- Post-cliff cancellation: `refunded_amount` = remaining (unclaimed) tokens; the
+  recipient received accrued tokens via a separate token transfer before this event.
+- The `sponsor` address is not in this event's topics. Retrieve it from the
+  corresponding `StreamCreated` event.
+
+---
+
+### 4. StreamClawedBack
+
+Emitted by `clawback_stream` when a sponsor performs a compliance clawback.
+
+**Topic discriminator:** `"vc_claw"`
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_claw"` |
+| topics[1] | `recipient` | `Address` | Stream recipient |
+
+**Data payload** — tuple `(StreamClawedBackData, reason)`:
+
+The first element is a `StreamClawedBackData` struct (encoded as `Vec<SCVal>` in field order):
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `sponsor` | `Address` | Original sponsor (receives recovered tokens) |
+| 1 | `recipient` | `Address` | Stream recipient whose stream was clawed back |
+| 2 | `token` | `Address` | SAC token contract address |
+| 3 | `amount_recovered` | `Int128Parts` | Total tokens returned to sponsor |
+| 4 | `reason_hash` | `Bytes` (32) | SHA-256 of the compliance reason string |
+| 5 | `ledger` | `Uint32` | Ledger sequence at which clawback was executed |
+
+The second element is the raw reason string for human readability:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 1 | `reason` | `String` | Compliance reason string (max 256 UTF-8 bytes) |
+
+**Example JSON payload:**
+
+```json
+{
+  "topic": [
+    { "type": "symbol",  "value": "vc_claw" },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": [
+    {
+      "sponsor":          { "type": "address", "value": "GSPONSOR..." },
+      "recipient":        { "type": "address", "value": "GRECIPIENT..." },
+      "token":            { "type": "address", "value": "CTOKEN..." },
+      "amount_recovered": { "type": "i128",    "value": "1500" },
+      "reason_hash":      { "type": "bytes",   "value": "e3b0c44298fc1c149afb..." },
+      "ledger":           { "type": "u32",     "value": 200 }
+    },
+    { "type": "string", "value": "Regulatory compliance — OFAC sanction" }
+  ]
+}
+```
+
+**Indexer notes:**
+- `reason_hash` is the SHA-256 of the reason string encoded as XDR bytes. Use it for
+  machine-readable compliance record matching and deduplication.
+- The human-readable `reason` string is still present as the second data element.
+- Only emitted on tokens with `AUTH_CLAWBACK_ENABLED_FLAG`. Regular cancellation
+  uses `StreamCancelled`.
+- `reason` is stored on-chain in the event — max 256 bytes enforced by contract error
+  `ReasonTooLong` (code 28).
+- Clawback bypasses cliff state; it recovers **all** remaining vault tokens regardless
+  of how much has vested.
+- `ledger` enables precise audit trail reconstruction without cross-referencing ledger
+  metadata from Horizon.
+
+---
+
+### 5. StreamDrained
+
+Emitted by `drain_expired_stream` when an expired stream is permissionlessly cleaned up.
+
+**Topic discriminator:** `"vc_drain"`
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_drain"` |
+| topics[1] | `recipient` | `Address` | Drained stream's recipient |
+
+**Data payload** — tuple `(caller, sponsor, token, amount)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `caller` | `Address` | Address that triggered the drain (any address) |
+| 1 | `sponsor` | `Address` | Original sponsor (receives tokens) |
+| 2 | `token` | `Address` | SAC token address |
+| 3 | `amount` | `Int128Parts` | Tokens transferred to sponsor |
+
+**Example JSON payload:**
+
+```json
+{
+  "topic": [
+    { "type": "symbol",  "value": "vc_drain" },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": {
+    "caller":  { "type": "address", "value": "GCALLER..." },
+    "sponsor": { "type": "address", "value": "GSPONSOR..." },
+    "token":   { "type": "address", "value": "CTOKEN..." },
+    "amount":  { "type": "i128",    "value": "2000" }
+  }
+}
+```
+
+**Indexer notes:**
+- `caller` is informational only — it is **not** the recipient of tokens.
+- Available only after `end_ledger + DRAIN_DELAY_LEDGERS` (~1 year at 5 s/ledger).
+- Tokens always go to `sponsor`, regardless of who calls.
+- No authentication required (`drain_expired_stream` is permissionless).
+
+---
+
+## Lifecycle Events
+
+### 6. StreamCompleted
+
+Emitted when a stream is fully vested and auto-cleaned up after the final claim.
+
+**Topic discriminator:** `"vc_done"`
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_done"` |
+| topics[1] | `recipient` | `Address` | Stream's recipient |
+
+**Data payload** — single `Address`:
+
+| Field | XDR Type | Description |
+|-------|----------|-------------|
+| `token` | `Address` | The SAC token address |
+
+**Example JSON payload:**
+
+```json
+{
+  "topic": [
+    { "type": "symbol",  "value": "vc_done" },
+    { "type": "address", "value": "GRECIPIENT..." }
+  ],
+  "value": { "type": "address", "value": "CTOKEN..." }
+}
+```
+
+---
+
+### 7. StreamTransferred
+
+Emitted when a stream's recipient address is transferred to a new address.
+
+**Topic discriminator:** `"StreamTransferred"` (full Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"StreamTransferred"` |
+| topics[1] | `current_recipient` | `Address` | The previous recipient address |
+
+**Data payload** — single `Address`:
+
+| Field | XDR Type | Description |
+|-------|----------|-------------|
+| `new_recipient` | `Address` | The new recipient address |
+
+---
+
+### 8. ContractInitialized
+
+Emitted once when `initialize` is called to configure the contract.
+
+**Topic discriminator:** `"ContractInit"` (full Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"ContractInit"` |
+| topics[1] | `admin` | `Address` | The admin address |
+
+**Data payload** — tuple `(fee_bps, treasury)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `fee_bps` | `Uint32` | Protocol fee in basis points (0–500) |
+| 1 | `treasury` | `Address` | Fee recipient address |
+
+---
+
+## Variable-Rate Stream Events
+
+### 9. VariableStreamCreated
+
+Emitted by `create_variable_rate_stream` when a variable-rate stream is created.
+
+**Topic discriminator:** `"vc_vrcre"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_vrcre"` |
+| topics[1] | `recipient` | `Address` | Beneficiary |
+
+**Data payload** — tuple `(sponsor, token, start_ledger, cliff_ledger, end_ledger, total_deposited)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `sponsor` | `Address` | Funder |
+| 1 | `token` | `Address` | SAC token |
+| 2 | `start_ledger` | `Uint32` | Stream start |
+| 3 | `cliff_ledger` | `Uint32` | Cliff ledger |
+| 4 | `end_ledger` | `Uint32` | Stream end |
+| 5 | `total_deposited` | `Int128Parts` | Total tokens deposited across all segments |
+
+---
+
+### 10. VariableTokensClaimed
+
+Emitted when a recipient claims from a variable-rate stream.
+
+**Topic discriminator:** `"vc_vrclam"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vc_vrclam"` |
+| topics[1] | `recipient` | `Address` | Claimant |
+
+**Data payload** — tuple `(amount, ledger_claimed_through)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `amount` | `Int128Parts` | Tokens transferred |
+| 1 | `ledger_claimed_through` | `Uint32` | Claim window end ledger |
+
+---
+
+## Multi-Token Stream Events
+
+### 11. MultiStreamCreated
+
+Emitted when a multi-token vesting stream is created.
+
+**Topic discriminator:** `"vmt_crt"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vmt_crt"` |
+| topics[1] | `recipient` | `Address` | Beneficiary |
+
+**Data payload** — tuple `(sponsor, allocations, start_ledger, cliff_ledger, end_ledger)`:
+
+| Index | Field | XDR Type | Description |
+|-------|-------|----------|-------------|
+| 0 | `sponsor` | `Address` | Funder |
+| 1 | `allocations` | `Vec<TokenAllocation>` | Per-token rate allocations |
+| 2 | `start_ledger` | `Uint32` | Stream start |
+| 3 | `cliff_ledger` | `Uint32` | Cliff ledger |
+| 4 | `end_ledger` | `Uint32` | Stream end |
+
+---
+
+### 12. MultiTokensClaimed
+
+Emitted when a recipient claims from a multi-token stream.
+
+**Topic discriminator:** `"vmt_clm"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vmt_clm"` |
+| topics[1] | `recipient` | `Address` | Claimant |
+
+**Data payload** — single `Uint32`:
+
+| Field | XDR Type | Description |
+|-------|----------|-------------|
+| `ledger_claimed_through` | `Uint32` | Claim window end ledger |
+
+**Indexer notes:** Per-token amounts are not emitted. Reconstruct off-chain from the
+stored `allocations` and the ledger range `[last_claimed + 1, ledger_claimed_through]`.
+
+---
+
+### 13. MultiStreamCompleted
+
+Emitted when a multi-token stream is fully exhausted.
+
+**Topic discriminator:** `"vmt_don"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vmt_don"` |
+| topics[1] | `recipient` | `Address` | Stream's recipient |
+
+**Data payload:** Empty tuple `()`.
+
+---
+
+### 14. MultiStreamCancelled
+
+Emitted when a sponsor cancels a multi-token stream.
+
+**Topic discriminator:** `"vmt_cnl"` (short Symbol)
+
+| Position | Field | XDR Type | Description |
+|----------|-------|----------|-------------|
+| topics[0] | `discriminator` | `Symbol` | `"vmt_cnl"` |
+| topics[1] | `recipient` | `Address` | Stream's recipient |
+
+**Data payload** — single `Address`:
+
+| Field | XDR Type | Description |
+|-------|----------|-------------|
+| `sponsor` | `Address` | The original sponsor |
+
+---
+
+## Event Versioning
+
+Events are versioned implicitly by the contract upgrade mechanism. When a field is
+added, removed, or reordered:
+
+1. Bump the contract version in `src/contract.rs`.
+2. Update this document in the **same PR** as the `src/events.rs` change.
+3. Add a row to the changelog table below.
+
+### Changelog
+
+| Version | Date | Change |
+|---------|------|--------|
+| 1.0.0 | 2026-10-02 | Initial schema documentation for all 14 events |
+| 1.1.0 | 2026-10-04 | `StreamClawedBack` enhanced: data is now `(StreamClawedBackData, reason)` with `sponsor`, `recipient`, `token`, `amount_recovered`, `reason_hash` (SHA-256), and `ledger` fields for compliance audit trail |
+
+---
+
+## CI Enforcement
+
+A GitHub Actions workflow (`.github/workflows/events-doc-check.yml`) runs on every
+pull request that touches `src/events.rs`. If `docs/events.md` is not also changed
+in the same PR, the workflow fails with:
+
+```
+ERROR: src/events.rs was modified but docs/events.md was not updated.
+Please update docs/events.md when changing event definitions.
+```
+
+This prevents silent schema drift between the on-chain event implementation and the
+indexer reference. See [docs/architecture.md](architecture.md) for the broader
+backend indexer design.

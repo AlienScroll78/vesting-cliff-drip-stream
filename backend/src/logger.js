@@ -16,6 +16,11 @@
  */
 
 import { AsyncLocalStorage } from 'async_hooks';
+import { createWriteStream, readFileSync } from 'fs';
+import { format } from 'util';
+import { createHash } from 'crypto';
+import pg from 'pg';
+import pino from 'pino';
 
 // Lazily resolve the OTel API so this module loads even when the SDK has not
 // been initialised (e.g. during unit tests that don't boot tracing.ts).
@@ -46,14 +51,6 @@ function getTraceContext() {
   } catch {
     return null;
   }
-}
-
-let pino;
-try {
-  pino = (await import('pino')).default;
-} catch {
-  // Fallback logger if pino is not installed (e.g. in minimal test envs)
-  pino = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +108,8 @@ export function runWithCorrelationId(correlationId, fn) {
 // ---------------------------------------------------------------------------
 const SERVICE_NAME    = process.env.SERVICE_NAME    ?? 'vesting-backend';
 const SERVICE_VERSION = process.env.SERVICE_VERSION ?? 'unknown';
-const LOG_LEVEL       = process.env.LOG_LEVEL       ?? 'info';
+const VALID_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']);
+let currentLogLevel = VALID_LOG_LEVELS.has(process.env.LOG_LEVEL) ? process.env.LOG_LEVEL : 'info';
 const LOG_PRETTY      = process.env.LOG_PRETTY      === 'true';
 
 /** Redact a Stellar address — keep first 4 and last 4 chars. */
@@ -161,28 +159,35 @@ function buildCorrelationFields() {
 }
 
 function buildPinoLogger() {
+  const outputStreams = [process.stdout];
+  if (process.env.LOG_FILE_PATH) {
+    outputStreams.push(createWriteStream(process.env.LOG_FILE_PATH, { flags: 'a' }));
+  }
+
   if (!pino) {
     // Minimal fallback using console
-    const levels = ['debug', 'info', 'warn', 'error'];
-    const minLevel = levels.indexOf(LOG_LEVEL);
+    const levels = ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'];
     const fallback = {};
     levels.forEach((lvl, idx) => {
       fallback[lvl] = (msgOrObj, msg) => {
+        const minLevel = levels.indexOf(currentLogLevel);
         if (idx < minLevel) return;
         const entry = typeof msgOrObj === 'string'
           ? { message: msgOrObj }
           : { ...msgOrObj, message: msg ?? msgOrObj.message };
         const traceCtx = getTraceContext();
-        process.stdout.write(
-          JSON.stringify({
+        const line = JSON.stringify({
             timestamp: new Date().toISOString(),
             level:     lvl,
             service:   SERVICE_NAME,
             version:   SERVICE_VERSION,
+            correlation_id: correlationStorage.getStore()?.correlationId ?? null,
+            duration_ms: entry.duration_ms ?? entry.durationMs ?? 0,
             ...buildCorrelationFields(),
+            ...(traceCtx ?? {}),
             ...entry,
-          }) + '\n',
-        );
+          }) + '\n';
+        for (const stream of outputStreams) stream.write(line);
       };
     });
     fallback.child = () => fallback;
@@ -192,17 +197,25 @@ function buildPinoLogger() {
   const transport = LOG_PRETTY
     ? { target: 'pino-pretty', options: { colorize: true } }
     : undefined;
+  const streams = outputStreams.map((stream) => ({ stream }));
+  const destination = streams.length > 1 ? pino.multistream(streams) : undefined;
 
   const instance = pino(
     {
-      level: LOG_LEVEL,
+      level: currentLogLevel,
+      messageKey: 'message',
       base: { service: SERVICE_NAME, version: SERVICE_VERSION },
-      timestamp: pino.stdTimeFunctions.isoTime,
+      timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
       formatters: {
         level(label) { return { level: label }; },
         log(obj) {
           // Inject all three correlation IDs from AsyncLocalStorage on every log call.
-          return { ...buildCorrelationFields(), ...obj };
+          return {
+            correlation_id: correlationStorage.getStore()?.correlationId ?? null,
+            duration_ms: obj.duration_ms ?? obj.durationMs ?? 0,
+            ...buildCorrelationFields(),
+            ...obj,
+          };
         },
       },
       redact: {
@@ -214,10 +227,83 @@ function buildPinoLogger() {
         error: pino.stdSerializers.err,
       },
     },
-    transport ? pino.transport(transport) : undefined,
+    transport ? pino.transport(transport) : destination,
   );
 
   return instance;
 }
 
 export const logger = buildPinoLogger();
+
+const clientPrototype = pg.Client.prototype;
+const queryLogPatch = Symbol.for('vesting.structured-query-logging');
+if (!clientPrototype[queryLogPatch]) {
+  const originalQuery = clientPrototype.query;
+  clientPrototype.query = function (...args) {
+    const config = args[0];
+    const queryText = typeof config === 'string' ? config : config?.text ?? '';
+    const queryHash = createHash('sha256').update(queryText.replace(/\s+/g, ' ').trim()).digest('hex');
+    const startedAt = process.hrtime.bigint();
+    const logResult = (error, result) => {
+      const fields = {
+        event: error ? 'db_query_error' : 'db_query',
+        query_hash: queryHash,
+        rows_affected: result?.rowCount ?? 0,
+        duration_ms: Math.round(Number(process.hrtime.bigint() - startedAt) / 1e4) / 100,
+      };
+      if (error) logger.error({ ...fields, err: error }, 'Database query failed');
+      else logger.info(fields, 'Database query');
+    };
+
+    const callbackIndex = args.findIndex((arg) => typeof arg === 'function');
+    if (callbackIndex !== -1) {
+      const callback = args[callbackIndex];
+      args[callbackIndex] = function (error, result) {
+        logResult(error, result);
+        return callback.apply(this, arguments);
+      };
+      return originalQuery.apply(this, args);
+    }
+
+    const result = originalQuery.apply(this, args);
+    if (result && typeof result.then === 'function') {
+      return result.then(
+        (value) => { logResult(null, value); return value; },
+        (error) => { logResult(error); throw error; },
+      );
+    }
+    return result;
+  };
+  Object.defineProperty(clientPrototype, queryLogPatch, { value: true });
+}
+
+for (const [consoleMethod, logMethod] of Object.entries({
+  debug: 'debug',
+  info: 'info',
+  log: 'info',
+  warn: 'warn',
+  error: 'error',
+})) {
+  console[consoleMethod] = (...args) => logger[logMethod](format(...args));
+}
+
+function reloadLogLevel() {
+  let requested = process.env.LOG_LEVEL;
+  if (process.env.LOG_LEVEL_FILE) {
+    try {
+      requested = readFileSync(process.env.LOG_LEVEL_FILE, 'utf8').trim();
+    } catch (error) {
+      logger.error({ event: 'log_level_reload_failed', err: error }, 'Unable to read LOG_LEVEL_FILE');
+      return;
+    }
+  }
+  if (!VALID_LOG_LEVELS.has(requested)) {
+    logger.warn({ event: 'invalid_log_level', requested_level: requested }, 'Ignoring invalid LOG_LEVEL');
+    return;
+  }
+  currentLogLevel = requested;
+  logger.level = currentLogLevel;
+  logger.info({ event: 'log_level_changed', level: currentLogLevel }, 'Log level reloaded');
+}
+
+if (process.platform !== 'win32') process.on('SIGHUP', reloadLogLevel);

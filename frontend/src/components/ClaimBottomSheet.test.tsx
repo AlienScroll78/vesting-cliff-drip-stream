@@ -58,6 +58,25 @@ describe("ClaimBottomSheet", () => {
     expect(screen.getByTestId("claim-button")).not.toBeDisabled();
   });
 
+  it("labels the review block as a claim and shows confirmation time", async () => {
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(screen.getByTestId("review-kind")).toHaveTextContent("Claim Vested Tokens");
+    expect(await screen.findByTestId("fee-value")).toBeInTheDocument();
+    expect(screen.getByTestId("review-eta")).toHaveTextContent(/seconds/);
+  });
+
+  it("warns about an unusually high claim fee", async () => {
+    vi.spyOn(feeEstimate, "estimateFee").mockResolvedValue({ xlm: "3.00000", usd: "$0.360000" });
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(await screen.findByTestId("review-fee-warning")).toHaveTextContent("3.00000 XLM");
+  });
+
+  it("keeps the raw XDR behind the advanced disclosure", async () => {
+    render(<ClaimBottomSheet {...defaultProps} />);
+    expect(await screen.findByTestId("review-xdr-unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Advanced").closest("details")).not.toHaveAttribute("open");
+  });
+
   it("calls onClaim when claim button is clicked", async () => {
     const onClaim = vi.fn().mockResolvedValue(undefined);
     render(<ClaimBottomSheet {...defaultProps} onClaim={onClaim} />);
@@ -119,6 +138,18 @@ describe("ClaimBottomSheet", () => {
     render(<ClaimBottomSheet {...defaultProps} stream={preCliffStream} />);
     expect(screen.getByTestId("cliff-countdown")).toBeInTheDocument();
     expect(screen.getByTestId("cliff-countdown")).toHaveTextContent(/cliff not reached/i);
+  });
+
+  it("replaces the pre-cliff CTA with the countdown claim action at the cliff", () => {
+    const reachedStream: VestingStream = {
+      ...activeStream,
+      status: "pre-cliff",
+      claimableAmount: 100,
+      cliffLedger: 51_200_000,
+    };
+    render(<ClaimBottomSheet {...defaultProps} stream={reachedStream} />);
+    expect(screen.getByTestId("cliff-claim-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("claim-button")).not.toBeInTheDocument();
   });
 
   it("disables claim button for pre-cliff stream", () => {

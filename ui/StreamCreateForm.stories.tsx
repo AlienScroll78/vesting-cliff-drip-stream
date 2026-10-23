@@ -4,30 +4,35 @@ import React from "react";
 import { StreamCreateForm } from "../frontend/src/components/StreamCreateForm";
 import { WalletContext } from "../frontend/src/contexts/WalletContext";
 
-// ─── Mock providers ───────────────────────────────────────────────────────────
-
-const MOCK_ADDRESS = "GABCDE1234567890ABCDE1234567890ABCDE1234567890ABCDE12345678";
+const VALID_ADDRESS = "GJLJ23WVK4UWYA4RGQTOUFXNZUBTTJMIRQPASCDZ4G4HM53NOT5W2OZX";
+const SPONSOR_ADDRESS = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
+const VALID_TOKEN = "CFU5BPFMUWIF6LXAQFCQ2RDS75QZL5ER2XXKHSIM2FBHTB4MFTKA5ITF";
 
 const connectedWallet = {
-  address: MOCK_ADDRESS,
+  address: SPONSOR_ADDRESS,
   freighterInstalled: true as const,
   balances: [],
   balancesLoading: false,
+  provider: "freighter" as const,
+  network: "testnet" as const,
+  modalOpen: false,
+  openModal: () => {},
+  closeModal: () => {},
   connect: async () => {},
+  connectWithProvider: () => {},
   disconnect: () => {},
+  switchNetwork: () => {},
 };
 
 const disconnectedWallet = {
+  ...connectedWallet,
   address: null,
-  freighterInstalled: null,
-  balances: [],
-  balancesLoading: false,
-  connect: async () => {},
-  disconnect: () => {},
+  freighterInstalled: false,
+  provider: null,
 };
 
 const FormWrapper = ({ children }: { children: React.ReactNode }) => (
-  <div style={{ width: 400, padding: 24, background: "#fff", borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+  <div style={{ width: 480, padding: 24, background: "var(--color-bg-base, #fff)", borderRadius: 8 }}>
     {children}
   </div>
 );
@@ -44,80 +49,45 @@ const meta: Meta<typeof StreamCreateForm> = {
       </WalletContext.Provider>
     ),
   ],
-  parameters: {
-    docs: {
-      description: {
-        component:
-          "Form for creating a new vesting stream. Validates all fields client-side and submits a Soroban contract invocation via the Freighter wallet.",
-      },
-    },
-  },
 };
 
 export default meta;
 type Story = StoryObj<typeof StreamCreateForm>;
 
-// ─── Default ──────────────────────────────────────────────────────────────────
-
-export const Default: Story = {
-  name: "Default (empty, wallet connected)",
-  args: { onSuccess: undefined },
+export const SimpleMode: Story = {
+  name: "Simple mode",
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const form = canvas.getByRole("form", { name: /create vesting stream/i });
-    expect(form).toBeInTheDocument();
-    const submitBtn = canvas.getByTestId("stream-create-submit");
-    expect(submitBtn).toBeEnabled();
+    expect(canvas.getByTestId("stream-create-form")).toBeInTheDocument();
+    expect(canvas.getByTestId("advanced-options-toggle")).toHaveAttribute("aria-expanded", "false");
+    expect(canvas.queryByLabelText(/custom rate/i)).not.toBeInTheDocument();
   },
 };
 
-// ─── Validation errors ────────────────────────────────────────────────────────
-
-export const WithValidationErrors: Story = {
-  name: "Validation errors (submit empty)",
-  parameters: {
-    docs: { description: { story: "Clicking submit without filling in fields reveals inline validation errors on each field." } },
-  },
+export const AdvancedMode: Story = {
+  name: "Advanced mode",
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const submitBtn = canvas.getByTestId("stream-create-submit");
-    await userEvent.click(submitBtn);
-    const recipientError = await canvas.findByTestId("recipient-error");
-    expect(recipientError).toBeInTheDocument();
-    const tokenError = canvas.getByTestId("token-error");
-    expect(tokenError).toBeInTheDocument();
-    const rateError = canvas.getByTestId("rate-error");
-    expect(rateError).toBeInTheDocument();
+    await userEvent.click(canvas.getByTestId("advanced-options-toggle"));
+    expect(canvas.getByLabelText(/custom rate/i)).toBeVisible();
+    expect(canvas.getByLabelText(/variable rate segments/i)).toBeVisible();
+    expect(canvas.getByLabelText(/metadata/i)).toBeVisible();
+    expect(canvas.getByLabelText(/allowlist override/i)).toBeVisible();
   },
 };
-
-// ─── Filled form ─────────────────────────────────────────────────────────────
 
 export const FilledForm: Story = {
-  name: "Filled (valid data, deposit preview)",
-  parameters: {
-    docs: { description: { story: "All fields filled with valid data; shows the estimated deposit preview." } },
-  },
+  name: "Filled with derived rate",
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-
-    // Use a valid G-address (56 chars) for recipient
-    const recipientAddr = "GABCDE1234567890ABCDE1234567890ABCDE1234567890ABCDE12345678";
-    const tokenAddr = "CABCDE1234567890ABCDE1234567890ABCDE1234567890ABCDE12345678";
-
-    await userEvent.type(canvas.getByLabelText(/recipient address/i), recipientAddr);
-    await userEvent.type(canvas.getByLabelText(/token contract/i), tokenAddr);
-    await userEvent.type(canvas.getByLabelText(/rate/i), "10");
+    await userEvent.type(canvas.getByLabelText(/recipient address/i), VALID_ADDRESS);
+    await userEvent.type(canvas.getByLabelText(/token contract/i), VALID_TOKEN);
+    await userEvent.type(canvas.getByLabelText(/total amount/i), "1000");
     await userEvent.type(canvas.getByLabelText(/cliff duration/i), "30");
     await userEvent.type(canvas.getByLabelText(/total duration/i), "365");
-
-    const preview = await canvas.findByTestId("deposit-preview");
-    expect(preview).toBeInTheDocument();
-    expect(preview).toHaveTextContent("tokens");
+    expect(await canvas.findByTestId("deposit-preview")).toHaveTextContent(/derived rate/i);
   },
 };
-
-// ─── Wallet not connected ─────────────────────────────────────────────────────
 
 export const NoWallet: Story = {
   name: "Wallet not connected",
@@ -132,9 +102,7 @@ export const NoWallet: Story = {
   ],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const submitBtn = canvas.getByTestId("stream-create-submit");
-    expect(submitBtn).toBeDisabled();
-    const alert = canvas.getByRole("alert");
-    expect(alert).toHaveTextContent(/connect your wallet/i);
+    expect(canvas.getByTestId("stream-create-submit")).toBeDisabled();
+    expect(canvas.getByRole("alert")).toHaveTextContent(/connect your wallet/i);
   },
 };

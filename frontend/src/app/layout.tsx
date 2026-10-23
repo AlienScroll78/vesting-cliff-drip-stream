@@ -8,9 +8,10 @@ import { NotificationCenter } from "@/components/NotificationCenter";
 import { HorizonStatusBanner } from "@/components/HorizonStatusBanner";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { AdminNavigation } from "@/components/AdminNavigation";
 
 // Inline script run before paint to prevent flash of unstyled content
-const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
+const noFoucScript = `(function(){try{var s=localStorage.getItem('vesting-dark-mode');var d=s==='true'||(s===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;if(d){e.classList.add('dark')}else{e.classList.remove('dark')}e.setAttribute('data-theme',d?'dark':'light')}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,45 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <title>Vesting Stream</title>
         <meta name="description" content="Cliff + drip vesting on Stellar" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>{`
+          /* ── Desktop top navigation (#770) ── */
+          .desktop-nav {
+            display: none;
+          }
+
+          @media (min-width: 768px) {
+            .desktop-nav {
+              display: flex;
+              align-items: center;
+              gap: 0.25rem;
+            }
+
+            .desktop-nav-link {
+              display: inline-flex;
+              align-items: center;
+              padding: 0.4rem 0.75rem;
+              border-radius: var(--radius, 0.5rem);
+              font-size: 0.9rem;
+              font-weight: 500;
+              color: var(--color-text, #111827);
+              text-decoration: none;
+              transition: background 0.15s ease, color 0.15s ease;
+              white-space: nowrap;
+            }
+
+            .desktop-nav-link:hover,
+            .desktop-nav-link:focus-visible {
+              background: color-mix(in srgb, var(--color-active, #1d6ae5) 10%, transparent);
+              color: var(--color-active, #1d6ae5);
+            }
+
+            .desktop-nav-link[aria-current="page"] {
+              color: var(--color-active, #1d6ae5);
+              font-weight: 700;
+              background: color-mix(in srgb, var(--color-active, #1d6ae5) 10%, transparent);
+            }
+          }
+        `}</style>
       </head>
       <body>
         {/* #69 — skip navigation link */}
@@ -39,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 <span style={{ fontWeight: 700, fontSize: "1.1rem" }}>⚡ VestingStream</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <AdminNavigation />
                   {/* #382 — Notification bell */}
                   <NotificationCenter />
                   {/* #280 — Language switcher */}
