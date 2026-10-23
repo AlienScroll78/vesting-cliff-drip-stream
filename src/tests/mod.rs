@@ -46,7 +46,7 @@ mod test_versioning;
 mod test_views;
 mod test_sponsor_streams;
 mod test_invalid_token;
-mod test_security;
+mod test_multi_stream;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
