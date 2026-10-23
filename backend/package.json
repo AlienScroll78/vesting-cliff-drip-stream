@@ -11,6 +11,7 @@
     "test:snapshots:update": "node scripts/run-snapshot-tests.mjs --update-snapshots",
     "test:ws-e2e": "vitest run --config vitest.ws-e2e.config.ts",
     "migrate": "node-pg-migrate up --migration-file-language ts",
+    "migrate:dry-run": "node-pg-migrate up --migration-file-language ts --dry-run",
     "migrate:down": "node-pg-migrate down --migration-file-language ts",
     "migrate:down:all": "node-pg-migrate down --count 999 --migration-file-language ts"
   },
@@ -19,8 +20,8 @@
     "@types/jsonwebtoken": "^9.0.9",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^11.5.3",
     "node-cron": "^3.0.3",
-    "pg": "^8.13.3",
     "node-pg-migrate": "^7.9.1",
     "pino": "^9.5.0",
     "prom-client": "15.1.3",

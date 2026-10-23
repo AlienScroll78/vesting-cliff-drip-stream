@@ -1,6 +1,7 @@
 /**
  * Issue #35: Health and readiness endpoints.
  * Issue #567: Contract version field added to both responses.
+ * Issue #1013: db_migrations status field added to both responses.
  *
  * GET /health checks PostgreSQL, Soroban RPC, and Redis.
  * GET /ready also checks indexer freshness.
@@ -11,6 +12,7 @@ import { createClient } from "redis";
 import { pool } from "../db.js";
 import { networkConfig } from "../config/network.js";
 import { horizonCircuitBreaker } from "../horizonCircuitBreaker.js";
+import { getMigrationStatus } from "../migrate.js";
 
 const START_TIME = Date.now();
 const VERSION =
@@ -105,12 +107,19 @@ async function runHealthChecks(): Promise<Record<string, string>> {
 function sendHealthResponse(res: Response, checks: Record<string, string>): void {
   const healthy = Object.values(checks).every((value) => value === "ok");
   if (!healthy) console.warn("[health] degraded service checks", checks);
+
+  // Issue #1013 — surface migration state. A schema that is not current means
+  // requests may run against stale structure, so it is reported explicitly
+  // rather than folded into the generic checks map.
+  const dbMigrations = getMigrationStatus();
+
   res.status(healthy ? 200 : 503).json({
     status: healthy ? "ok" : "degraded",
     version: VERSION,
     uptime: uptimeSeconds(),
     uptime_seconds: uptimeSeconds(),
     contract_version: _contractVersion,
+    db_migrations: dbMigrations,
     checks,
     horizon_circuit: horizonCircuitBreaker.getState(),
   });

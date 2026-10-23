@@ -1,6 +1,7 @@
 import express, { type Request, type Response, NextFunction } from 'express';
 import { RecipientParamsSchema } from './validation.js';
 import { validate } from './middleware/validate.js';
+import { corsMiddleware } from './middleware/cors.js';
 import { rateLimitMiddleware } from './middleware/tokenBucketRateLimit.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { adminRouter } from './admin/index.js';

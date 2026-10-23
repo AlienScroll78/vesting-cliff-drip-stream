@@ -34,8 +34,11 @@ let previousKey: RsaKeyPair | null = null;
 // ---------------------------------------------------------------------------
 
 function generateKeyPair(): RsaKeyPair {
-  // No encoding options: they make generateKeyPairSync return PEM strings
-  // instead of KeyObjects, breaking .export() calls below.
+  // Generate as KeyObjects (no publicKeyEncoding/privateKeyEncoding) so the
+  // returned values satisfy the RsaKeyPair type and support .export().
+  // Previously these were generated as PEM *strings*, which made the
+  // `.export({ format: "der" })` call below throw
+  // "publicKey.export is not a function".
   const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
   });
