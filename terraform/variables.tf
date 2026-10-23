@@ -73,6 +73,8 @@ variable "deployment_alert_emails" {
   description = "Email recipients for CodeDeploy lifecycle notifications."
   type        = set(string)
   default     = []
+}
+
 variable "slack_webhook_url" {
   description = "Bootstrap Slack incoming webhook for the alert relay. Applied once, then managed in AWS Secrets Manager."
   type        = string
