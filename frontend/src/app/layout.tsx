@@ -11,7 +11,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { AdminNavigation } from "@/components/AdminNavigation";
 
 // Inline script run before paint to prevent flash of unstyled content
-const noFoucScript = `(function(){try{var d=localStorage.getItem('vesting-dark-mode');if(d==='true'||(d===null&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`;
+const noFoucScript = `(function(){try{var s=localStorage.getItem('vesting-dark-mode');var d=s==='true'||(s===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);var e=document.documentElement;if(d){e.classList.add('dark')}else{e.classList.remove('dark')}e.setAttribute('data-theme',d?'dark':'light')}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

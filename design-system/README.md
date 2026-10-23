@@ -53,8 +53,11 @@ Semantic aliases (used by `components.css`, resolve to the shade noted):
 Dark is the default (`:root`) palette. Add `data-theme="light"` to `<html>` or
 any ancestor element to flip the semantic bg/text/border aliases and shadow
 opacities to the light variant — the 10-shade colour scales themselves don't
-change between themes, only which alias points at which shade. This maps onto
-the existing `useDarkMode` toggle in `frontend/src/hooks/useDarkMode.ts`.
+change between themes, only which alias points at which shade. `data-theme="dark"`
+is also declared explicitly so a subtree can force the dark variant even under a
+light ancestor. This maps onto the existing `useDarkMode` toggle in
+`frontend/src/hooks/useDarkMode.ts`, which sets `data-theme` on `<html>`
+alongside the legacy `.dark` class.
 
 ### Typography scale
 

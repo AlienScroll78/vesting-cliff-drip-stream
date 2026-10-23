@@ -200,3 +200,36 @@
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
 }
+
+/* ── Dark theme ───────────────────────────────────────────────────────────
+ * Dark is the default palette on :root, but it is also declared explicitly
+ * for data-theme="dark" so a subtree can force dark even when an ancestor
+ * opts into light. This lets the theme be driven purely by CSS custom
+ * properties (via the data-theme attribute) instead of a `.dark` class.
+ * Mirrors the semantic aliases set on :root above.
+ */
+[data-theme='dark'] {
+  --color-brand-primary:    var(--color-primary-600);
+  --color-brand-secondary:  var(--color-secondary-600);
+  --color-accent:           #06B6D4;
+
+  --color-success:          var(--color-success-500);
+  --color-warning:          var(--color-warning-500);
+  --color-danger:           var(--color-error-500);
+
+  --color-bg-base:          var(--color-neutral-900);
+  --color-bg-surface:       var(--color-neutral-800);
+  --color-bg-elevated:      var(--color-neutral-700);
+
+  --color-text-primary:     var(--color-neutral-50);
+  --color-text-secondary:   var(--color-neutral-400);
+  --color-text-disabled:    var(--color-neutral-600);
+
+  --color-border:           var(--color-neutral-700);
+  --color-border-focus:     var(--color-primary-600);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+}
