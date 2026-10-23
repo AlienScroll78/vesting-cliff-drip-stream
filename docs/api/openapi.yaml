@@ -55,7 +55,7 @@ components:
         Stellar public key (G-address). Starts with G followed by 55
         uppercase base-32 characters (A–Z, 2–7).
       examples:
-        - GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+        - GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA
 
     ContractAddress:
       type: string
@@ -616,8 +616,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Stream"
               example:
-                recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
-                sponsor: GBKPCL6MBNDKLGXFVYQUQZKPUV4NGZKUOPGSNK2E3PO3MPXWL6BFQQH
+                recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA
+                sponsor: GBKPCL6MBNDKLGXFVYQUQZKPUV4NGZKUOPGSNK2E3PO3MPXWL6BFQQHA
                 token: CCJZ5DPSLXROYIQ373NBNANGKKBKM4DZJMKBMJDUZM4DZJMKBMJDUZM4
                 rate_per_ledger: "1000"
                 start_ledger: 52000000
@@ -657,7 +657,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/StreamStatus_Endpoint"
               example:
-                recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
+                recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA
                 status: active
                 updated_at: "2026-01-15T10:30:00Z"
         "400":
@@ -703,7 +703,40 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ValidationError"
+                type: object
+                required:
+                  - error
+                properties:
+                  error:
+                    type: string
+                    enum: [validation_failed, nothing_to_claim]
+                    description: >
+                      "validation_failed" for malformed input, "nothing_to_claim"
+                      when the cliff has not been reached or nothing is due.
+                  fields:
+                    type: array
+                    description: >
+                      Per-field validation failure details. Present for
+                      "validation_failed" responses.
+                    items:
+                      type: object
+                      required:
+                        - field
+                        - message
+                      properties:
+                        field:
+                          type: string
+                          description: >
+                            Dot-notation path to the invalid field (e.g.
+                            "recipient", "query.page"). "_root" for top-level
+                            errors.
+                          examples:
+                            - "recipient"
+                        message:
+                          type: string
+                          description: Human-readable description of the validation failure.
+                          examples:
+                            - "Must be a valid Stellar public key (G followed by 55 base-32 characters)"
               examples:
                 invalid_address:
                   summary: Invalid recipient address
@@ -781,8 +814,8 @@ paths:
                 $ref: "#/components/schemas/StreamListResponse"
               example:
                 items:
-                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN
-                    sponsor: GBKPCL6MBNDKLGXFVYQUQZKPUV4NGZKUOPGSNK2E3PO3MPXWL6BFQQH
+                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA
+                    sponsor: GBKPCL6MBNDKLGXFVYQUQZKPUV4NGZKUOPGSNK2E3PO3MPXWL6BFQQHA
                     token: CCJZ5DPSLXROYIQ373NBNANGKKBKM4DZJMKBMJDUZM4DZJMKBMJDUZM4
                     rate_per_ledger: "1000"
                     start_ledger: 52000000
@@ -806,7 +839,62 @@ paths:
         "500":
           $ref: "#/components/responses/InternalErrorResponse"
 
-  # ── Analytics ────────────────────────────────────────────────────────────────
+  # ── Claimable ────────────────────────────────────────────────────────────────
+  /api/claimable-batch:
+    get:
+      summary: Get claimable amounts for multiple recipients
+      description: >
+        Batch counterpart of the single-recipient claimable lookup. Mirrors the
+        on-chain `get_claimable_batch(recipients)` view: one entry is returned
+        per requested recipient, in the requested order. Recipients without a
+        stream, before their cliff, or with a paused stream report an amount
+        of `0`.
+      operationId: getClaimableBatch
+      tags: [Streams]
+      parameters:
+        - name: recipients
+          in: query
+          required: true
+          description: >
+            Comma-separated list of recipient Stellar addresses (max 20,
+            matching the contract's `MAX_BATCH_SIZE`).
+          schema:
+            type: string
+          example: "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA"
+      responses:
+        "200":
+          description: Claimable amounts for every requested recipient.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        recipient:
+                          type: string
+                          description: Requested recipient address.
+                        claimable_amount:
+                          type: string
+                          description: Claimable amount as a string-encoded integer.
+                required: [results]
+              example:
+                results:
+                  - recipient: GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWNA
+                    claimable_amount: "5000000"
+                  - recipient: GBKPCL6MBNDKLGXFVYQUQZKPUV4NGZKUOPGSNK2E3PO3MPXWL6BFQQHA
+                    claimable_amount: "0"
+        "400":
+          $ref: "#/components/responses/ValidationErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimitResponse"
+        "503":
+          $ref: "#/components/responses/InternalErrorResponse"
+
+
   /api/analytics/summary:
     get:
       summary: Get global analytics summary

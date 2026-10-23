@@ -1,0 +1,211 @@
+name: CD Deployment Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment to deploy"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  BACKEND_IMAGE_NAME: vesting-backend
+  INDEXER_IMAGE_NAME: vesting-indexer
+
+jobs:
+  build-backend:
+    name: Build & Scan Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e3ddf14a3dc0f89df5907c1c8da1c52a73a1a9cb # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+
+      - name: Build backend Docker image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry || env.ECR_REGISTRY }}"
+          docker build -t ${REGISTRY}/${BACKEND_IMAGE_NAME}:${{ github.sha }} -f Dockerfile .
+          docker tag ${REGISTRY}/${BACKEND_IMAGE_NAME}:${{ github.sha }} ${REGISTRY}/${INDEXER_IMAGE_NAME}:${{ github.sha }}
+
+      - name: Scan Docker image with Trivy (pre-deploy)
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry || env.ECR_REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: false
+          severity: "CRITICAL,HIGH"
+
+      - name: Push images to Amazon ECR
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry || env.ECR_REGISTRY }}"
+          docker push ${REGISTRY}/${BACKEND_IMAGE_NAME}:${{ github.sha }}
+          docker push ${REGISTRY}/${INDEXER_IMAGE_NAME}:${{ github.sha }}
+
+  build-frontend:
+    name: Build Frontend (Vite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1e60f63fe62888e5bf437692d27713b3eb9ec72b # v4.2.0
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build Vite static assets
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Upload frontend build artifacts
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.6.1
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
+
+  deploy:
+    name: Deploy to ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+    env:
+      TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER_NAME || (github.event_name == 'push' && 'staging-vesting' || (inputs.environment == 'production' && 'prod-vesting' || 'staging-vesting')) }}
+      ECS_SERVICE: ${{ vars.ECS_SERVICE_NAME || 'vesting-backend' }}
+      FRONTEND_BUCKET: ${{ vars.FRONTEND_S3_BUCKET || (github.event_name == 'push' && 'vesting-staging-frontend' || (inputs.environment == 'production' && 'vesting-production-frontend' || 'vesting-staging-frontend')) }}
+      CLOUDFRONT_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+      API_URL: ${{ vars.API_URL || (github.event_name == 'push' && 'https://api.staging.vesting.example.com' || (inputs.environment == 'production' && 'https://api.vesting.example.com' || 'https://api.staging.vesting.example.com')) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download frontend static assets
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e3ddf14a3dc0f89df5907c1c8da1c52a73a1a9cb # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Record previous task definition for rollback
+        id: record-prev
+        run: |
+          PREV_TASK_DEF=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query "services[0].taskDefinition" --output text)
+          echo "Previous task definition: $PREV_TASK_DEF"
+          echo "PREV_TASK_DEF=$PREV_TASK_DEF" >> $GITHUB_ENV
+
+      - name: Deploy backend to ECS (rolling update)
+        id: deploy-ecs
+        run: |
+          echo "Fetching active task definition..."
+          TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition "$PREV_TASK_DEF" --query "taskDefinition")
+          NEW_CONTAINER_DEFS=$(echo "$TASK_DEF_JSON" | jq --arg IMAGE "${ECR_REGISTRY}/${BACKEND_IMAGE_NAME}:${{ github.sha }}" '.containerDefinitions | map(if .name == "vesting-backend" or .name == "backend" then .image = $IMAGE else . end)')
+          
+          # Register new task definition with new image tag
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --family "$(echo "$TASK_DEF_JSON" | jq -r '.family')" \
+            --execution-role-arn "$(echo "$TASK_DEF_JSON" | jq -r '.executionRoleArn')" \
+            --task-role-arn "$(echo "$TASK_DEF_JSON" | jq -r '.taskRoleArn // empty')" \
+            --network-mode "$(echo "$TASK_DEF_JSON" | jq -r '.networkMode')" \
+            --cpu "$(echo "$TASK_DEF_JSON" | jq -r '.cpu')" \
+            --memory "$(echo "$TASK_DEF_JSON" | jq -r '.memory')" \
+            --requires-compatibilities "$(echo "$TASK_DEF_JSON" | jq -r '.requiresCompatibilities[]')" \
+            --container-definitions "$NEW_CONTAINER_DEFS" \
+            --query "taskDefinition.taskDefinitionArn" --output text)
+            
+          echo "Updating ECS service for zero-downtime rolling deployment..."
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$NEW_TASK_DEF_ARN" \
+            --force-new-deployment
+
+          echo "Waiting for ECS service to reach steady state..."
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+
+      - name: Deploy frontend to S3 and invalidate CloudFront
+        run: |
+          echo "Syncing frontend static assets to S3..."
+          aws s3 sync frontend/dist "s3://${FRONTEND_BUCKET}" --delete
+
+          if [ -n "$CLOUDFRONT_ID" ]; then
+            echo "Invalidating CloudFront distribution cache..."
+            aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_ID" --paths "/*"
+          else
+            echo "CLOUDFRONT_DISTRIBUTION_ID not provided, skipping invalidation."
+          fi
+
+      - name: Post-deploy smoke test (GET /health within 120s)
+        id: smoke-test
+        run: |
+          echo "Running smoke test: GET ${API_URL}/health (timeout: 120 seconds)..."
+          START_TIME=$(date +%s)
+          SUCCESS=false
+
+          while [ $(($(date +%s) - START_TIME)) -lt 120 ]; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/health" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Smoke test passed with status 200 within $(($(date +%s) - START_TIME)) seconds."
+              SUCCESS=true
+              break
+            fi
+            echo "Smoke test returned HTTP $STATUS, retrying in 5 seconds..."
+            sleep 5
+          done
+
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Smoke test failed: GET /health did not return 200 within 120 seconds."
+            exit 1
+          fi
+
+      - name: Automatic Rollback on failure
+        if: failure() && steps.deploy-ecs.outcome == 'success'
+        run: |
+          echo "Smoke test or subsequent step failed! Rolling back ECS service to previous task definition: $PREV_TASK_DEF"
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$PREV_TASK_DEF" \
+            --force-new-deployment
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          echo "Automatic rollback completed."

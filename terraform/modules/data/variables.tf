@@ -1,7 +1,13 @@
-variable "environment"       {}
-variable "vpc_id"            {}
+variable "environment"        {}
+variable "vpc_id"             {}
 variable "private_subnet_ids" { type = list(string) }
-variable "db_password"       { sensitive = true }
+variable "db_password"        { sensitive = true }
+
+variable "ecs_security_group_ids" {
+  description = "Security group IDs of the ECS tasks allowed to connect to RDS PostgreSQL"
+  type        = list(string)
+  default     = []
+}
 
 variable "db_instance_class" {
   description = "RDS instance class. db.t3.micro is used in testnet/staging, db.t3.small in production."

@@ -503,7 +503,7 @@ export default function StreamDashboardClient() {
 
 // ── StreamDetails sub-component ───────────────────────────────────────────────
 
-function StreamDetails({
+export function StreamDetails({
   stream,
   progress: _progress,
   totalRemaining,
