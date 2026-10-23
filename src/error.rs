@@ -79,7 +79,20 @@ pub enum VestingError {
     /// **Code 16** — The batch size exceeds the maximum of 20.
     BatchTooLarge = 16,
 
-    /// **Code 17** — `rate × total_duration` is below the configured minimum.
+    /// **Code 17** — `rate` is positive but `rate × total_duration < min_deposit`.
+    ///
+    /// This error fires **before** the overflow check when the arithmetic succeeds
+    /// (no overflow) but the resulting deposit is still below the configured minimum.
+    ///
+    /// # Distinction from `DepositBelowMinimum` (code 22)
+    ///
+    /// | Code | When returned |
+    /// |------|---------------|
+    /// | 17 `RateTooLow` | `rate > 0`, multiplication succeeds, result < `min_deposit` (fast-path check before `calculate_total_deposit`) |
+    /// | 22 `DepositBelowMinimum` | Overflow-safe path: `calculate_total_deposit` returned `Ok` but value < `min_deposit` |
+    ///
+    /// In practice both codes indicate the same user-visible condition (stream is
+    /// too small). Callers should treat either code as "increase rate or duration".
     RateTooLow = 17,
 
     /// **Code 18** — `initialize` has not yet been called.
@@ -89,27 +102,6 @@ pub enum VestingError {
     /// or contain a non-positive rate).
     InvalidSegments = 19,
 
-    /// **Code 13** — Contract has already been initialized.
-    AlreadyInitialized = 13,
-
-    /// **Code 14** — Recipient is not allowed.
-    RecipientNotAllowed = 14,
-
-    /// **Code 15** — The stream is currently paused.
-    StreamPaused = 15,
-
-    /// **Code 16** — Batch size exceeds the maximum allowed limit.
-    BatchTooLarge = 16,
-
-    /// **Code 17** — Rate is below the minimum allowed rate.
-    RateTooLow = 17,
-
-    /// **Code 18** — Contract has not been initialized.
-    NotInitialized = 18,
-
-    /// **Code 19** — Variable-rate segments are invalid.
-    InvalidSegments = 19,
-
     /// **Code 20** — The `metadata` string exceeds the 256-byte limit.
     MetadataTooLong = 20,
 
@@ -117,6 +109,20 @@ pub enum VestingError {
     Unauthorized = 21,
 
     /// **Code 22** — Total deposit is below the configured minimum.
+    ///
+    /// Returned from the overflow-safe `calculate_total_deposit` code path when
+    /// `rate × total_duration` succeeds without overflow but the result is still
+    /// less than the value set by `set_min_deposit` (default: 100).
+    ///
+    /// # Distinction from `RateTooLow` (code 17)
+    ///
+    /// | Code | When returned |
+    /// |------|---------------|
+    /// | 17 `RateTooLow` | `rate > 0`, simple multiplication < `min_deposit` (before `calculate_total_deposit`) |
+    /// | 22 `DepositBelowMinimum` | Result of `calculate_total_deposit` < `min_deposit` (overflow-safe fallback) |
+    ///
+    /// Both codes signal that the stream parameters produce an insufficiently
+    /// small deposit. Increase `rate` or `total_duration` to resolve either error.
     DepositBelowMinimum = 22,
 
     /// **Code 23** — The stream is already paused.
@@ -145,26 +151,11 @@ pub enum VestingError {
     ///
     /// Reason strings are stored on-chain in the emitted event. Trim the reason
     /// to at most 256 UTF-8 bytes before retrying.
-    ReasonTooLong = 22,
+    ReasonTooLong = 28,
 
-    /// **Code 23** — The stream is already paused.
-    StreamAlreadyPaused = 23,
+    /// **Code 29** — Milestone configuration is invalid.
+    InvalidMilestones = 29,
 
-    /// **Code 24** — The stream is not currently paused.
-    StreamNotPaused = 24,
-
-    /// **Code 25** — Version counter overflow.
-    VersionOverflow = 25,
-
-    /// **Code 26** — Caller is not authorized to perform this operation.
-    Unauthorized = 26,
-
-    /// **Code 27** — Deposit is below the configured minimum deposit.
-    DepositBelowMinimum = 27,
-
-    /// **Code 28** — Milestone configuration is invalid.
-    InvalidMilestones = 28,
-
-    /// **Code 29** — Reentrancy guard: reentrant call rejected.
-    Reentrancy = 29,
+    /// **Code 30** — Reentrancy guard: reentrant call rejected.
+    Reentrancy = 30,
 }
