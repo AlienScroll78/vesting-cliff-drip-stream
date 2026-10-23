@@ -1,0 +1,33 @@
+{{- if .Values.logging.fluentBit.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vesting-backend.fullname" . }}-fluent-bit
+  labels:
+    {{- include "vesting-backend.labels" . | nindent 4 }}
+data:
+  log-level: {{ .Values.config.logLevel | quote }}
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        storage.path  /tmp/fluent-bit-storage
+      Parsers_File  /fluent-bit/etc/parsers.conf
+
+    [INPUT]
+        Name              tail
+        Path              /var/log/vesting/*.jsonl
+        Parser            json
+        Tag               vesting.application
+        DB                /tmp/fluent-bit-storage/tail.db
+        Read_from_Head    On
+        Skip_Long_Lines   On
+
+    [OUTPUT]
+        Name                cloudwatch_logs
+        Match               vesting.application
+        region              ${AWS_REGION}
+        log_group_name      ${CLOUDWATCH_LOG_GROUP}
+        log_stream_prefix   ${HOSTNAME}-
+        auto_create_group   true
+{{- end }}

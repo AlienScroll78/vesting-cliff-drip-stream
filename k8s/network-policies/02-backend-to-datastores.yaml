@@ -1,0 +1,104 @@
+# NetworkPolicy: backend-api → PostgreSQL (port 5432) and Redis (port 6379)
+#
+# Allows:
+#   - backend-api pods to connect outbound to PostgreSQL on port 5432
+#   - backend-api pods to connect outbound to Redis on port 6379
+#   - PostgreSQL pods to accept inbound from backend-api on port 5432
+#   - Redis pods to accept inbound from backend-api on port 6379
+#
+# Label assumptions:
+#   backend-api pods:  app.kubernetes.io/name=vesting-backend
+#   postgres pods:     app.kubernetes.io/name=postgresql
+#   redis pods:        app.kubernetes.io/name=redis
+#
+# If you use the Bitnami Helm charts, the default name labels are:
+#   postgresql: app.kubernetes.io/name=postgresql
+#   redis:      app.kubernetes.io/name=redis
+# Adjust matchLabels if your chart uses different labels.
+---
+# Egress from backend-api → postgres:5432 and redis:6379
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-datastores-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vesting-backend
+  policyTypes:
+    - Egress
+  egress:
+    # PostgreSQL
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    # Redis
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Ingress to PostgreSQL ← backend-api:5432
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-postgres-ingress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgresql
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vesting-backend
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Ingress to Redis ← backend-api:6379
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-redis-ingress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vesting-backend
+      ports:
+        - protocol: TCP
+          port: 6379

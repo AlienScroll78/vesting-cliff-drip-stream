@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-api
+  namespace: vesting-production
+  labels:
+    app.kubernetes.io/name: backend-api
+    app.kubernetes.io/part-of: vesting-cliff-drip-stream
+    app.kubernetes.io/component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend-api
+      app.kubernetes.io/part-of: vesting-cliff-drip-stream

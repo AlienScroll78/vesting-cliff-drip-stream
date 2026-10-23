@@ -3,7 +3,14 @@
  * Run with: npx jest frontend/WalletConnectButton.test.ts
  * (requires jest + jsdom + ts-jest)
  */
-import { createWalletConnectButton } from "./WalletConnectButton";
+import {
+  createWalletConnectButton,
+  persistWalletAddress,
+  restoreWalletAddress,
+  clearWalletAddress,
+  silentReconnect,
+  WALLET_STORAGE_KEY,
+} from "./WalletConnectButton";
 
 const ADDR = "GBTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
 
@@ -114,5 +121,111 @@ describe("WalletConnectButton", () => {
     });
     const items = el.querySelectorAll("[role=menuitem]");
     expect(items.length).toBe(3);
+  });
+
+  // ── Persistence helpers ──────────────────────────────────────────────────
+
+  describe("persistWalletAddress", () => {
+    afterEach(() => {
+      localStorage.clear();
+    });
+
+    test("stores the address under WALLET_STORAGE_KEY", () => {
+      persistWalletAddress(ADDR);
+      expect(localStorage.getItem(WALLET_STORAGE_KEY)).toBe(ADDR);
+    });
+
+    test("overwrites a previously stored address", () => {
+      persistWalletAddress(ADDR);
+      const ADDR2 = "GCOTHER0000000000000000000000000000000000000000";
+      persistWalletAddress(ADDR2);
+      expect(localStorage.getItem(WALLET_STORAGE_KEY)).toBe(ADDR2);
+    });
+
+    test("does not throw when localStorage is unavailable", () => {
+      const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+      Object.defineProperty(window, "localStorage", {
+        get() { throw new Error("unavailable"); },
+        configurable: true,
+      });
+      expect(() => persistWalletAddress(ADDR)).not.toThrow();
+      Object.defineProperty(window, "localStorage", original);
+    });
+  });
+
+  describe("restoreWalletAddress", () => {
+    afterEach(() => {
+      localStorage.clear();
+    });
+
+    test("returns null when nothing is cached", () => {
+      expect(restoreWalletAddress()).toBeNull();
+    });
+
+    test("returns the stored address after persist", () => {
+      persistWalletAddress(ADDR);
+      expect(restoreWalletAddress()).toBe(ADDR);
+    });
+
+    test("returns null when localStorage is unavailable", () => {
+      const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+      Object.defineProperty(window, "localStorage", {
+        get() { throw new Error("unavailable"); },
+        configurable: true,
+      });
+      expect(restoreWalletAddress()).toBeNull();
+      Object.defineProperty(window, "localStorage", original);
+    });
+  });
+
+  describe("clearWalletAddress", () => {
+    afterEach(() => {
+      localStorage.clear();
+    });
+
+    test("removes the stored address", () => {
+      persistWalletAddress(ADDR);
+      clearWalletAddress();
+      expect(localStorage.getItem(WALLET_STORAGE_KEY)).toBeNull();
+    });
+
+    test("does not throw when nothing is stored", () => {
+      expect(() => clearWalletAddress()).not.toThrow();
+    });
+
+    test("does not throw when localStorage is unavailable", () => {
+      const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+      Object.defineProperty(window, "localStorage", {
+        get() { throw new Error("unavailable"); },
+        configurable: true,
+      });
+      expect(() => clearWalletAddress()).not.toThrow();
+      Object.defineProperty(window, "localStorage", original);
+    });
+  });
+
+  describe("silentReconnect", () => {
+    afterEach(() => {
+      localStorage.clear();
+    });
+
+    test("returns null when no cached key exists", () => {
+      expect(silentReconnect()).toBeNull();
+    });
+
+    test("returns the cached public key when one is stored", () => {
+      persistWalletAddress(ADDR);
+      expect(silentReconnect()).toBe(ADDR);
+    });
+
+    test("returns null gracefully when localStorage is unavailable", () => {
+      const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+      Object.defineProperty(window, "localStorage", {
+        get() { throw new Error("unavailable"); },
+        configurable: true,
+      });
+      expect(silentReconnect()).toBeNull();
+      Object.defineProperty(window, "localStorage", original);
+    });
   });
 });
