@@ -26,7 +26,7 @@ describe('GlossaryTerm', () => {
     fireEvent.mouseEnter(trigger);
     expect(await screen.findByRole('tooltip')).toBeInTheDocument();
     expect(screen.getByRole('tooltip')).toHaveTextContent(
-      'A mandatory lock-up period',
+      'A mandatory waiting period',
     );
   });
 
@@ -64,15 +64,23 @@ describe('GlossaryTerm', () => {
   });
 
   it('renders a learn-more link pointing to the glossary anchor', async () => {
-    render(<GlossaryTerm term="token" />);
-    fireEvent.mouseEnter(screen.getByRole('button', { name: /token/i }));
+    render(<GlossaryTerm term="cliff" />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /cliff/i }));
     const link = await screen.findByRole('link', { name: /learn more/i });
-    expect(link).toHaveAttribute('href', expect.stringContaining('#token'));
+    expect(link).toHaveAttribute('href', expect.stringContaining('#cliff'));
   });
 
   it('renders nothing special for unknown terms', () => {
     render(<GlossaryTerm term="unknownxyz">some text</GlossaryTerm>);
     expect(screen.getByText('some text')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('surfaces persistent storage from the glossary', async () => {
+    render(<GlossaryTerm term="persistent storage" />);
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /persistent storage/i }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Soroban storage for contract data',
+    );
   });
 });

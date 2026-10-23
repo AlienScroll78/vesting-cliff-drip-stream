@@ -11,6 +11,8 @@ export interface WalletBalance {
 
 export interface VestingStream {
   id: string;
+  /** On-chain stream identifier used by stream-specific sponsor actions. */
+  streamId?: number;
   recipient: string;
   sponsor: string;
   token: string;
@@ -24,6 +26,10 @@ export interface VestingStream {
   totalDeposit?: number;
   totalVested?: number;
   totalReceived?: number;
+  /** True only when the token's SAC clawback flag has been verified. */
+  clawbackEligible?: boolean;
+  /** Current amount recoverable by clawback, in token base units. */
+  clawbackAmount?: number;
 }
 
 export type TxType = "claim" | "create" | "cancel";

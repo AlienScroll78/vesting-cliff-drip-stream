@@ -7,7 +7,7 @@ WASM_OUTPUT      = target/wasm32-unknown-unknown/release/$(CONTRACT_NAME).wasm
 OPTIMIZED        = target/$(CONTRACT_NAME).optimized.wasm
 MAX_WASM_SIZE_KB ?= 50
 
-.PHONY: all build test spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update setup
+.PHONY: all build test proptest spec-test optimize clean fmt lint check doc test-integration test-e2e test-e2e-ui test-load test-load-dryrun test-drift fuzz fuzz-ci bench bench-update
 
 all: build
 
@@ -27,16 +27,21 @@ build:
 test:
 	cargo test --features testutils
 
+## Run property-based tests (proptest, 10,000 cases per property)
+proptest:
+	cargo test --features testutils test_properties
+
 ## Run coverage with cargo-llvm-cov (install: cargo install cargo-llvm-cov)
 ## Generates HTML report in docs/coverage/html and lcov.info in docs/coverage/
 coverage:
 	cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
 	cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
 
-## Run coverage in CI mode with threshold enforcement
-## Fails if line coverage < 90% or branch coverage < 80%
+## Run contract coverage in CI mode with threshold enforcement
+## Fails if contract.rs line coverage < 90% or branch coverage < 85%
 coverage-ci:
-	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
+	cargo llvm-cov --features testutils --include-files 'src/contract.rs' --fail-under-lines 90 --fail-under-branches 85 --html --output-dir docs/coverage/html
+	cargo llvm-cov --features testutils --include-files 'src/contract.rs' --lcov --output-path docs/coverage/lcov.info
 
 ## Enforce a minimum 90% line coverage threshold (issue #785).
 ## Generates HTML report in docs/coverage/html/ and LCOV in docs/coverage/lcov.info,

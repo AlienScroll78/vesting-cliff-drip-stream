@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Tooltip } from '../Tooltip'
+import { CostCalculator } from '../components/CostCalculator'
 import { ledgersToDuration, scheduleSchema, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
 
@@ -169,6 +170,14 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
           ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration before continuing.
         </div>
       )}
+
+      {/* #538 — live sponsor cost calculator */}
+      <CostCalculator
+        rate={rate}
+        cliffDuration={cliff}
+        totalDuration={total}
+        tokenSymbol={data.tokenSymbol || 'tokens'}
+      />
 
       <div style={styles.actions}>
         <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">

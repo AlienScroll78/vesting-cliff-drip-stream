@@ -12,9 +12,11 @@
  * Valid transitions (mirrored from the DB trigger):
  *   active     → cancelled   (StreamCancelled event)
  *   active     → expired     (background job)
+ *   active     → clawedback   (StreamClawedBack event)
  *   pre_cliff  → active      (cliff reached)
  *   pre_cliff  → cancelled   (StreamCancelled event)
  *   pre_cliff  → expired     (background job)
+ *   pre_cliff  → clawedback   (StreamClawedBack event)
  *   expired    → drained     (StreamDrained event)
  *
  * Invalid transitions (e.g. active → drained) throw a StatusTransitionError
@@ -30,7 +32,8 @@ export type StreamStatus =
   | "pre_cliff"
   | "expired"
   | "cancelled"
-  | "drained";
+  | "drained"
+  | "clawedback";
 
 export type TriggeringEvent =
   | "StreamCreated"
@@ -85,11 +88,12 @@ export class StreamNotFoundError extends Error {
 // ── Valid transition table ────────────────────────────────────────────────────
 
 const VALID_TRANSITIONS: Record<StreamStatus, readonly StreamStatus[]> = {
-  active:    ["cancelled", "expired"],
-  pre_cliff: ["active", "cancelled", "expired"],
+  active:    ["cancelled", "expired", "clawedback"],
+  pre_cliff: ["active", "cancelled", "expired", "clawedback"],
   expired:   ["drained"],
   cancelled: [], // terminal state
   drained:   [], // terminal state
+  clawedback: [], // terminal state
 };
 
 /**

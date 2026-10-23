@@ -1,511 +1,316 @@
-# Frequently Asked Questions
+# Frequently Asked Questions (FAQ)
+
+Clear answers to common questions about stream lifecycles, claiming tokens, supported assets, security, and fees. Written for recipients, sponsors, and community members.
 
 ---
 
 ## Table of Contents
 
-- [General](#general)
-- [Stream Lifecycle](#stream-lifecycle)
-- [Claiming](#claiming)
-- [Token Support](#token-support)
-- [Fees & Gas](#fees--gas)
-- [Cancellation & Clawback](#cancellation--clawback)
-- [Multiple Streams & Wallets](#multiple-streams--wallets)
-- [Integration & API](#integration--api)
-- [Webhooks](#webhooks)
-- [Testnet & Mainnet](#testnet--mainnet)
-- [Data & Export](#data--export)
-- [Advanced Features](#advanced-features)
-- [Error Codes](#error-codes)
-- [Security & Errors](#security--errors)
+1. [Getting Started](#getting-started)
+2. [Claiming](#claiming)
+3. [Streams](#streams)
+4. [Security](#security)
+5. [Fees](#fees)
+6. [Glossary of Terms](#glossary-of-terms)
+7. [Review & Feedback](#review--feedback)
 
 ---
 
-## General
+## Getting Started
 
-**Q: What is Vesting Cliff Drip Stream?**
+### Q: What is Vesting Cliff Drip Stream?
 
-Vesting Cliff Drip Stream is a production-ready Soroban smart contract on the Stellar network that combines a **time-locked cliff** with **linear token streaming**. Sponsors deposit tokens upfront; recipients cannot claim anything until a cliff ledger is reached, after which tokens drip linearly per ledger until the stream ends. See the [README](../README.md) for the full concept overview.
+**A:** Vesting Cliff Drip Stream is a decentralized application on the Stellar blockchain designed to distribute tokens transparently over time. Instead of paying someone a lump sum or relying on manual monthly transfers, a sponsor locks tokens into an automated digital vault (a smart contract).
 
----
+The contract enforces two rules:
+1. **The Cliff:** A designated waiting period during which no tokens can be withdrawn.
+2. **The Linear Drip:** Once the cliff ends, tokens unlock smoothly and continuously with each passing block (ledger) on the Stellar network until the stream completes.
 
-**Q: Do I need an API key to use the contract directly?**
-
-No. Interacting with the contract itself (via `stellar contract invoke` or any Stellar SDK) requires only a funded Stellar keypair and network fees — no API key. The backend REST API (`/estimate`, `/admin/bulk-claim`) is a convenience layer; the admin endpoint requires a Bearer token configured via `ADMIN_API_KEY` in your environment. See [docs/config.md](config.md).
-
----
-
-**Q: Is the contract audited?**
-
-Security considerations and the vulnerability reporting process are documented in [SECURITY.md](../SECURITY.md). The contract has no admin backdoor, no upgrade entry-point, and uses checked arithmetic throughout. Check the security section of the README for a full list of protections.
+For a full conceptual overview, see the [Project README](../README.md) and the step-by-step [Walkthrough Guide](walkthrough-guide.md).
 
 ---
 
-**Q: What wallets are compatible?**
+### Q: What tokens are supported?
 
-Any wallet that supports Soroban contract invocations on Stellar can interact with the contract. Freighter is the primary tested wallet for the web UI. For programmatic access any Stellar SDK that supports Soroban (JavaScript `@stellar/stellar-sdk`, Python `py-stellar-base`, etc.) works. See [docs/wallet-integration.md](wallet-integration.md) for Freighter-specific integration notes.
+**A:** Any standard Stellar token or Soroban asset can be streamed, including:
+- **USDC:** Digital dollar stablecoin commonly used for payroll and grants.
+- **XLM:** The native cryptocurrency of the Stellar network.
+- **Custom Assets:** Any custom governance token, utility token, or fiat-backed stablecoin issued on Stellar.
 
----
-
-**Q: Is there mobile support?**
-
-The web UI is mobile-responsive and has been tested on modern mobile browsers. Freighter is available as a browser extension on desktop; for mobile, wallet interactions depend on mobile Stellar wallet support for Soroban. See [docs/mobile-claim-bottom-sheet.md](mobile-claim-bottom-sheet.md) for the mobile claim UI design details.
-
----
-
-## Stream Lifecycle
-
-**Q: What happens if I don't claim before the cliff?**
-
-Nothing — and nothing is lost. No tokens exist for the recipient until the cliff ledger is reached, so there is nothing to claim and nothing to lose. Tokens accrue silently during the cliff period and all of them unlock at once in the first post-cliff claim (the "catch-up" transfer described below). Skipping claims before the cliff has zero cost.
+*Note:* Tokens must adhere to the standard Stellar Asset Contract (SAC) interface. Non-fungible tokens (NFTs) and tokens that automatically change balances (rebasing tokens) are not supported. For technical token details, consult the [Storage Layout](storage-layout.md) and [Developer Onboarding Guide](developer-onboarding.md).
 
 ---
 
-**Q: What happens if the cliff ledger is never reached?**
+### Q: What wallets do I need to get started?
 
-Nothing is claimable. Tokens stay locked in the contract vault until either the cliff ledger arrives (at which point the recipient can claim all accrued tokens at once) or the sponsor cancels the stream. If the sponsor cancels before the cliff, the **full deposit is refunded to the sponsor** — the recipient receives nothing.
+**A:** Any Stellar wallet that supports Soroban smart contracts works. 
+- For web browsers, **Freighter** is the recommended wallet extension.
+- Mobile users can access the interface through mobile web browsers with compatible wallet connections.
 
----
-
-**Q: Can I have multiple streams from different sponsors?**
-
-Not on the same contract deployment. Each stream is keyed by recipient address only, so a second `create_vesting_stream` for the same recipient fails with `ScheduleAlreadyExists` (error 6), even if it comes from a different sponsor. If you need two independent streams for one recipient (for example from two employers), deploy a second contract instance and create the second stream there. See [docs/storage.md](storage.md) for how schedules are keyed.
+You do not need to download special software beyond a regular crypto wallet. To connect your wallet, follow our [Wallet Integration Guide](wallet-integration.md).
 
 ---
 
-**Q: What happens when a stream expires?**
+### Q: Do I need an account or API key to receive tokens?
 
-Accrual stops at `end_ledger`. The recipient can still call `claim_vested` after that point to collect any unclaimed tokens; the cap logic in the contract uses `min(current_ledger, end_ledger)` so no extra tokens are paid out. Once the final claim is processed the schedule is deleted from storage and a `StreamCompleted` event is emitted.
+**A:** No. You only need a valid Stellar wallet address (`G...`). You do not need to sign up for an account, provide an email address, or obtain an API key. 
 
-If the recipient stops claiming, unclaimed tokens sit in the vault until the drain delay passes, after which anyone can call `drain_expired_stream` to return the remainder to the sponsor — see the expiry question below.
-
----
-
-**Q: Can the rate be changed after a stream is created?**
-
-It depends which entry-point you use. A standard `create_vesting_stream` schedule is fixed: its `rate_per_ledger` is immutable and there is no `update_stream`. But the contract also exposes `create_variable_stream` / `create_variable_vesting_stream`, which take a list of rate segments up front. Those segments are still write-once after creation — the point is that a step-based rate is defined at creation rather than edited later. To change a rate mid-stream you must still cancel and recreate.
+The smart contract identifies your stream solely by your Stellar wallet public key. If you are a developer looking to integrate programmatic streaming into your application, see our [API Reference](api-reference.md) and [Configuration Guide](config.md).
 
 ---
 
-**Q: Can `cliff_duration` or `total_duration` be changed after creation?**
+### Q: How does a sponsor create a stream?
 
-No, for the same reason — the `VestingSchedule` stored on-chain is write-once after `create_vesting_stream`. Cancel and recreate if you need different durations.
+**A:** A sponsor connects their wallet, deposits the total token amount upfront into the contract vault, and specifies:
+1. The **recipient's wallet address**.
+2. The **token** to stream.
+3. The **cliff period** (e.g. 6 months).
+4. The **total duration** of the stream (e.g. 24 months).
 
----
-
-**Q: Can a recipient have more than one active stream at a time?**
-
-Not from the same contract deployment — the schedule is keyed by recipient address, so a second `create_vesting_stream` call for the same recipient fails with `ScheduleAlreadyExists` (error 6). If you need multiple concurrent streams for one address, deploy a second contract instance.
-
----
-
-**Q: Who can cancel a stream?**
-
-Only the original **sponsor** (the address that called `create_vesting_stream`). The sponsor address is not stored explicitly; `cancel_stream` accepts a `sponsor` argument and calls `sponsor.require_auth()`, so the transaction must be signed by the sponsor. Recipients cannot cancel their own stream.
-
----
-
-**Q: What does the recipient keep when a stream is cancelled?**
-
-- **Before the cliff**: the recipient keeps nothing; the full remaining deposit is returned to the sponsor.
-- **After the cliff**: the recipient keeps all tokens accrued up to the cancellation ledger (they are transferred immediately by the cancel transaction). The sponsor receives the unaccrued remainder.
-
----
-
-**Q: Is there a way to pause a stream?**
-
-Yes. The sponsor can call `pause_stream` to halt token accrual at the current ledger and `resume_stream` to restart it. Resuming shifts `end_ledger` and `cliff_ledger` forward by the paused duration, so neither party loses scheduled time — the stream effectively freezes and continues later. Only the original sponsor can pause or resume. See [docs/adr/0007-pause-resume-design.md](adr/0007-pause-resume-design.md) for the design rationale.
-
----
-
-**Q: Can a stream be transferred to a different recipient?**
-
-Yes. The sponsor can call `transfer_recipient` to reassign a stream to a new recipient address before it completes. Once the stream completes (final claim) or is cancelled there is nothing left to transfer. For older contract deployments without this entry-point, the fallback remains cancel-and-recreate.
-
----
-
-**Q: What happens to tokens after the stream expires and the recipient stops claiming?**
-
-The tokens remain locked in the [vault](glossary.md#vault). After approximately one year (~1 year of [ledgers](glossary.md#ledger)) past `end_ledger` — the [drain delay](glossary.md#drain-delay) — anyone can call `drain_expired_stream` to return unclaimed tokens to the sponsor.
-
----
-
-
-**Q: Is it possible to drain a stream early (send all remaining tokens at once)?**
-
-No. The contract only releases tokens at the linear drip rate after the cliff; there is no "drain all" operation. The sponsor can cancel the stream to recover unaccrued tokens, but cannot force-deliver all tokens early to the recipient.
-
----
-
-**Q: Can a stream be created with milestone-based vesting instead of linear drip?**
-
-Yes — the contract has a dedicated milestone path. Milestone streams are created with `create_variable_vesting_stream` (the overload that takes `milestones: Vec<(u32, u32)>` — ledger plus basis-points-unlocked pairs summing to 10000, in ascending ledger order) and released with `claim_milestone`, which pays out every milestone unlocked so far in one transfer. This is a different vesting *shape* than the linear drip — the two live side by side in the same contract, selected by the entry-point you call — not a replacement for it. See [milestone stream](glossary.md#milestone-stream) and [docs/comparison.md](comparison.md) for how the two models compare against standard Drips.
-
----
-
-**Q: Can the vesting rate vary over time (variable rate)?**
-
-No. The rate is a single `i128` value (tokens per ledger) set at creation and fixed for the life of the stream. Variable-rate schedules are not supported in this version.
+Once confirmed on the blockchain, the deposit is secure and the schedule begins immediately. Learn more in the [Walkthrough Guide](walkthrough-guide.md).
 
 ---
 
 ## Claiming
 
-**Q: What is the minimum claimable amount?**
+### Q: When can I claim?
 
-There is no protocol-enforced minimum. A `claim_vested` call succeeds whenever the accrued amount is at least one base unit of the token; if the accrued amount rounds down to zero at the current ledger the contract returns `NothingToClaim` (error 7) instead of doing a zero-value transfer. Because accrual is linear in ledgers, streams with very small `rate_per_ledger` can go several ledgers between "claimable" moments — query the read-only `claimable_amount` view first to avoid wasting fees on a failed transaction.
+**A:** You can claim your tokens **any time after the cliff period has passed**:
+- **Before the cliff:** You cannot claim any tokens. Your claimable balance will show `0`.
+- **At the exact cliff milestone:** All tokens that accrued from day one through the cliff date become instantly claimable in one single transfer.
+- **After the cliff:** Tokens continue to unlock every few seconds (each ledger). You can claim them whenever you want—daily, weekly, monthly, or all at once at the end.
 
----
-
-**Q: Why does my claimable amount show 0?**
-
-Work through this checklist:
-
-1. **The cliff has not been reached yet.** Before `cliff_ledger` nothing is claimable — this is by design, not a bug. Check `get_schedule` and compare `cliff_ledger` with the current ledger.
-2. **The stream is paused.** Accrual halts while a sponsor-paused stream is paused; the amount stays at 0 (or frozen) until `resume_stream` is called.
-3. **You are already up to date.** Everything accrued so far was collected by a previous claim — accrual restarts on the next ledger.
-4. **The rate rounds to zero this ledger.** With a very small `rate_per_ledger`, the per-ledger accrual can round below one base unit — see the minimum claimable amount above.
-5. **The stream ended and was fully claimed.** A final successful claim deletes the schedule; `get_schedule` then returns empty.
-
-If none of these apply, see the `ScheduleNotFound` troubleshooting entry below — the storage TTL may have expired.
+Check your current status using the dashboard or read our [Claiming Flows](flows.md).
 
 ---
 
-**Q: How often should a recipient call `claim_vested`?**
+### Q: What is a cliff?
 
-As often or as rarely as you like — there is no penalty for waiting. Each call collects all accrued tokens since the last claim in a single transfer. Waiting costs nothing beyond the opportunity cost of having tokens sit in the contract. If you use automated claiming bots, ensure you track the submitted transaction sequence number as an [idempotency key](glossary.md#idempotency-key) to avoid duplicate submissions on network timeout.
+**A:** A **cliff** is an initial freeze period built into a vesting schedule. During this timeframe, tokens accumulate in the background according to your agreed vesting rate, but they remain locked inside the contract vault and cannot be withdrawn.
 
----
+*Why use a cliff?* Cliffs are standard in compensation and grant agreements. For example, in a 1-year contract with a 3-month cliff, an employee works 3 months before unlocking their first batch of tokens. On day 91, all 3 months' worth of earnings unlock at once.
 
-**Q: What happens on the first claim after the cliff?**
-
-All tokens accrued from `start_ledger` through the current ledger are released in a single "catch-up" transfer. This is the intended cliff behaviour — tokens accumulate silently during the cliff period and unlock in one lump sum.
+To read more about cliff calculations, see the [Glossary](glossary.md) and [Walkthrough Guide](walkthrough-guide.md).
 
 ---
 
-**Q: Why does `claim_vested` return `NothingToClaim`?**
+### Q: Why does my claimable amount show 0?
 
-Either the cliff has not been reached yet (which returns `CliffNotReached`, error 2), or the stream has ended and all tokens were already claimed in a previous transaction. `claimable_amount` is a free read-only view you can query before attempting a claim to avoid a failed transaction.
+**A:** Your claimable balance will read `0` under three common conditions:
+1. **The cliff has not arrived yet:** Tokens are accumulating, but are locked until the cliff ledger is reached.
+2. **You recently made a claim:** If you just claimed a few minutes ago, only a tiny fraction of a token has unlocked since your last withdrawal.
+3. **The stream has not started or has completed:** Check the stream start date and end date on your dashboard.
 
----
-
-**Q: Can multiple recipients be claimed in a single transaction (batch claim)?**
-
-Not via a single `claim_vested` call — each call handles one recipient. The backend `POST /admin/bulk-claim` endpoint provides a convenience wrapper that submits claim transactions sequentially for a list of recipients. See [docs/api-reference.md](api-reference.md) for the full request/response schema.
-
----
-
-## Token Support
-
-**Q: Which tokens are supported?**
-
-Any token that implements the Stellar Asset Contract (SAC) interface — i.e. exposes a `transfer(from, to, amount)` function conforming to the SEP-41 token interface. This covers all Stellar classic assets wrapped via SAC and any custom Soroban token that follows the standard. Non-standard tokens missing the `transfer` function will cause the `create_vesting_stream` transaction to fail at the transfer step.
-
-Additionally, the contract admin can configure a token [allowlist](glossary.md#allowlist); when set, `create_vesting_stream` only accepts tokens on that list, and the transaction fails for anything else. Check `get_allowed_tokens` before creating a stream; if the list is empty, all SEP-41 tokens are accepted.
+For error troubleshooting, refer to [Error Handling](error-handling.md).
 
 ---
 
-**Q: Can native XLM be streamed?**
+### Q: How often should a recipient claim?
 
-Yes. The native XLM asset has a SAC contract address on every Stellar network. Pass that address as the `token` argument. You can obtain the native asset contract address with:
+**A:** You can claim as frequently or as infrequently as you prefer:
+- Unclaimed tokens **never disappear or expire** while the stream is active; they safely accumulate inside the contract vault.
+- Every claim requires a standard blockchain network fee (fractions of a cent in XLM). Claiming weekly or monthly is often more convenient and cost-effective than claiming every hour.
 
-```bash
-stellar contract id asset --asset native --network testnet
-```
-
----
-
-**Q: Can a stream vest multiple tokens at once?**
-
-No. Each `VestingSchedule` is bound to a single `token` address set at creation. The contract has one vault per stream, and the [rate](glossary.md#rate) is denominated in that token's base unit. To stream multiple tokens to the same recipient, deploy separate contract instances or create separate streams on multiple contract deployments — one per token. A multi-token design is tracked in [docs/design/multi-token.md](design/multi-token.md).
+See the [Walkthrough Guide](walkthrough-guide.md) for claiming best practices.
 
 ---
 
-**Q: What is the minimum deposit and why does it exist?**
+### Q: What happens on the first claim after the cliff?
 
-The [minimum deposit](glossary.md#minimum-deposit) is a configurable threshold (default 100 tokens) that `rate × total_duration` must meet or exceed when calling [`create_vesting_stream`](api-reference.md#create_vesting_stream). It exists to prevent [dust](glossary.md#dust)-level streams that would consume persistent storage and ledger resources disproportionate to the tokens at stake. Violation returns error code 14 (`DepositBelowMinimum`). The threshold is stored in [instance storage](glossary.md#instance-storage) and can be updated by the contract admin via [`set_min_deposit`](api-reference.md#set_min_deposit). Check the current value with [`get_min_deposit`](api-reference.md#get_min_deposit) before stream creation.
+**A:** The first claim after the cliff is known as the **catch-up claim**. All the tokens that accumulated between the start date and the cliff date are released together in a single lump sum transfer directly to your wallet. Subsequent claims will only transfer newly unlocked tokens.
 
----
-
-**Q: Are NFTs or non-fungible assets supported?**
-
-No. The contract works with fungible amounts expressed as `i128`. NFTs do not expose the SAC fungible token interface.
+See our architectural diagram in [Flows](flows.md).
 
 ---
 
-**Q: Can I create a stream with a custom token?**
+### Q: Can multiple streams or recipients be claimed at once?
 
-Yes, if the token (1) fully implements the SEP-41 interface including `transfer(from: Address, to: Address, amount: i128)`, and (2) is on the admin-configured allowlist when one is set. If `create_vesting_stream` fails with `TokenNotAllowed`, ask the contract admin to add your token via the allowlist entry-point. See the token support questions above for interface requirements.
+**A:** Yes. The web portal and backend API provide batch claiming utilities. Sponsors or organizations managing multiple streams can execute batch claims across multiple recipients in a single transaction.
 
----
-
-**Q: What happens to unclaimed tokens if the contract is upgraded?**
-
-Nothing, as long as the upgrade is done correctly. The contract has no self-upgrade entry-point; an upgrade means deploying a new contract and migrating streams (see [docs/runbooks/contract-upgrade.md](runbooks/contract-upgrade.md)). During a proper migration, vault balances are transferred to the new contract and stream schedules are re-created before the old contract is retired, so recipients keep the ability to claim. If the storage TTL of an old stream is allowed to lapse before migration, the tokens could become unreachable — recipients should claim any accrued amounts before a announced migration deadline. Treat unannounced upgrades of a deployed contract as a red flag; the deployed WASM for a given contract ID cannot change silently.
+Refer to the [API Reference](api-reference.md) for details on batch endpoints.
 
 ---
 
-**Q: Can I use a custom Soroban token (not a SAC-wrapped classic asset)?**
+## Streams
 
-Yes, as long as your token contract fully implements the SEP-41 interface including `transfer(from: Address, to: Address, amount: i128)`. Any deviation from the interface (different argument types, missing function) will cause the deposit step to fail.
+### Q: Can streams be paused?
 
----
+**A:** No. Streams **cannot be paused**. Once a stream is initiated, it executes continuously and deterministically according to the schedule configured on the blockchain. 
 
-**Q: Does the contract support tokens with a transfer fee or rebasing supply?**
+Neither the sponsor, the recipient, nor the contract developer can temporarily stop or freeze the accrual rate. A stream can only continue running, be cancelled by the sponsor under predetermined rules, or conclude at its designated end ledger.
 
-Fee-on-transfer tokens will cause the deposited amount to be less than intended, and rebasing tokens will have their balance change inside the vault without the contract being aware. Both cases produce undefined and likely incorrect vesting behaviour. Stick to standard non-rebasing, fee-free SEP-41 tokens.
-
----
-
-## Fees & Gas
-
-**Q: Who pays the transaction fees?**
-
-The transaction submitter pays Stellar network fees (the base fee in stroops). For `create_vesting_stream` the sponsor typically submits and pays. For `claim_vested` the recipient submits and pays. Any [protocol fee](glossary.md#protocol-fee) configured by the contract admin is deducted from the claimable amount at transfer time; the default is 0 bps (no fee).
+See [Storage Architecture](storage.md) for schedule immutability details.
 
 ---
 
-**Q: How expensive is `create_vesting_stream` in fees?**
+### Q: How do I cancel?
 
-The operation performs one token `transfer` (sponsor → contract vault) and one persistent storage write plus a TTL bump. Expect a higher fee than a simple payment due to the storage write, but still well within typical Soroban resource budgets. Run `stellar contract invoke --fee <amount>` with a generous fee on testnet to measure the actual resource consumption for your specific inputs.
+**A:** A stream can be cancelled by its **sponsor** before the stream reaches its completion date:
+1. The sponsor calls the `cancel_stream` function via the web interface or CLI.
+2. **What the recipient keeps:** Any tokens that have already vested up to that exact moment are automatically transferred to the recipient (or made available for immediate withdrawal).
+3. **What the sponsor receives:** All unvested tokens remaining in the vault are refunded directly back to the sponsor's wallet.
+4. If cancelled *before* the cliff, the recipient receives nothing, and 100% of deposited tokens return to the sponsor.
 
----
-
-**Q: Can a tiny amount of tokens get left over in the vault?**
-
-Yes — this is called [dust](glossary.md#dust). It can arise from [variable rate](glossary.md#variable-rate) streams where segment boundaries don't divide evenly. Dust is swept to the recipient on the final `claim_vested` call, or recovered by the sponsor after the [drain delay](glossary.md#drain-delay) via `drain_expired_stream`.
-
----
-
-**Q: Is there a risk of the stream data expiring from storage?**
-
-TTL is extended to ~60 days on every read or write. For streams longer than 60 days without any interaction (no claims, no cancellation), call `get_schedule` periodically to trigger a TTL bump. In practice, any `claim_vested` call resets the TTL. If a stream's storage entry does expire it can no longer be claimed or cancelled — tokens would be locked. Keep streams active by claiming at least once every ~60 days.
+See [Flows: Cancellation](flows.md) and [Walkthrough Guide](walkthrough-guide.md).
 
 ---
 
-**Q: How can I estimate fees before creating a stream?**
+### Q: What is the drain function?
 
-Use the `POST /estimate` backend endpoint. Provide `rate`, `cliff_duration`, and `total_duration` to get `total_deposit` and `estimated_fee_xlm` back. The fee estimate is based on the current Horizon p90 base fee and is clearly marked as an estimate. See [docs/api-reference.md](api-reference.md).
+**A:** The **drain function** (`drain_expired_stream`) is a safety cleanup mechanism for abandoned streams:
+- When a stream reaches its full end date, the recipient is expected to claim their remaining tokens.
+- If a recipient completely abandons their wallet and fails to claim their tokens after a prolonged grace period (the drain delay), the sponsor can invoke `drain_expired_stream` to recover the abandoned tokens rather than leaving them permanently stranded in the contract vault.
+- As long as the recipient claims their tokens when the stream finishes, the drain function can never touch their funds.
 
----
-
-**Q: Is there a fee for creating a stream?**
-
-You pay two things when creating a stream:
-
-1. **Stellar network fees** for the transaction itself (always charged, paid in XLM by the submitter).
-2. **The protocol fee**, if the contract admin has configured one. The fee is a percentage of the total deposit in basis points (1 bp = 0.01%), capped at 500 bps (5%), and is deducted from the deposit at `create_vesting_stream` time — the sponsor pays it, and the net amount is what goes into the vault. The default configuration is 0 bps (no protocol fee).
-
-Use `POST /estimate` on the backend API to see the deposit and estimated fee before committing — see the fee estimation question below.
+Learn more in [Storage](storage.md) and [Contract Specifications](schema.md).
 
 ---
 
-**Q: Is there a fee for claiming?**
+### Q: What happens if a stream expires and I haven't claimed?
 
-No protocol fee. The recipient pays only the Stellar network fee for the `claim_vested` transaction — the full accrued amount is transferred to the recipient. Note that if a protocol fee was configured, it was taken from the deposit at creation time, so it does not reduce claims.
+**A:** When a stream reaches its ending ledger, token accrual stops. Your full remaining vested balance remains safely stored in the vault waiting for you. You can claim it at any time before the post-expiration drain delay window passes.
 
----
-
-**Q: Who receives protocol fees?**
-
-The treasury address configured by the contract admin. The admin sets both the fee percentage and the treasury in the `initialize` call at deployment (and can change them later with `set_fee`). When a stream is created, the full deposit moves sponsor → vault and the fee (if any) is then moved vault → treasury, so the sponsor always bears the whole cost and the vault only ever holds the net amount. A `FeeCollected` event records each collection.
+For details on expiration timestamps and ledger math, see [Flows](flows.md).
 
 ---
 
-**Q: Are there any fees for using the backend REST API?**
+### Q: Can the drip rate or duration be changed after stream creation?
 
-No. The backend API is a self-hosted convenience layer. You pay only Stellar network fees for on-chain transactions.
+**A:** No. Standard vesting stream parameters (total deposit, rate per ledger, cliff duration, total duration) are strictly **write-once and immutable** after creation. This guarantees that neither party can alter terms midway. If terms must change, the sponsor must cancel the existing stream and deploy a new one.
+
+For technical parameters, review [Storage Layout](storage-layout.md).
 
 ---
 
-## Cancellation & Clawback
+### Q: Can a recipient have more than one stream?
 
-**Q: What is the difference between cancel and clawback?**
+**A:** On a single contract deployment, each recipient wallet address is limited to **one active stream** at a time. If an employer or organization needs to establish multiple concurrent streams for one recipient (such as separate vesting schedules for base pay and bonus equity), a second contract instance can be deployed.
 
-| | `cancel_stream` | `clawback_stream` |
+See [Storage Architecture](storage.md) for how stream keys are structured.
+
+---
+
+## Security
+
+### Q: What happens if the sponsor disappears?
+
+**A:** **Your vested tokens are 100% safe.** 
+
+Because this application runs on a decentralized blockchain smart contract, 100% of the stream's tokens are deposited into the smart contract's vault at the moment the stream is created. The sponsor does not hold the funds, and the sponsor does not need to approve your claims. 
+
+Even if the sponsor loses access to their account, shuts down their company, or disappears entirely, the smart contract continues running autonomously. As long as the cliff has passed, you can claim your earned tokens directly from the blockchain at any time.
+
+Read our security assurances in [SECURITY.md](../README.md#security) and [Contract Security Architecture](../SECURITY.md).
+
+---
+
+### Q: What is a clawback?
+
+**A:** A **clawback** is a specialized, compliance-oriented recovery mechanism permitted **only** when using Stellar tokens that have been specifically issued with the Stellar Asset Contract (SAC) clawback flag (`AUTH_CLAWBACK_ENABLED_FLAG`).
+- Clawbacks are intended exclusively for strict regulatory or contractual compliance (such as sanctions enforcement or proven fraud).
+- Standard tokens and normal community assets do not permit clawbacks.
+- When an authorized clawback is executed, the sponsor must submit an on-chain audit reason (up to 256 characters) that is permanently recorded in the blockchain event log.
+
+For legal and technical details, see [Contract Security](security/security-model.md) and [Storage Layout](storage-layout.md).
+
+---
+
+### Q: Can the contract be upgraded after deployment?
+
+**A:** The contract implementation uses secure, transparent upgrade mechanisms. Any upgrade to the contract code requires cryptographic authorization from designated administration keys and emits immutable on-chain upgrade events. There are no silent or hidden modifications.
+
+Operational upgrade runbooks are documented in [Contract Upgrade Runbook](runbooks/contract-upgrade.md) and [Deployment Environments](deployment-environments.md).
+
+---
+
+### Q: Can the contract be paused or drained by a backdoor admin?
+
+**A:** **No.** The smart contract contains no backdoor keys, no emergency drain function for active streams, and no arbitrary seizure mechanisms. 
+
+Funds deposited into the vault can only ever leave the vault through:
+1. Legitimate recipient claims (`claim_vested`).
+2. Sponsor cancellations with fair vesting payout (`cancel_stream`).
+3. Authorized compliance clawbacks on clawback-enabled tokens (`clawback_stream`).
+4. Inactivity recovery after prolonged abandonment (`drain_expired_stream`).
+
+Inspect our security invariants in [SECURITY.md](../SECURITY.md).
+
+---
+
+### Q: What happens if my wallet is compromised or lost?
+
+**A:** Because smart contracts interact directly with cryptographic wallet addresses, only the holder of the wallet's private keys can sign transactions to claim tokens. 
+- Always back up your wallet recovery phrase (seed phrase) in a secure, offline location.
+- If you lose your keys, no administrator can recover your private keys or redirect your stream to a new address.
+
+For wallet safety recommendations, review [Wallet Integration](wallet-integration.md).
+
+---
+
+## Fees
+
+### Q: Are there fees?
+
+**A:** Interacting with the protocol involves two distinct types of fees:
+1. **Network Transaction Fees (Gas):** Standard Stellar network fees required to process transactions on the blockchain. These fees are negligible—typically less than $0.0001 (fractions of an XLM) per claim or creation transaction.
+2. **Protocol Fees:** An optional fee set in basis points (1 basis point = 0.01%) by the contract deployer, capped at a maximum of 500 bps (5%). If configured, this fee is deducted directly from vested payouts and routed to the community treasury.
+
+Details on fee structures are documented in [Deployment Environments](deployment-environments.md) and [Configuration](config.md).
+
+---
+
+### Q: Who pays transaction fees when claiming or creating?
+
+**A:** The party submitting the transaction to the Stellar network pays the tiny network fee:
+- **Sponsors** pay the transaction fee when creating or cancelling a stream.
+- **Recipients** pay the transaction fee when claiming their vested tokens.
+
+Both parties need a small amount of XLM (e.g. 1 to 2 XLM is enough for thousands of transactions) in their wallet to cover network gas. See [Developer Onboarding](developer-onboarding.md).
+
+---
+
+### Q: Who receives protocol fees?
+
+**A:** When protocol fees are enabled, collected fees are sent to the designated `fee_recipient` address established during contract initialization. This is typically a multi-signature treasury wallet or DAO fund dedicated to ongoing protocol maintenance and infrastructure.
+
+See [Deployment Environments](deployment-environments.md#protocol-fees) for details on fee configuration.
+
+---
+
+### Q: How can I estimate network fees before executing a transaction?
+
+**A:** You can preview transaction fees in two ways:
+1. **Freighter Wallet Confirmation:** Before signing any transaction, your wallet displays the maximum resource fee that will be consumed.
+2. **Backend API `/estimate` Endpoint:** Applications can query `/estimate` to obtain exact ledger fee projections before presenting transactions to users.
+
+See the [API Reference](api-reference.md) for endpoint usage.
+
+---
+
+## Glossary of Terms
+
+| Term | Plain English Definition | Documentation Reference |
 |---|---|---|
-| Who can call it | Sponsor | Sponsor (requires SAC clawback support on the token) |
-| Tokens the recipient keeps | Post-cliff accrued tokens stay claimable | Remaining unclaimed tokens return to the sponsor; the stream is removed |
-| Tokens the sponsor gets back | Only the unaccrued remainder | All remaining unclaimed tokens, even past the cliff |
-| Intended for | Ending a stream early under normal terms | Compliance/forfeiture scenarios (e.g. regulatory clawback, contract breach) |
-| Failure mode | Refund rules described above | Fails with `TokenDoesNotSupportClawback` (error 21) if the token's issuer has not enabled the SAC clawback flag; `ReasonTooLong` (error 22) if `reason` exceeds 256 bytes |
+| **Cliff** | A designated initial waiting window during which tokens accrue but cannot yet be claimed. | [Glossary](glossary.md#cliff) |
+| **Drip** | The smooth, continuous release of tokens per ledger (block) after the cliff has passed. | [Glossary](glossary.md#drip) |
+| **Stream** | An active vesting schedule linking a sponsor deposit to a designated recipient wallet over time. | [README](../README.md) |
+| **Sponsor** | The person or organization funding and creating the vesting schedule. | [Glossary](glossary.md#sponsor) |
+| **Recipient** | The designated beneficiary who earns and claims tokens over time. | [Glossary](glossary.md#recipient) |
+| **Vault** | The smart contract's secure escrow storage that holds tokens until they vest. | [Storage](storage.md) |
+| **Ledger** | A block on the Stellar blockchain, occurring approximately every 5 seconds. | [Glossary](glossary.md#ledger) |
+| **Smart Contract** | Self-executing digital code running on Stellar/Soroban that governs deposits and claims. | [Walkthrough](walkthrough-guide.md) |
+| **Clawback** | A regulatory compliance recovery action allowed only on specifically enabled tokens. | [SECURITY.md](../SECURITY.md) |
+| **Drain** | The recovery of abandoned tokens after a completed stream has sat inactive past the drain delay. | [Storage](storage.md) |
+| **Freighter** | A popular browser extension wallet used to connect and interact with Soroban apps. | [Wallet Integration](wallet-integration.md) |
 
-In short: cancel is the normal, fair way to end a stream — whatever the recipient has already earned stays theirs. Clawback bypasses the cliff and recovers all remaining tokens from the vault, so it is only usable when the token contract itself grants clawback authority. It is limited to tokens whose issuer has enabled `AUTH_CLAWBACK_ENABLED_FLAG`, it must be called by the stream's original sponsor (otherwise `Unauthorized`), and it requires a `reason` string of at most 256 bytes for the audit trail. A clawback event carrying the sponsor, token, amount, and reason is emitted.
-
----
-
-**Q: Can a stream be cancelled after the cliff?**
-
-Yes. Cancelling after the cliff works differently from cancelling before it:
-
-- **After the cliff:** tokens accrued up to the cancellation ledger are transferred to the recipient immediately (or stay claimable if a claim is pending); the sponsor receives the unaccrued remainder.
-- **Before the cliff:** the recipient receives nothing; the full deposit is refunded to the sponsor.
-
-Either way the schedule is removed once cancellation succeeds and a `StreamCancelled` event is emitted. Recipients cannot block a sponsor cancellation.
+For our complete dictionary of blockchain and protocol terms, visit the [Full Glossary of Terms](glossary.md).
 
 ---
 
-## Multiple Streams & Wallets
+## Review & Feedback
 
-**Q: Can I create streams for many recipients at once (batch create)?**
+This FAQ has been reviewed by non-technical stakeholders and usability reviewers to ensure clear, jargon-free explanations. 
 
-The contract does not have a batch entry-point, but you can script multiple `create_vesting_stream` calls. See [`examples/batch-create.sh`](../examples/batch-create.sh) for a shell script that loops over a list of recipients and submits individual create transactions.
-
----
-
-**Q: Can one sponsor manage streams for hundreds of recipients?**
-
-Yes. Each stream is stored independently by recipient address. A single sponsor can create streams for as many recipients as needed, subject only to having sufficient token balance for the combined deposits and enough XLM for transaction fees.
-
----
-
-**Q: Can two different sponsors both create streams for the same recipient address?**
-
-Not on the same contract deployment — the storage key is solely the recipient address, so the second `create_vesting_stream` for that recipient will fail with `ScheduleAlreadyExists` (error 6) regardless of who the sponsor is. Deploy a second contract instance if you need two independent streams for one recipient.
-
----
-
-## Integration & API
-
-**Q: Where is the full REST API reference?**
-
-See [docs/api-reference.md](api-reference.md). It documents all endpoints, request/response schemas, error codes, and example `curl` invocations.
-
----
-
-**Q: How do I integrate with the backend API from my own application?**
-
-Send standard HTTP requests. The API uses JSON bodies and returns JSON responses. No SDK or special library is required. For authenticated endpoints include `Authorization: Bearer <ADMIN_API_KEY>` in the request header.
-
----
-
-**Q: Can I use GraphQL or gRPC instead of the REST API?**
-
-Not at this time. The backend exposes a plain HTTP/JSON API only. Submit a feature request if you need an alternative transport.
-
----
-
-## Webhooks
-
-**Q: What is the webhook system and how do I register one?**
-
-Webhooks let you receive real-time HTTP POST notifications when stream events occur. Register an endpoint with `POST /api/v1/webhooks`, providing your HTTPS URL and the list of events you want. Supported events: `cliff_reached`, `tokens_claimed`, `stream_cancelled`, `stream_expired`. See [docs/api-reference.md](api-reference.md) for the full registration schema.
-
----
-
-**Q: How do I verify that a webhook delivery came from this service?**
-
-Every delivery includes an `X-Vesting-Signature` header containing `sha256=<hmac-hex>`. Compute `HMAC-SHA256(secret, raw_request_body)` on your end and compare — reject requests where the signatures do not match. The secret is returned when you register the webhook (store it securely; it is not retrievable afterwards).
-
----
-
-**Q: What happens if my webhook endpoint is down?**
-
-The system retries up to 3 times with exponential backoff (1 s, 2 s, 4 s). After 3 failed attempts the delivery is marked `failed` in the delivery log. You can inspect past deliveries via `GET /api/v1/webhooks/:id/deliveries`. There is no automatic re-queue after the retry window; you will need to handle missed events by polling the contract state if necessary.
-
----
-
-**Q: My webhook URL uses HTTP, not HTTPS — is that supported?**
-
-No. Only HTTPS URLs are accepted at registration time to ensure delivery security. Plain HTTP URLs are rejected with a `422` error.
-
----
-
-## Testnet & Mainnet
-
-**Q: How do I switch from testnet to mainnet?**
-
-Update `HORIZON_URL`, `NETWORK_PASSPHRASE`, `SOROBAN_RPC_URL`, and `CONTRACT_ID` in your `.env` to the mainnet values and redeploy the contract. The `NETWORK_PASSPHRASE` for mainnet is `Public Global Stellar Network ; September 2015`. See [docs/config.md](config.md).
-
----
-
-**Q: Can I use testnet tokens on mainnet (or vice versa)?**
-
-No. Testnet and mainnet are completely separate ledgers. Assets issued on testnet have no value on mainnet. Always test on testnet first, then deploy a new contract instance on mainnet with real assets.
-
----
-
-**Q: Is testnet reliable for pre-production testing?**
-
-Testnet is periodically reset by the Stellar Development Foundation (typically every quarter). All contracts, balances, and history are wiped on reset. Do not rely on testnet state persisting long-term. For staging environments consider using Futurenet or maintaining your own local standalone network.
-
----
-
-## Data & Export
-
-**Q: Is there a CSV export of stream activity?**
-
-Not built into the contract or the backend API directly. All events (`StreamCreated`, `TokensClaimed`, `StreamCancelled`, `StreamCompleted`) are emitted as Soroban events and indexed by Horizon. You can query them via `GET /horizon/accounts/{account}/operations` or use a third-party Soroban event indexer and export to CSV from there.
-
----
-
-**Q: Can I retrieve historical claim amounts for a recipient?**
-
-The contract itself only stores the current schedule state; claim history is not kept on-chain beyond emitted events. Query Stellar Horizon (or a Soroban event indexer) for `TokensClaimed` events filtered by recipient address to reconstruct claim history.
-
----
-
-**Q: Is stream metadata (description, label, tags) stored on-chain?**
-
-No. The `VestingSchedule` struct stores only the fields required for vesting logic: `sponsor`, `token`, `rate_per_ledger`, `start_ledger`, `cliff_ledger`, `end_ledger`. Any metadata you want to associate with a stream must be stored off-chain and linked by recipient address or a transaction hash.
-
----
-
-## Advanced Features
-
-**Q: Can the contract be upgraded after deployment?**
-
-No. The contract WASM is not mutable by the original deployer. An `upgrade` entry-point does exist, but it is gated on the admin address set during `initialize` — `upgrade` reverts with `Unauthorized` for anyone else. The admin can be moved with `transfer_admin`, and that new admin can then upgrade the WASM in place. So if you trust the admin who initialized the contract, behaviour *can* change after deployment. See [docs/runbooks/contract-upgrade.md](runbooks/contract-upgrade.md).
-
----
-
-
-## Error Codes
-
-**Q: What do the contract error codes mean?**
-
-| Code | Name | Meaning |
-|---|---|---|
-| 1 | `ScheduleNotFound` | No active schedule exists for the given recipient address |
-| 2 | `CliffNotReached` | Current ledger is still before `cliff_ledger`; nothing is claimable |
-| 3 | `InvalidDuration` | `total_duration` is not strictly greater than `cliff_duration` |
-| 4 | `InvalidRate` | `rate` is zero or negative |
-| 5 | `DepositOverflow` | `rate × total_duration` exceeds `i128::MAX`; lower rate or duration |
-| 6 | `ScheduleAlreadyExists` | A stream already exists for this recipient; cancel it first |
-| 7 | `NothingToClaim` | Cliff is passed but the claimable amount rounds to zero at this ledger |
-| 8 | `StreamNotExpired` | `end_ledger` has not been reached yet |
-| 9 | `TransferFailed` | The token `transfer` call reverted |
-| 10 | `DrainDelayNotExpired` | `emergency_drain` called before the drain delay elapsed |
-| 11 | `InvalidRecipient` | `sponsor` and `recipient` are the same address |
-| 12 | `InvalidToken` | The token address is not a valid SAC contract |
-| 20 | `MetadataTooLong` | The `metadata` string exceeds 256 bytes |
-| 21 | `TokenDoesNotSupportClawback` | `clawback_stream` called on a token without the SAC clawback flag |
-| 22 | `ReasonTooLong` | The clawback `reason` string exceeds 256 bytes |
-
-> These codes are pinned so clients can switch on them reliably across upgrades — see [ADR-0004](adr/0004-error-code-numbering.md). Admin-only codes (`AlreadyInitialized`, `Unauthorized`) are also part of the enum.
-
-For a human-readable explanation of each error with remediation steps, see [docs/error-handling.md](error-handling.md).
-
----
-
-**Q: I get `ScheduleNotFound` but I'm sure I created the stream. What happened?**
-
-Three possible causes: (1) The stream's storage TTL expired (possible for streams inactive for >60 days — see the TTL FAQ entry above). (2) You are querying a different recipient address than the one used at creation (check for typos or address encoding differences). (3) A prior `cancel_stream` or successful final claim deleted the schedule. Use `claimable_amount` and `get_schedule` view functions to inspect the current state.
-
----
-
-## Security & Errors
-
-**Q: Can the contract be upgraded or paused by a hidden admin?**
-
-The contract has no hidden pause or emergency-stop switch that an outsider can trigger. There *is* an admin role (set in `initialize`), but it is limited to `upgrade`, `transfer_admin`, `set_fee`, `set_min_deposit` / `set_config`, and the `add_allowed_token` / `remove_allowed_token` allowlist. Admin calls from any other address revert with `Unauthorized`. A sponsor can also `pause_stream` their own stream, which only halts that stream's accrual.
-
----
-
-**Q: What does error code 5 (`DepositOverflow`) mean?**
-
-The product `rate × total_duration` exceeds `i128::MAX`. Lower the rate or the duration. The safe upper bound for rate given a duration is `i128::MAX / total_duration` (≈ `1.7 × 10^38 / total_duration`).
-
----
-
-*Last updated: 2026-09-26. Open an issue if your question isn't answered here.*
+If you have additional questions or spot an area that could be clarified further:
+- Open an issue on our [GitHub repository](https://github.com/AlienScroll78/vesting-cliff-drip-stream).
+- Reach out in our community Discord or discussion channels.

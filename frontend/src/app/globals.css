@@ -10,6 +10,9 @@
   --color-border: #e5e7eb;
   --color-text: #111827;
   --radius: 0.5rem;
+  --motion-duration-ui: 180ms;
+  --motion-duration-celebration: 900ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   /* ── Issue #766: semantic color tokens (light mode defaults) ── */
   --bg-primary: #ffffff;
   --text-primary: #1a1a1a;
@@ -123,8 +126,17 @@ body {
   min-height: 44px; min-width: 44px;
   padding: 0.5rem 1.25rem; border-radius: var(--radius); font-weight: 600;
   cursor: pointer; border: 2px solid transparent;
-  transition: opacity 0.15s, background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+  transition: opacity 0.15s, background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard),
+    transform 100ms ease-out, box-shadow 100ms ease-out;
   white-space: nowrap;
+}
+.btn:hover:not(:disabled) { box-shadow: 0 3px 7px rgb(15 23 42 / 0.18); }
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: 0 0 0 rgb(15 23 42 / 0.12);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary  { background: var(--color-active); color: #fff; }
@@ -159,12 +171,43 @@ body {
   display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
   border: 1.5px solid currentColor;
-  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
+  transition: color var(--motion-duration-ui) var(--motion-ease-standard),
+    background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard);
 }
 .badge-active    { color: var(--color-active);    background: #eff6ff; }
 .badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
 .badge-completed { color: var(--color-completed); background: #f0fdf4; }
 .badge-cancelled { color: var(--color-cancelled); background: #fef2f2; }
+
+/* Stream lifecycle feedback */
+.stream-status-badge {
+  transition: color var(--motion-duration-ui) var(--motion-ease-standard),
+    background-color var(--motion-duration-ui) var(--motion-ease-standard),
+    border-color var(--motion-duration-ui) var(--motion-ease-standard);
+}
+.stream-status-badge__icon {
+  display: inline-flex;
+  transform-origin: center;
+  animation: status-icon-enter var(--motion-duration-ui) var(--motion-ease-standard) both;
+}
+@keyframes status-icon-enter {
+  from { opacity: 0.35; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* The lock releases as the cliff is reached. */
+.cliff-unlock-icon {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: cliff-lock-release var(--motion-duration-celebration) var(--motion-ease-standard) both;
+}
+@keyframes cliff-lock-release {
+  0% { opacity: 0; transform: rotate(-24deg) scale(0.75); }
+  35% { opacity: 1; transform: rotate(12deg) scale(1.15); }
+  65% { transform: rotate(-6deg) scale(0.96); }
+  100% { transform: rotate(0) scale(1); }
+}
 
 /* ── Legend ── */
 .legend {
@@ -274,6 +317,14 @@ body {
 .copy-btn:hover, .copy-btn:focus-visible {
   color: var(--color-active); background: #eff6ff; outline: 2px solid var(--color-active);
 }
+.copyable-identifier {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  min-width: 0; font-family: monospace; white-space: nowrap;
+}
+.copyable-identifier-explorer {
+  color: var(--color-active); text-decoration: none; font-family: sans-serif;
+}
+.copyable-identifier-explorer:hover { text-decoration: underline; }
 
 /* ── Network selector (#62) ── */
 .network-selector select {
@@ -287,6 +338,17 @@ body {
   border-bottom: 1px solid #fecaca; font-size: 0.9rem;
 }
 
+/* Mobile route changes fade in while moving content up by 8px. */
+@keyframes mobile-route-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 767px) {
+  .mobile-route-transition {
+    animation: mobile-route-enter 160ms ease-out both;
+  }
+}
+
 /* ── Skeleton loaders (#64) ── */
 @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .skeleton {
@@ -294,15 +356,35 @@ body {
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
-/* ── Reduced motion (#374) ──
-   Belt-and-suspenders on top of the JS-side useReducedMotion checks:
-   any transition/animation still reaching the DOM under this preference
-   (e.g. from a component that doesn't check the hook) is neutralized here. */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
+.sponsor-dashboard-heading, .sponsor-dashboard-header-actions, .sponsor-dashboard-controls,
+.sponsor-dashboard-pagination, .sponsor-dashboard-modal-actions {
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.sponsor-dashboard-heading { justify-content: space-between; margin-bottom: 1rem; }
+.sponsor-dashboard-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+.sponsor-dashboard-address { margin-top: 0.35rem; color: #6b7280; font: 0.8rem monospace; overflow-wrap: anywhere; }
+.sponsor-dashboard-totals {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+.sponsor-dashboard-totals > div { border-top: 2px solid var(--color-border); padding-top: 0.65rem; }
+.sponsor-dashboard-totals dt { color: #6b7280; font-size: 0.8rem; }
+.sponsor-dashboard-totals dd { margin: 0.25rem 0 0; font-size: 1.25rem; font-weight: 700; }
+.sponsor-dashboard-controls { margin: 0 0 0.75rem; }
+.sponsor-dashboard-controls select { min-height: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid var(--color-border); border-radius: 0.25rem; background: var(--color-surface); }
+.sponsor-dashboard-table-wrap { overflow-x: auto; }
+.sponsor-dashboard-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.sponsor-dashboard-table th, .sponsor-dashboard-table td { padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; white-space: nowrap; }
+.sponsor-dashboard-table th { color: #6b7280; font-size: 0.75rem; font-weight: 700; }
+.sponsor-dashboard-recipient, .sponsor-dashboard-actions { display: inline-flex; align-items: center; gap: 0.25rem; }
+.sponsor-dashboard-actions .btn { min-height: 2rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+.sponsor-dashboard-pagination { justify-content: center; margin-top: 1rem; }
+.sponsor-dashboard-error { margin: 0.75rem 0; color: var(--color-cancelled); }
+.sponsor-dashboard-modal-backdrop { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 45%); }
+.sponsor-dashboard-modal { width: min(100%, 28rem); display: grid; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); }
+.sponsor-dashboard-modal textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--color-border); border-radius: 0.25rem; font: inherit; resize: vertical; }
+.sponsor-dashboard-modal-actions { justify-content: flex-end; margin-top: 0.5rem; }
+@media (max-width: 540px) {
+  .sponsor-dashboard-totals { grid-template-columns: 1fr; gap: 0.65rem; }
+  .sponsor-dashboard-heading { align-items: flex-start; flex-direction: column; }
 }

@@ -217,7 +217,11 @@ impl VestingDrips {
     /// * `InvalidRate`            – `rate` is zero or negative.
     /// * `InvalidDuration`        – `total_duration` ≤ `cliff_duration`.
     /// * `DepositOverflow`        – Total deposit exceeds i128 bounds.
-    /// * `DepositBelowMinimum`    – Total deposit is below the configured minimum.
+    /// * `RateTooLow`             – `rate > 0` but `rate × total_duration < min_deposit`
+    ///                              (fast-path check; code 17).
+    /// * `DepositBelowMinimum`    – Fixed-point-scaled deposit is below `min_deposit`
+    ///                              (overflow-safe fallback; code 22).
+    /// * `ScheduleAlreadyExists`  – A stream already exists for `recipient`.
     /// * `TokenNotAllowed`        – Token is not in the allowlist (when enforced).
     pub fn create_vesting_stream(
         env: Env,
@@ -295,9 +299,24 @@ impl VestingDrips {
             .checked_add(total_duration)
             .ok_or(VestingError::DepositOverflow)?;
 
+        // Fast-path: if rate × total_duration is safely below min_deposit (no
+        // overflow possible because both sides are small), return RateTooLow
+        // immediately without going through the scaled calculate_total_deposit.
+        // This is the primary path documented as code 17.
+        let min_deposit = storage::get_min_deposit(&env);
+        if let Some(fast_deposit) = rate.checked_mul(total_duration as i128) {
+            if fast_deposit < min_deposit {
+                return Err(VestingError::RateTooLow);
+            }
+        }
+
+        // total_deposit uses RATE_DECIMALS-scaled rate then divides back.
+        // The actual tokens deposited = rate * total_duration / RATE_DECIMALS.
         let total_deposit: i128 = calculate_total_deposit(rate, total_duration)?;
 
-        let min_deposit = storage::get_min_deposit(&env);
+        // Overflow-safe fallback: calculate_total_deposit may return a value
+        // below min_deposit due to fixed-point scaling (RATE_DECIMALS division).
+        // This is the secondary path documented as code 23.
         if total_deposit < min_deposit {
             return Err(VestingError::DepositBelowMinimum);
         }
@@ -1143,6 +1162,10 @@ impl VestingDrips {
         stream_id: u32,
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
+
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
 
         let mut schedule =
             storage::get_schedule_by_id(&env, &recipient, stream_id)

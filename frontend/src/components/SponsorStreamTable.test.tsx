@@ -99,6 +99,38 @@ describe("SponsorStreamTable", () => {
     expect(onCancelStream).toHaveBeenCalledWith("1");
   });
 
+  it("shows Compliance Clawback only for clawback-eligible streams", async () => {
+    const onClawbackStream = vi.fn();
+    renderTable({
+      streams: [
+        { ...STREAMS[0]!, clawbackEligible: true },
+        { ...STREAMS[1]!, clawbackEligible: false },
+      ],
+      onClawbackStream,
+    });
+
+    const clawback = screen.getByRole("button", {
+      name: "Compliance Clawback for recipient GRECIPIENT1",
+    });
+    expect(screen.queryByRole("button", {
+      name: "Compliance Clawback for recipient GRECIPIENT2",
+    })).not.toBeInTheDocument();
+
+    await userEvent.click(clawback);
+    expect(onClawbackStream).toHaveBeenCalledWith("1");
+  });
+
+  it("does not offer clawback for a completed eligible stream", () => {
+    renderTable({
+      streams: [{ ...STREAMS[1]!, clawbackEligible: true }],
+      onClawbackStream: vi.fn(),
+    });
+
+    expect(screen.getByRole("button", {
+      name: "Compliance Clawback for recipient GRECIPIENT2",
+    })).toBeDisabled();
+  });
+
   it("renders the DataTable loading state", () => {
     renderTable({ isLoading: true });
 

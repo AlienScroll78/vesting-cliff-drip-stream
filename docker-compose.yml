@@ -1,16 +1,21 @@
-# docker-compose.yml — local dev environment for vesting-cliff-drip-stream
-# Issue #27: includes PostgreSQL for the event indexer.
+# docker-compose.yml — local development environment for vesting-cliff-drip-stream
+#
+# Services:
+#   postgres     — PostgreSQL 16 for both backend API and indexer
+#   backend      — Backend API server with hot-reload (tsx watch)
+#   indexer      — Event indexer polling Horizon, with hot-reload
+#   redis        — Redis for job queue and session cache
+#   postgres-pact — Separate PostgreSQL instance for the Pact broker
+#   pact-broker  — Self-hosted Pact broker (http://localhost:9292)
 #
 # Usage:
-#   docker compose up -d
-#   DATABASE_URL=postgres://vesting:vesting@localhost:5432/vesting npm run dev
-#
-# The `backend` service is optional — remove it if you prefer running the
-# server with `npm run dev` directly.
+#   docker compose up -d               # Start all services
+#   docker compose up backend indexer  # Start only app services
 
 services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.6-alpine3.20
     restart: unless-stopped
     environment:
       POSTGRES_USER: vesting
@@ -26,9 +31,11 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.1-alpine3.20
     restart: unless-stopped
+    command: redis-server --save "" --appendonly no
     ports:
       - "6379:6379"
     healthcheck:
@@ -37,37 +44,79 @@ services:
       timeout: 3s
       retries: 10
 
+  # ── Backend API (hot-reload) ────────────────────────────────────────────────
+  # Build the deps stage only — tsx serves TypeScript directly with watch mode.
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
+      target: deps
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: "3001"
+      DATABASE_URL: postgres://vesting:vesting@postgres:5432/vesting
+      REDIS_URL: redis://redis:6379
+      HORIZON_URL: ${HORIZON_URL:-https://horizon-testnet.stellar.org}
+      NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
+      CONTRACT_ID: ${CONTRACT_ID:-}
+      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
+      STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/migrations:/app/migrations:ro
+    command: ["node", "--loader", "tsx", "--watch", "src/server.ts"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  # ── Event Indexer (hot-reload) ──────────────────────────────────────────────
+  indexer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.indexer
+      target: deps
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       NODE_ENV: development
-      PORT: "3001"
       DATABASE_URL: postgres://vesting:vesting@postgres:5432/vesting
       HORIZON_URL: ${HORIZON_URL:-https://horizon-testnet.stellar.org}
       NETWORK_PASSPHRASE: ${NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}
       CONTRACT_ID: ${CONTRACT_ID:-}
-      SOROBAN_RPC_URL: ${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org}
       STELLAR_NETWORK: ${STELLAR_NETWORK:-testnet}
+      INDEXER_PORT: "9464"
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
     ports:
-      - "3001:3001"
+      - "9464:9464"
+    volumes:
+      - ./backend/src:/app/src:ro
+    command: ["node", "--loader", "tsx", "--watch", "src/indexer/index.ts"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
-      interval: 10s
+      test: ["CMD", "wget", "-qO-", "http://localhost:9464/metrics"]
+      interval: 15s
       timeout: 5s
       retries: 6
-      start_period: 15s
+      start_period: 20s
 
-  # ── Pact Broker (self-hosted) — issue #791 ─────────────────────────────────
+  # ── Pact Broker (self-hosted) ───────────────────────────────────────────────
   # Access the UI at http://localhost:9292
   # Default credentials:  pact_workshop / pact_workshop
   postgres-pact:
-    image: postgres:16-alpine
+    image: postgres:16.6-alpine3.20
     restart: unless-stopped
     environment:
       POSTGRES_USER: pact_workshop
@@ -82,7 +131,7 @@ services:
       - postgres_pact_data:/var/lib/postgresql/data
 
   pact-broker:
-    image: pactfoundation/pact-broker:latest
+    image: pactfoundation/pact-broker:2.111.0
     restart: unless-stopped
     depends_on:
       postgres-pact:
