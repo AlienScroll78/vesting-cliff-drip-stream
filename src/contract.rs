@@ -1144,6 +1144,10 @@ impl VestingDrips {
     ) -> Result<(), VestingError> {
         sponsor.require_auth();
 
+        if sponsor == recipient {
+            return Err(VestingError::InvalidRecipient);
+        }
+
         let mut schedule =
             storage::get_schedule_by_id(&env, &recipient, stream_id)
                 .ok_or(VestingError::ScheduleNotFound)?;
