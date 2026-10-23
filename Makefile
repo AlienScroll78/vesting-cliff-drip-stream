@@ -11,6 +11,14 @@ MAX_WASM_SIZE_KB ?= 50
 
 all: build
 
+## Install project dependencies and start local PostgreSQL and Redis.
+setup:
+	rustup target add wasm32-unknown-unknown
+	npm install --no-audit --no-fund
+	npm install --prefix backend --no-audit --no-fund
+	npm install --prefix frontend --no-audit --no-fund
+	docker compose up -d postgres redis
+
 ## Compile the contract to WASM
 build:
 	cargo build --target wasm32-unknown-unknown --release

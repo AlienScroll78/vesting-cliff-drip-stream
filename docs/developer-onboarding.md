@@ -1,10 +1,9 @@
 # Developer Onboarding Guide
 
-> ⏱ **Estimated setup time:** 15–20 minutes to running `make test`
+> **Estimated setup time:** about 30 minutes to a running local stack; dependency downloads vary by connection.
 >
-> This guide walks a new contributor from zero through a verified local build,
-> test run, and first contribution on **Ubuntu 24.04 LTS** and **macOS 14+**.
-> All commands are verified on both platforms.
+> This guide walks a new contributor through the local development environment.
+> Commands use a POSIX shell and Docker Compose v2.
 >
 > **Related docs:**
 > - [Architecture Overview](architecture.md) — understand the system before changing it
@@ -32,11 +31,14 @@
 
 | Tool | Minimum | Install command |
 |------|---------|----------------|
-| Rust (stable) | 1.75+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Rust and Cargo | 1.84+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | WASM target | — | `rustup target add wasm32-unknown-unknown` |
-| Stellar CLI | 21.x+ | `cargo install --locked stellar-cli --features opt` |
-| Node.js | 20 LTS | see below |
-| Docker + Compose v2 | 25+ / 2.24+ | see below |
+| Stellar CLI | 21.3.0 | Install the release matching your OS from [Stellar CLI releases](https://github.com/stellar/stellar-cli/releases/tag/v21.3.0). |
+| Node.js and npm | Node.js 22 LTS, npm 10+ | Install Node.js 22 LTS from [nodejs.org](https://nodejs.org/). |
+| Docker Engine | 25+ | Install Docker Engine for your OS. |
+| Docker Compose | v2.24+ | Install the Compose v2 plugin with Docker. |
+| PostgreSQL | 16 | Started by the repository's Compose configuration. |
+| Redis | 7 | Started by the repository's Compose configuration. |
 
 ### 1.1 Rust & WASM target
 
@@ -49,45 +51,46 @@ source "$HOME/.cargo/env"
 rustup target add wasm32-unknown-unknown
 
 # Verify
-rustc --version     # rustc 1.75.x (stable)
+rustc --version     # rustc 1.84.x or newer
 cargo --version
 ```
 
-### 1.2 Stellar CLI
+### 1.2 Stellar CLI 21.3.0
 
 ```bash
-cargo install --locked stellar-cli --features opt
+Install Stellar CLI 21.3.0 from the prebuilt release for your platform:
+<https://github.com/stellar/stellar-cli/releases/tag/v21.3.0>
 
 # Add $HOME/.cargo/bin to PATH if not already present
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc  # bash
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc   # zsh
 source ~/.bashrc  # or ~/.zshrc
 
-stellar --version   # stellar 21.x.x
+stellar --version   # stellar 21.3.0
 ```
 
-### 1.3 Node.js 20 LTS
+### 1.3 Node.js 22 LTS
 
 **Ubuntu / Debian:**
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
-node --version   # v20.x.x
-npm --version    # 10.x.x
+node --version   # v22.x.x
+npm --version    # 10.x.x or newer
 ```
 
 **macOS:**
 
 ```bash
 # via Homebrew
-brew install node@20
-echo 'export PATH="/opt/homebrew/opt/node@20/bin:$PATH"' >> ~/.zshrc
+brew install node@22
+echo 'export PATH="/opt/homebrew/opt/node@22/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 node --version
 ```
 
-### 1.4 Docker & Docker Compose v2
+### 1.4 Docker Engine 25+ & Docker Compose v2.24+
 
 **Ubuntu / Debian:**
 
@@ -138,34 +141,55 @@ git clone https://github.com/AlienScroll78/vesting-cliff-drip-stream.git
 cd vesting-cliff-drip-stream
 ```
 
-### 2.2 Root environment
+### 2.2 Configure environment values
 
 ```bash
 cp .env.example .env
 ```
 
-The defaults in `.env.example` point to Stellar testnet and local Docker services.
-For smart-contract-only work you can leave `.env` as-is.
+The backend example has safe local-development values. Copy it and replace the
+placeholder contract IDs after testnet deployment (or keep them as placeholders
+if you are not using contract-backed backend routes):
 
-Key variables you may need to change:
+```bash
+cp backend/.env.testnet.example backend/.env
+```
 
-| Variable | Default | Purpose |
+Required backend variables are:
+
+| Variable | Example | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `postgres://vesting:vesting@localhost:5432/vesting` | PostgreSQL for the backend indexer |
-| `REDIS_URL` | `redis://localhost:6379` | Redis for caching/rate-limiting |
-| `VESTING_CONTRACT_ID` | placeholder `CAAA…` | The deployed Soroban contract address |
-| `SOROBAN_RPC_URL` | testnet RPC | Soroban JSON-RPC endpoint |
+| `HORIZON_URL` | `https://horizon-testnet.stellar.org` | Stellar Horizon endpoint |
+| `SOROBAN_RPC_URL` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint |
+| `NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Network for signing and RPC |
+| `VESTING_CONTRACT_ID` | `<testnet-contract-id>` | Contract configured for backend services |
+| `TESTNET_CONTRACT_ID` | `<testnet-contract-id>` | Contract ID read by backend network selection; use the same ID |
+| `DATABASE_URL` | `postgres://vesting:vesting@localhost:5432/vesting` | Local PostgreSQL |
+| `REDIS_URL` | `redis://localhost:6379` | Local Redis |
+| `JWT_SECRET` | `dev-only-secret-at-least-32-characters-long` | Local-only JWT secret, minimum 32 characters |
+| `WEBHOOK_SECRET` | `dev-only-webhook-secret-16chars` | Local-only HMAC secret, minimum 16 characters |
+| `PORT` | `3001` | Backend HTTP port |
 
 ### 2.3 Frontend environment
 
 ```bash
-cat > frontend/.env << 'EOF'
+cat > frontend/.env.local << 'EOF'
 VITE_API_URL=http://localhost:3001
 VITE_NETWORK=testnet
-VITE_CONTRACT_ID=CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+VITE_CONTRACT_ID=<testnet-contract-id>
 VITE_HORIZON_URL=https://horizon-testnet.stellar.org
 EOF
 ```
+
+`VITE_API_URL`, `VITE_CONTRACT_ID`, and `VITE_HORIZON_URL` are required by the
+frontend. These values are public client configuration, not secrets.
+
+| Variable | Example | Description |
+|---|---|---|
+| `VITE_API_URL` | `http://localhost:3001` | Local backend base URL |
+| `VITE_NETWORK` | `testnet` | Stellar network selected by the app |
+| `VITE_CONTRACT_ID` | `<testnet-contract-id>` | Deployed contract address |
+| `VITE_HORIZON_URL` | `https://horizon-testnet.stellar.org` | Horizon endpoint for client-side queries |
 
 ### 2.4 Verify build
 
@@ -176,8 +200,8 @@ cargo check --lib
 # Build the production WASM
 make build
 
-# Install all Node dependencies (root workspace + backend + frontend)
-npm install
+# Install all JavaScript dependencies and start local services
+make setup
 ```
 
 Expected output from `make build`: a `.wasm` file under
@@ -196,7 +220,7 @@ or end-to-end tests.
 docker compose up -d postgres redis
 
 # Verify both containers are healthy
-docker compose ps
+docker compose ps postgres redis
 # NAME                          STATUS
 # vesting-cliff-drip-stream-postgres-1   running (healthy)
 # vesting-cliff-drip-stream-redis-1      running
@@ -219,6 +243,38 @@ docker compose down -v       # stop containers AND delete volumes (fresh DB)
 ```
 
 ---
+
+### Start the backend
+
+After copying `backend/.env.testnet.example` to `backend/.env` and setting both
+contract ID variables as described above, start the backend from the repository
+root:
+
+```bash
+cd backend
+node --env-file=.env --loader tsx src/server.ts
+```
+
+You should now see the backend announce its active network and listening port.
+In another terminal, confirm its health endpoint:
+
+```bash
+curl -i http://localhost:3001/health
+```
+
+You should receive an HTTP 200 response. Leave the backend process running.
+
+### Start the frontend
+
+Create `frontend/.env.local` as described in Section 2.3, then start Vite from
+the repository root:
+
+```bash
+npm --prefix frontend run dev -- --host 0.0.0.0
+```
+
+You should now see Vite print `http://localhost:5173`. Open that address in a
+browser to view the app.
 
 ## 4. Running Tests
 
@@ -259,8 +315,7 @@ make lint
 
 ```bash
 cd backend
-npm test               # vitest run
-npm run test:watch     # interactive watch mode
+npm test               # node --test test/schedules.test.ts
 cd ..
 ```
 
@@ -373,169 +428,51 @@ cargo build --target wasm32-unknown-unknown --release  # WASM compiles
 ### 6.1 Generate and fund a test account
 
 ```bash
-# Generate a new keypair named "default" and fund it via testnet Friendbot
-stellar keys generate default --network testnet --fund
+# Generate a keypair named "default"
+stellar keys generate default --network testnet
+
+# Read its public address and fund it using the testnet Friendbot
+ADDRESS=$(stellar keys address default --network testnet)
+curl -sS "https://friendbot.stellar.org/?addr=${ADDRESS}"
 
 # Verify balance (~10,000 XLM on testnet)
 stellar balances --network testnet --source default
 ```
 
-### 6.2 Build the optimised WASM
+### 6.2 Build, optimize, deploy, and initialize
 
 ```bash
-make build
-
-stellar contract optimize \
-  --wasm target/wasm32-unknown-unknown/release/vesting_cliff_drip_stream.wasm \
-  --wasm-out target/vesting_cliff_drip_stream.optimized.wasm
+SOROBAN_NETWORK=testnet ./scripts/deploy.sh default
 ```
 
-### 6.3 Deploy
-
-```bash
-export IDENTITY=default   # stellar keys name
-
-CONTRACT_ID=$(stellar contract deploy \
-  --wasm target/vesting_cliff_drip_stream.optimized.wasm \
-  --source "$IDENTITY" \
-  --network testnet)
-
-echo "Deployed: $CONTRACT_ID"
-export VESTING_CONTRACT="$CONTRACT_ID"
-```
-
-### 6.4 Initialize
-
-```bash
-ADMIN=$(stellar keys address "$IDENTITY")
-
-stellar contract invoke \
-  --id "$VESTING_CONTRACT" \
-  --source "$IDENTITY" \
-  --network testnet \
-  -- initialize \
-  --admin "$ADMIN" \
-  --fee_bps 0 \
-  --treasury "$ADMIN"
-```
-
-### 6.5 Create a test stream
-
-```bash
-export SPONSOR="$IDENTITY"
-export RECIPIENT=<G-address-of-recipient>
-export TOKEN=<C-address-of-SAC-token>
-export RATE=10               # tokens/ledger (whole, not scaled)
-export CLIFF_DURATION=17280  # ~1 day
-export TOTAL_DURATION=172800 # ~10 days
-
-./scripts/invoke_create.sh
-```
-
-### 6.6 Claim vested tokens
-
-```bash
-./scripts/invoke_claim.sh
-```
-
----
+You should see “Contract deployed and initialized!” and a contract ID beginning
+with `C`. Copy that ID to `VESTING_CONTRACT_ID`, `TESTNET_CONTRACT_ID`, and
+`frontend/.env.local` as `VITE_CONTRACT_ID`.
 
 ## 7. Troubleshooting
 
-### 1. `wasm32-unknown-unknown` target missing
+| Symptom | Fix |
+|---|---|
+| `wasm32-unknown-unknown` target missing | Run `rustup target add wasm32-unknown-unknown`, or rerun `make setup`. |
+| `stellar` command not found | Add `$HOME/.cargo/bin` to `PATH`, then reopen the terminal. |
+| PostgreSQL/Redis port is already in use | Stop the conflicting service or change the host port in `docker-compose.yml`. |
+| Docker socket permission denied | Add your user to the Docker group and sign in again, or use Docker Desktop. |
+| Backend rejects its environment | Check the required variables in `backend/.env`; use local-only secrets of at least the documented length. |
+| Testnet deployment times out | Retry later; public testnet RPC may be rate-limited. Confirm the key is funded with Friendbot. |
 
-**Symptom:**
-```
-error[E0463]: can't find crate for 'std'
- --> src/lib.rs:1:1
-  |
-  = note: the `wasm32-unknown-unknown` target may not be installed
-```
+## Verification Checklist
 
-**Fix:**
-```bash
-rustup target add wasm32-unknown-unknown
-```
+- `make setup` completes and `docker compose ps postgres redis` shows both services running.
+- `make test` reports no failed contract tests.
+- `curl -i http://localhost:3001/health` returns HTTP 200 while the backend runs.
+- Vite prints `http://localhost:5173` and the frontend loads in the browser.
+- Testnet deployment prints an initialized contract ID, and the same ID is configured in both apps.
 
-### 2. `stellar: command not found`
+## Cold-Read Review
 
-**Symptom:** Command not found after installing Stellar CLI.
-
-**Fix:**
-```bash
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### 3. PostgreSQL port 5432 already in use
-
-**Symptom:**
-```
-Error starting userland proxy: listen tcp4 0.0.0.0:5432: bind: address already in use
-```
-
-**Fix:**
-```bash
-# Stop the system PostgreSQL service
-sudo systemctl stop postgresql      # Ubuntu / Debian
-brew services stop postgresql       # macOS
-
-# Or map to a different host port in docker-compose.yml
-```
-
-### 4. JWT secret too short
-
-**Symptom:**
-```
-JWT_SECRET: String must contain at least 32 character(s)
-```
-
-**Fix:** Generate a random 32+ character secret:
-```bash
-openssl rand -base64 32
-# Paste the output into .env as JWT_SECRET
-```
-
-### 5. Docker `permission denied` on socket
-
-**Symptom:**
-```
-permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock
-```
-
-**Fix:**
-```bash
-sudo usermod -aG docker "$USER"
-newgrp docker       # activate group membership without logging out
-```
-
-### 6. Soroban RPC timeout during testnet deploy
-
-**Symptom:** `stellar contract deploy` hangs or returns a timeout error.
-
-**Fix:** The public testnet RPC can be rate-limited or slow during high traffic.
-
-```bash
-# Retry with a longer timeout
-stellar contract deploy \
-  --wasm target/vesting_cliff_drip_stream.optimized.wasm \
-  --source default \
-  --network testnet \
-  --fee 10000000   # increase fee to prioritise transaction
-```
-
-Alternatively, run a local Stellar Quickstart node:
-
-```bash
-docker run --rm -p 8000:8000 \
-  stellar/quickstart:testing \
-  --local --enable-soroban-rpc
-```
-
-Then set `SOROBAN_RPC_URL=http://localhost:8000/soroban/rpc` and
-`NETWORK_PASSPHRASE="Standalone Network ; February 2017"`.
-
----
+Before merging, have a developer unfamiliar with this repository follow the guide
+from a fresh clone and record any missing or ambiguous steps. This guide has not
+been independently cold-read-tested yet.
 
 ## 8. Architecture Overview
 
