@@ -1,11 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { expect, fn, userEvent, within } from "@storybook/test";
 import {
+  EventHistoryEmpty,
   ExpiredFullyClaimedState,
   NewUserEmpty,
   NotificationsEmpty,
+  RecipientEmpty,
+  SearchEmpty,
   SearchResultsEmpty,
+  SponsorEmpty,
   SponsorStreamListEmpty,
+  WalletNotConnectedEmpty,
 } from "../frontend/src/components/EmptyStates";
 
 const meta: Meta = {
@@ -87,5 +92,95 @@ export const Completed: Story = {
     expect(canvas.getByRole("heading", { name: "Stream complete" })).toBeInTheDocument();
     expect(canvas.getByTestId("completed-total-received")).toHaveTextContent("63,072,000 USDC");
     expect(canvas.getByRole("img", { name: /trophy with stars and tokens/i })).toBeInTheDocument();
+  },
+};
+
+// ─── 5 new scenarios ──────────────────────────────────────────────────────────
+
+export const RecipientNoStreams: Story = {
+  name: "Recipient / no active streams",
+  render: () => <RecipientEmpty />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      canvas.getByRole("heading", { name: "You have no active streams." }),
+    ).toBeInTheDocument();
+    expect(canvas.getByText(/Share your address with a sponsor to get started/i)).toBeInTheDocument();
+    expect(
+      canvas.getByRole("img", { name: /inbox with no streams/i }),
+    ).toBeInTheDocument();
+  },
+};
+
+export const SponsorNoStreams: Story = {
+  name: "Sponsor / no streams created",
+  args: { onCreateStream: fn() },
+  render: (args) => <SponsorEmpty {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      canvas.getByRole("heading", { name: "No vesting streams yet." }),
+    ).toBeInTheDocument();
+    expect(
+      canvas.getByRole("button", { name: "Create your first vesting stream" }),
+    ).toBeEnabled();
+    expect(
+      canvas.getByRole("img", { name: /rocket launching/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Create your first vesting stream" }));
+  },
+};
+
+export const EventHistoryNew: Story = {
+  name: "Stream event history / just created",
+  render: () => <EventHistoryEmpty />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      canvas.getByRole("heading", {
+        name: "Stream just created — events will appear as activity occurs.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      canvas.getByRole("img", { name: /timeline with a clock/i }),
+    ).toBeInTheDocument();
+  },
+};
+
+export const SearchNoResults: Story = {
+  name: "Search / no filter results",
+  args: { onClearFilters: fn() },
+  render: (args) => <SearchEmpty {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      canvas.getByRole("heading", { name: "No streams match your filters." }),
+    ).toBeInTheDocument();
+    expect(
+      canvas.getByRole("button", { name: "Clear filters" }),
+    ).toBeEnabled();
+    expect(
+      canvas.getByRole("img", { name: /magnifying glass overlapping a filter funnel/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Clear filters" }));
+  },
+};
+
+export const WalletNotConnected: Story = {
+  name: "Wallet not connected",
+  args: { onConnect: fn() },
+  render: (args) => <WalletNotConnectedEmpty {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      canvas.getByRole("heading", { name: "Connect your wallet to view your streams." }),
+    ).toBeInTheDocument();
+    expect(
+      canvas.getByRole("button", { name: "Connect wallet" }),
+    ).toBeEnabled();
+    expect(
+      canvas.getByRole("img", { name: /wallet with a lock/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(canvas.getByRole("button", { name: "Connect wallet" }));
   },
 };

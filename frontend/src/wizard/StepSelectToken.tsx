@@ -63,9 +63,9 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
 
   return (
     <div style={styles.card}>
-      <h2 style={styles.heading}>Select token</h2>
+      <h2 style={styles.heading}>{t('wizard.selectToken')}</h2>
       <p style={styles.sub}>
-        Choose the SAC token to stream. The sponsor wallet must hold enough to cover the full deposit.
+        {t('wizard.tokenDescription')}
       </p>
 
       <div style={styles.presets}>
@@ -84,13 +84,13 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
 
       <label style={styles.label}>
         <span>
-          Custom token contract{' '}
-          <Tooltip content="Stellar Asset Contract (SAC) address starting with C. Must be an issued Soroban token on this network." />
+          {t('wizard.customToken')}{' '}
+          <Tooltip content={t('wizard.customTokenHelp')} />
         </span>
         <input
           id="wizard-token-custom-input"
           type="text"
-          placeholder="C…"
+          placeholder={t('wizard.tokenPlaceholder')}
           value={custom}
           onChange={e => handleCustomChange(e.target.value.trim())}
           onBlur={handleBlur}
@@ -128,7 +128,7 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
 
       <div style={styles.actions}>
         <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
-          ← Back
+          ← {t('history.back')}
         </button>
         <button
           type="button"
@@ -137,7 +137,7 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
           onClick={onNext}
           data-testid="wizard-next-btn"
         >
-          Continue →
+          {t('wizard.continue')} →
         </button>
       </div>
     </div>

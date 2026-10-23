@@ -1,0 +1,209 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GET /claimable-batch > matches the batch claimable snapshot (GET /api/claimable-batch) 1`] = `
+{
+  "results": [
+    {
+      "claimable_amount": "4250000",
+      "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+    },
+    {
+      "claimable_amount": "0",
+      "recipient": "GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAO7FY6YTQ3GAA",
+    },
+  ],
+}
+`;
+
+exports[`GET /claimable-batch > matches the batch claimable snapshot (GET /claimable-batch) 1`] = `
+{
+  "results": [
+    {
+      "claimable_amount": "4250000",
+      "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+    },
+    {
+      "claimable_amount": "0",
+      "recipient": "GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAO7FY6YTQ3GAA",
+    },
+  ],
+}
+`;
+
+exports[`GET /claimable-batch > matches the validation error snapshot 1`] = `
+{
+  "error": "validation_failed",
+  "fields": [
+    {
+      "field": "recipients.0",
+      "message": "Must be a valid Stellar public key (G followed by 55 base-32 characters)",
+    },
+  ],
+}
+`;
+
+exports[`GET /health > matches the degraded service snapshot 1`] = `
+{
+  "checks": {
+    "db": "timeout or unavailable",
+    "redis": "ok",
+    "rpc": "ok",
+  },
+  "contract_version": "unknown",
+  "horizon_circuit": {
+    "failureCount": 0,
+    "openedAt": null,
+    "state": "closed",
+  },
+  "status": "degraded",
+  "uptime": "<volatile>",
+  "uptime_seconds": "<volatile>",
+  "version": "<volatile>",
+}
+`;
+
+exports[`GET /health > matches the healthy service snapshot 1`] = `
+{
+  "checks": {
+    "db": "ok",
+    "redis": "ok",
+    "rpc": "ok",
+  },
+  "contract_version": "unknown",
+  "horizon_circuit": {
+    "failureCount": 0,
+    "openedAt": null,
+    "state": "closed",
+  },
+  "status": "ok",
+  "uptime": "<volatile>",
+  "uptime_seconds": "<volatile>",
+  "version": "<volatile>",
+}
+`;
+
+exports[`GET /streams > matches the empty stream list snapshot 1`] = `
+{
+  "limit": 20,
+  "next_cursor": null,
+  "page": 1,
+  "streams": [],
+  "total": 0,
+}
+`;
+
+exports[`GET /streams > matches the sponsor stream list snapshot (GET /api/streams) 1`] = `
+{
+  "limit": 20,
+  "next_cursor": null,
+  "page": 1,
+  "streams": [
+    {
+      "cliff_ledger": 2000,
+      "created_at": "2026-01-15T10:30:00.000Z",
+      "end_ledger": 9000,
+      "rate_per_ledger": "1000000",
+      "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+      "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+      "start_ledger": 1000,
+      "status": "active",
+      "token": "USDC",
+    },
+    {
+      "cliff_ledger": 2500,
+      "created_at": "2026-01-15T10:30:00.000Z",
+      "end_ledger": 12000,
+      "rate_per_ledger": "2500000",
+      "recipient": "GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAO7FY6YTQ3GAA",
+      "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+      "start_ledger": 1000,
+      "status": "pre_cliff",
+      "token": "USDC",
+    },
+  ],
+  "total": 2,
+}
+`;
+
+exports[`GET /streams > matches the sponsor stream list snapshot (GET /streams) 1`] = `
+{
+  "limit": 20,
+  "next_cursor": null,
+  "page": 1,
+  "streams": [
+    {
+      "cliff_ledger": 2000,
+      "created_at": "2026-01-15T10:30:00.000Z",
+      "end_ledger": 9000,
+      "rate_per_ledger": "1000000",
+      "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+      "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+      "start_ledger": 1000,
+      "status": "active",
+      "token": "USDC",
+    },
+    {
+      "cliff_ledger": 2500,
+      "created_at": "2026-01-15T10:30:00.000Z",
+      "end_ledger": 12000,
+      "rate_per_ledger": "2500000",
+      "recipient": "GA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAO7FY6YTQ3GAA",
+      "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+      "start_ledger": 1000,
+      "status": "pre_cliff",
+      "token": "USDC",
+    },
+  ],
+  "total": 2,
+}
+`;
+
+exports[`GET /streams > matches the validation error snapshot 1`] = `
+{
+  "error": "validation_failed",
+  "fields": [
+    {
+      "field": "sponsor",
+      "message": "Must be a valid Stellar public key (G followed by 55 base-32 characters)",
+    },
+  ],
+}
+`;
+
+exports[`GET /streams/:id > matches the not-found snapshot 1`] = `
+{
+  "error": "stream not found",
+}
+`;
+
+exports[`GET /streams/:id > matches the stream detail snapshot (GET /api/streams/:recipient) 1`] = `
+{
+  "claimable_now": 4250000,
+  "cliff_ledger": 2000,
+  "created_at": "2026-01-15T10:30:00.000Z",
+  "end_ledger": 9000,
+  "rate": 1000000,
+  "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+  "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+  "status": "active",
+  "token": "USDC",
+  "total_claimed": 1000000000,
+  "total_deposited": 8000000000,
+}
+`;
+
+exports[`GET /streams/:id > matches the stream detail snapshot (GET /streams/:id) 1`] = `
+{
+  "claimable_now": 4250000,
+  "cliff_ledger": 2000,
+  "created_at": "2026-01-15T10:30:00.000Z",
+  "end_ledger": 9000,
+  "rate": 1000000,
+  "recipient": "GC3Q2YBF4Z4X6KMTQKGHWJ2LRYFWX3DPEBQJHY5WELGBUIHKQIMT3ZAA",
+  "sponsor": "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
+  "status": "active",
+  "token": "USDC",
+  "total_claimed": 1000000000,
+  "total_deposited": 8000000000,
+}
+`;

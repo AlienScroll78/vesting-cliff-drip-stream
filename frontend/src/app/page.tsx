@@ -22,7 +22,6 @@ import { StreamComparisonView } from "@/components/StreamComparisonView";
 // #820 — first-time-user onboarding tour
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { ReplayTourButton } from "@/components/ReplayTourButton";
-import { useWallet } from "@/contexts/WalletContext";
 // #389 — keyboard navigation & focus management
 import { StreamCardList } from "@/components/StreamCardList";
 import { useModalFocus } from "@/hooks/useModalFocus";
@@ -171,8 +170,9 @@ function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamCla
 }
 
 function StreamList() {
-  const { t } = useTranslation();
-  const { address } = useWallet();
+  const { t, i18n } = useTranslation();
+  const { setPending, setConfirmed, setFailed } = useTx();
+  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);
@@ -253,8 +253,7 @@ function StreamList() {
             <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  {s.recipient}
-                  <CopyButton text={s.recipient} label="Copy recipient address" />
+                  <CopyableAddress value={s.recipient} />
                 </div>
                 <div style={{ marginTop: "0.25rem" }}>
                   <StatusBadge status={s.status} />

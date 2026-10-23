@@ -12,6 +12,7 @@ mod test_cancel_event;
 mod test_claim;
 mod test_clawback;
 mod test_cliff_ratio;
+mod test_cliff_boundary;
 mod test_config;
 mod test_coverage;
 mod test_create;
@@ -25,7 +26,9 @@ mod test_fees;
 mod test_golden_path;
 mod test_initialize;
 mod test_mutation_score;
+mod test_mutations_extended;
 mod test_properties;
+mod test_rate_too_low;
 mod test_recipient_transfer;
 mod test_reentrancy;
 mod test_snapshots;
@@ -43,7 +46,7 @@ mod test_versioning;
 mod test_views;
 mod test_sponsor_streams;
 mod test_invalid_token;
-mod test_lifecycle;
+mod test_multi_stream;
 
 pub use soroban_sdk::{
     testutils::{Address as _, Ledger, LedgerInfo},
