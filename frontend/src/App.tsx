@@ -21,6 +21,8 @@ import { CreateStreamWizard } from './wizard/CreateStreamWizard'
 import { LanguageSwitcher } from './components/LanguageSwitcher'
 // #532 — real-time claimable amount display
 import { ClaimableAmountDisplay } from './components/ClaimableAmountDisplay'
+// #534 — keyboard shortcuts
+import { initKeyboardShortcuts } from '../KeyboardShortcuts'
 
 // #539 — register service worker for offline support
 function registerServiceWorker() {
@@ -47,6 +49,18 @@ function App() {
 
   // #120 — start tour for first-time users
   useOnboardingTour()
+
+  // #534 — wire up keyboard shortcuts for power users
+  useEffect(() => {
+    const cleanup = initKeyboardShortcuts({
+      onCreateStream: () => setWizardOpen(true),
+      onRefresh:      () => window.location.reload(),
+      onCloseModal:   () => setWizardOpen(false),
+      onGoHistory:    () => console.log('navigate to history'),
+      onGoSchedule:   () => console.log('navigate to schedule'),
+    })
+    return cleanup
+  }, [setWizardOpen])
 
   const errorInfo = errorCode != null ? getErrorInfo(errorCode, t) : null
 
