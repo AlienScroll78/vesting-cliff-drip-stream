@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
+    "backfill": "tsx scripts/backfill_stream_events.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
     "test:snapshots": "node scripts/run-snapshot-tests.mjs",
     "test:snapshots:update": "node scripts/run-snapshot-tests.mjs --update-snapshots",
