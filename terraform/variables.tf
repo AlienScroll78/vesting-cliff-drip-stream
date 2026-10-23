@@ -73,6 +73,8 @@ variable "deployment_alert_emails" {
   description = "Email recipients for CodeDeploy lifecycle notifications."
   type        = set(string)
   default     = []
+}
+
 variable "slack_webhook_url" {
   description = "Bootstrap Slack incoming webhook for the alert relay. Applied once, then managed in AWS Secrets Manager."
   type        = string
@@ -103,4 +105,23 @@ variable "db_instance_class" {
   description = "RDS instance class. db.t3.micro for testnet/staging, db.t3.small for production."
   type        = string
   default     = "db.t3.micro"
+}
+
+variable "backup_restore_test_class" {
+  description = "RDS instance class for the temporary restore-test instance. Defaults to db.t3.micro to minimise cost; use a larger class if the restore SLA requires it."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "backup_verify_alert_emails" {
+  description = "Email addresses that receive backup-restore verification pass/fail alerts."
+  type        = set(string)
+  default     = []
+}
+
+variable "pagerduty_integration_key" {
+  description = "PagerDuty Events v2 integration key. When non-empty, the backup-verify and infrastructure-alert SNS topics route to PagerDuty. Leave empty to disable PagerDuty routing."
+  type        = string
+  default     = ""
+  sensitive   = true
 }

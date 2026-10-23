@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export type Network = "testnet" | "mainnet";
 
@@ -45,13 +46,14 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 export const useNetwork = () => useContext(NetworkContext);
 
 export function NetworkSelector() {
+  const { t } = useTranslation();
   const { network, setNetwork } = useNetwork();
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const next = e.target.value as Network;
     if (next === "mainnet") {
       const ok = window.confirm(
-        "You are switching to Mainnet. Real assets will be used. Continue?"
+        t("network.confirmMainnet")
       );
       if (!ok) return;
     }
@@ -59,10 +61,10 @@ export function NetworkSelector() {
   }
 
   return (
-    <label className="network-selector" aria-label="Select network">
+    <label className="network-selector" aria-label={t("network.select")}>
       <select value={network} onChange={handleChange}>
-        <option value="testnet">Testnet</option>
-        <option value="mainnet">Mainnet</option>
+        <option value="testnet">{t("network.testnet")}</option>
+        <option value="mainnet">{t("network.mainnet")}</option>
       </select>
     </label>
   );

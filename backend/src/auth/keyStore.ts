@@ -34,16 +34,17 @@ let previousKey: RsaKeyPair | null = null;
 // ---------------------------------------------------------------------------
 
 function generateKeyPair(): RsaKeyPair {
-  // No *Encoding options: generateKeyPairSync must return KeyObjects, which
-  // every consumer of RsaKeyPair expects (jwt.sign, export({format:"jwk"})).
-  // Specifying PEM encodings makes Node return strings instead, breaking
-  // KeyObject-only APIs downstream.
+  // Generate as KeyObjects (no publicKeyEncoding/privateKeyEncoding) so the
+  // returned values satisfy the RsaKeyPair type and support .export().
+  // Previously these were generated as PEM *strings*, which made the
+  // `.export({ format: "der" })` call below throw
+  // "publicKey.export is not a function".
   const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
     modulusLength: 2048,
   });
 
   // Derive a stable kid from the public key's DER fingerprint
-  const pubDer = publicKey.export({ type: "spki", format: "der" });
+  const pubDer = publicKey.export({ type: "spki", format: "der" }) as Buffer;
   const kid = crypto
     .createHash("sha256")
     .update(pubDer)

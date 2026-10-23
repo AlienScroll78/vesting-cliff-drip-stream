@@ -42,6 +42,7 @@ export default defineConfig({
         "**/claim-sheet.spec.ts",
         "**/badges.spec.ts",
         "**/create-wizard.spec.ts",
+        "**/stream-creation-flow.spec.ts",
       ],
       use: {
         ...devices["Desktop Chrome"],
@@ -53,6 +54,14 @@ export default defineConfig({
           permissions: ["clipboard-read", "clipboard-write"],
         },
       },
+    },
+
+    // ── Firefox without extension – cross-browser coverage for the ─────────
+    // dedicated flow specs (creation + claim). Mocked wallet only.
+    {
+      name: "firefox-mock",
+      testMatch: ["**/stream-creation-flow.spec.ts"],
+      use: { ...devices["Desktop Firefox"] },
     },
 
     // ── Mobile viewports (no extension needed – UI tests only) ──────────────
@@ -68,7 +77,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // Pin the dev server to the port the tests expect; without --port/--strictPort
+    // Vite falls back to 5173+ and the webServer wait times out.
+    command: "npm run dev -- --port 3000 --strictPort",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
