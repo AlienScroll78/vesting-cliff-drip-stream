@@ -42,7 +42,7 @@ export function LanguageSwitcher({ showFullName = false }: Props) {
   return (
     <div
       role="group"
-      aria-label={t("settings.language", { defaultValue: t("language") })}
+      aria-label={t("accessibility.selectLanguage", { defaultValue: "Select language" })}
       style={{ display: "flex", gap: "0.25rem" }}
     >
       {LANGS.map(({ code, label, fullName }) => {
