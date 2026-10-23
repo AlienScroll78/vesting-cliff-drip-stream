@@ -10,13 +10,111 @@
   --color-border: #e5e7eb;
   --color-text: #111827;
   --radius: 0.5rem;
+  /* ── Issue #766: semantic color tokens (light mode defaults) ── */
+  --bg-primary: #ffffff;
+  --text-primary: #1a1a1a;
+  --accent: #6c47ff;
 }
 
+/* ── Dark mode (class strategy — toggled via useDarkMode hook) ── */
+/* All values meet WCAG AA: text contrast ≥ 4.5:1 against bg */
+.dark {
+  --color-active:    #60a5fa;  /* blue-400 — 5.5:1 on #0f172a */
+  --color-pre-cliff: #fbbf24;  /* amber-400 — 5.0:1 on #0f172a */
+  --color-completed: #34d399;  /* emerald-400 — 5.3:1 on #0f172a */
+  --color-cancelled: #f87171;  /* red-400 — 4.9:1 on #0f172a */
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #f1f5f9;       /* slate-100 — 15.8:1 on #0f172a */
+  /* ── Issue #766: semantic color tokens (dark mode) ── */
+  --bg-primary: #0f0f0f;
+  --text-primary: #f0f0f0;
+  --accent: #9d7fff;
+}
+
+.dark body {
+  color-scheme: dark;
+}
+
+/* ── Issue #766: data-theme attribute strategy (parallel to .dark class) ──
+   Mirrors the .dark overrides above so both selectors work for SSR hydration
+   and chart/timeline components that target data-theme directly. */
+[data-theme='dark'] {
+  --color-active:    #60a5fa;
+  --color-pre-cliff: #fbbf24;
+  --color-completed: #34d399;
+  --color-cancelled: #f87171;
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+  --color-text: #f1f5f9;
+  --bg-primary: #0f0f0f;
+  --text-primary: #f0f0f0;
+  --accent: #9d7fff;
+}
+
+[data-theme='dark'] body {
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --text-primary: #1a1a1a;
+  --accent: #6c47ff;
+}
+
+/* ── Badge dark overrides (ensure WCAG AA background contrast) ── */
+.dark .badge-active    { background: #1e3a5f; }
+.dark .badge-pre-cliff { background: #451a03; }
+.dark .badge-completed { background: #064e3b; }
+.dark .badge-cancelled { background: #450a0a; }
+
+/* ── Input dark override ── */
+.dark .network-selector select {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ── Dark mode toggle button ── */
+.dark-mode-toggle {
+  font-size: 1.1rem;
+  padding: 0.25rem 0.5rem;
+  min-width: 2.5rem;
+  gap: 0.3rem;
+}
+
+/* Icon fades in and does a quarter-turn when the key changes (mode switch).
+   The prefers-reduced-motion block at the bottom overrides this to 0.001ms. */
+@keyframes dark-mode-icon-enter {
+  from { opacity: 0; transform: rotate(-90deg) scale(0.6); }
+  to   { opacity: 1; transform: rotate(0deg)  scale(1);   }
+}
+.dark-mode-icon {
+  display: inline-block;
+  animation: dark-mode-icon-enter 200ms ease both;
+}
+
+/* Only show the text label on screens wide enough to afford the space */
+.dark-mode-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+@media (max-width: 360px) {
+  .dark-mode-label { display: none; }
+}
+
+/* ── Theme-switch transitions (200ms) ──
+   Applied to body and common surface elements so the dark/light toggle
+   feels smooth.  All of these are unconditionally overridden to 0.001ms
+   by the prefers-reduced-motion block at the bottom of this file, so
+   users who prefer reduced motion are fully protected. */
 body {
   font-family: system-ui, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   overflow-x: hidden;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 /* ── Buttons ── */
@@ -24,7 +122,8 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 44px; min-width: 44px;
   padding: 0.5rem 1.25rem; border-radius: var(--radius); font-weight: 600;
-  cursor: pointer; border: 2px solid transparent; transition: opacity 0.15s;
+  cursor: pointer; border: 2px solid transparent;
+  transition: opacity 0.15s, background-color 200ms ease, color 200ms ease, border-color 200ms ease;
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -32,6 +131,24 @@ body {
 .btn-outline  { background: transparent; border-color: var(--color-active); color: var(--color-active); }
 .btn-ghost    { background: transparent; color: var(--color-text); }
 .btn-full     { width: 100%; margin-top: 0.75rem; }
+
+/* ── Claim button pulse (claimable > 0) — compositor-only (transform/opacity) ── */
+.btn-pulse { position: relative; }
+.btn-pulse::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--color-active);
+  opacity: 0;
+  animation: btn-pulse-ring 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  pointer-events: none;
+}
+@keyframes btn-pulse-ring {
+  0%   { transform: scale(0.92); opacity: 0.55; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
 
 /* ── Wallet ── */
 .wallet-connected { display: flex; align-items: center; gap: 0.75rem; }
@@ -42,6 +159,7 @@ body {
   display: inline-flex; align-items: center; gap: 0.25rem;
   padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600;
   border: 1.5px solid currentColor;
+  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease;
 }
 .badge-active    { color: var(--color-active);    background: #eff6ff; }
 .badge-pre-cliff { color: var(--color-pre-cliff); background: #fffbeb; }
@@ -62,6 +180,11 @@ body {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius); padding: 1rem;
   display: flex; flex-direction: column; gap: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: box-shadow 100ms ease, background-color 200ms ease, border-color 200ms ease;
+}
+.stream-card:hover {
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.15), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 /* Card inner row: recipient+badge on left, amount+button on right */
@@ -108,7 +231,8 @@ body {
   padding: 0.5rem 1rem; background: var(--color-active); color: #fff;
   font-weight: 600; text-decoration: none; border-radius: 0 0 var(--radius) 0;
 }
-.skip-nav:focus { top: 0; }
+.skip-nav:focus,
+.skip-nav:focus-visible { top: 0; }
 
 /* #69 — visible focus outlines for keyboard navigation */
 :focus-visible {
@@ -163,9 +287,53 @@ body {
   border-bottom: 1px solid #fecaca; font-size: 0.9rem;
 }
 
+/* Mobile route changes fade in while moving content up by 8px. */
+@keyframes mobile-route-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 767px) {
+  .mobile-route-transition {
+    animation: mobile-route-enter 160ms ease-out both;
+  }
+}
+
 /* ── Skeleton loaders (#64) ── */
 @keyframes skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .skeleton {
   background: var(--color-border);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.sponsor-dashboard-heading, .sponsor-dashboard-header-actions, .sponsor-dashboard-controls,
+.sponsor-dashboard-pagination, .sponsor-dashboard-modal-actions {
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.sponsor-dashboard-heading { justify-content: space-between; margin-bottom: 1rem; }
+.sponsor-dashboard-header-actions { flex-wrap: wrap; justify-content: flex-end; }
+.sponsor-dashboard-address { margin-top: 0.35rem; color: #6b7280; font: 0.8rem monospace; overflow-wrap: anywhere; }
+.sponsor-dashboard-totals {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;
+  margin: 0 0 1.25rem;
+}
+.sponsor-dashboard-totals > div { border-top: 2px solid var(--color-border); padding-top: 0.65rem; }
+.sponsor-dashboard-totals dt { color: #6b7280; font-size: 0.8rem; }
+.sponsor-dashboard-totals dd { margin: 0.25rem 0 0; font-size: 1.25rem; font-weight: 700; }
+.sponsor-dashboard-controls { margin: 0 0 0.75rem; }
+.sponsor-dashboard-controls select { min-height: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid var(--color-border); border-radius: 0.25rem; background: var(--color-surface); }
+.sponsor-dashboard-table-wrap { overflow-x: auto; }
+.sponsor-dashboard-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.sponsor-dashboard-table th, .sponsor-dashboard-table td { padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; white-space: nowrap; }
+.sponsor-dashboard-table th { color: #6b7280; font-size: 0.75rem; font-weight: 700; }
+.sponsor-dashboard-recipient, .sponsor-dashboard-actions { display: inline-flex; align-items: center; gap: 0.25rem; }
+.sponsor-dashboard-actions .btn { min-height: 2rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+.sponsor-dashboard-pagination { justify-content: center; margin-top: 1rem; }
+.sponsor-dashboard-error { margin: 0.75rem 0; color: var(--color-cancelled); }
+.sponsor-dashboard-modal-backdrop { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 1rem; background: rgb(0 0 0 / 45%); }
+.sponsor-dashboard-modal { width: min(100%, 28rem); display: grid; gap: 0.75rem; padding: 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); }
+.sponsor-dashboard-modal textarea { width: 100%; padding: 0.6rem; border: 1px solid var(--color-border); border-radius: 0.25rem; font: inherit; resize: vertical; }
+.sponsor-dashboard-modal-actions { justify-content: flex-end; margin-top: 0.5rem; }
+@media (max-width: 540px) {
+  .sponsor-dashboard-totals { grid-template-columns: 1fr; gap: 0.65rem; }
+  .sponsor-dashboard-heading { align-items: flex-start; flex-direction: column; }
 }

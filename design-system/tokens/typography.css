@@ -1,0 +1,273 @@
+/* ==========================================================================
+   Typography System — Vesting Cliff Drip Stream
+   Issue #384: Responsive fluid type scale with clamp()
+
+   Fluid sizes interpolate linearly between a minimum (320px viewport) and a
+   maximum (1280px viewport). No media-query breakpoints are used for type.
+
+   Formula:
+     clamp(min, preferred, max)
+     preferred = min_rem + (max_rem - min_rem) * (100vw - 320px) / (1280px - 320px)
+               = min_rem + (delta) * (100vw - 20rem) / 60
+               simplified to a vw-based calc below.
+
+   Contrast: All text tokens must achieve ≥ 4.5:1 against their expected
+   background. See docs/a11y-audit.md for verified pairs.
+   ========================================================================== */
+
+:root {
+  /* ── Font families ─────────────────────────────────────────────────────── */
+
+  /* Body / UI — system font stack; zero-latency, native rendering */
+  --font-family-body:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    'Helvetica Neue',
+    sans-serif;
+
+  /* Mono — for Stellar addresses, ledger numbers, transaction hashes */
+  --font-family-mono:
+    'JetBrains Mono',
+    'Fira Code',
+    'Cascadia Code',
+    'Consolas',
+    'Menlo',
+    monospace;
+
+  /* ── Fluid type scale ──────────────────────────────────────────────────── */
+  /*
+   * Each step uses:  clamp(min_rem, preferred_vw_calc, max_rem)
+   * Viewport range:  320px (20rem) → 1280px (80rem)
+   * Body range:      16px (1rem)   → 18px (1.125rem)
+   *
+   * Preferred formula:  min + (max - min) * (100vw - 20rem) / 60
+   * Written inline as:  min_rem + (delta)vw + correction_rem
+   *
+   * Use clamp() — no media queries needed for any text size.
+   */
+
+  /* xs — labels, captions, helper text */
+  /* 11px → 12px */
+  --font-size-fluid-xs: clamp(0.6875rem, 0.6583rem + 0.1458vw, 0.75rem);
+
+  /* sm — secondary text, metadata, badge labels */
+  /* 13px → 14px */
+  --font-size-fluid-sm: clamp(0.8125rem, 0.7833rem + 0.1458vw, 0.875rem);
+
+  /* base — body text (primary reading size) */
+  /* 16px → 18px  (issue #384 explicit requirement) */
+  --font-size-fluid-base: clamp(1rem, 0.9292rem + 0.3542vw, 1.125rem);
+
+  /* lg — sub-headings, card titles, important UI labels */
+  /* 18px → 20px */
+  --font-size-fluid-lg: clamp(1.125rem, 1.0542rem + 0.3542vw, 1.25rem);
+
+  /* xl — section headings, h4 */
+  /* 20px → 24px */
+  --font-size-fluid-xl: clamp(1.25rem, 1.1083rem + 0.7083vw, 1.5rem);
+
+  /* 2xl — page sub-headings, h3 */
+  /* 24px → 30px */
+  --font-size-fluid-2xl: clamp(1.5rem, 1.2875rem + 1.0625vw, 1.875rem);
+
+  /* 3xl — page headings, h2 */
+  /* 30px → 38px */
+  --font-size-fluid-3xl: clamp(1.875rem, 1.5917rem + 1.4167vw, 2.375rem);
+
+  /* 4xl — hero / display headings, h1 */
+  /* 36px → 48px */
+  --font-size-fluid-4xl: clamp(2.25rem, 1.8250rem + 2.125vw, 3rem);
+
+  /* ── Heading hierarchy (h1–h4) ────────────────────────────────────────── */
+  /* Maps semantic headings to fluid scale steps */
+  --font-size-h1: var(--font-size-fluid-4xl);  /* 36px → 48px */
+  --font-size-h2: var(--font-size-fluid-3xl);  /* 30px → 38px */
+  --font-size-h3: var(--font-size-fluid-2xl);  /* 24px → 30px */
+  --font-size-h4: var(--font-size-fluid-xl);   /* 20px → 24px */
+
+  /* ── Font weights ──────────────────────────────────────────────────────── */
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+  --font-weight-extrabold: 800;
+
+  /* ── Line heights ──────────────────────────────────────────────────────── */
+  --line-height-none:     1;        /* single-line labels */
+  --line-height-tight:    1.25;     /* headings */
+  --line-height-snug:     1.375;    /* sub-headings */
+  --line-height-body:     1.6;      /* body text — issue #384 requirement */
+  --line-height-relaxed:  1.75;     /* long-form prose */
+
+  /* ── Letter spacing ────────────────────────────────────────────────────── */
+  --letter-spacing-tight:  -0.025em;  /* large headings */
+  --letter-spacing-normal:  0;
+  --letter-spacing-wide:    0.025em;  /* ALL-CAPS labels */
+  --letter-spacing-wider:   0.05em;   /* monospace addresses */
+
+  /* ── Maximum line length ───────────────────────────────────────────────── */
+  /* issue #384: 72ch for body text */
+  --measure-body:    72ch;
+  --measure-narrow:  45ch;   /* tight labels and captions */
+  --measure-wide:    90ch;   /* tables and wide data displays */
+
+  /* ── Numeric rendering ─────────────────────────────────────────────────── */
+  /* Applied to amounts, ledger numbers, addresses */
+  --font-variant-numeric: tabular-nums;
+  --font-feature-settings-tabular: 'tnum' 1, 'lnum' 1;
+
+  /* ── Mono sizing ───────────────────────────────────────────────────────── */
+  /* Mono fonts render slightly larger than sans-serif at the same em size */
+  --font-size-mono-sm:   0.8125rem;  /* 13px — inline address snippets */
+  --font-size-mono-base: 0.9375rem;  /* 15px — full address display */
+  --font-size-mono-lg:   1rem;       /* 16px — tx hash, ledger number */
+}
+
+/* ==========================================================================
+   Base typographic styles
+   Import this file AFTER tokens.css so token values are available.
+   ========================================================================== */
+
+/* ── Document base ─────────────────────────────────────────────────────── */
+html {
+  font-size: 100%;           /* honour user browser font-size preference */
+  -webkit-text-size-adjust: 100%;  /* prevent iOS auto-zoom */
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-family-body);
+  font-size: var(--font-size-fluid-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-body);
+  font-variant-numeric: var(--font-variant-numeric);
+  /* Improve rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── Heading hierarchy ─────────────────────────────────────────────────── */
+h1, .h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+h2, .h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+h3, .h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+h4, .h4 {
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-snug);
+}
+
+/* ── Body text ─────────────────────────────────────────────────────────── */
+p, .body-text {
+  font-size: var(--font-size-fluid-base);
+  line-height: var(--line-height-body);
+  max-width: var(--measure-body);  /* 72ch cap — issue #384 requirement */
+}
+
+/* ── Utility text sizes ─────────────────────────────────────────────────── */
+.text-xs   { font-size: var(--font-size-fluid-xs); }
+.text-sm   { font-size: var(--font-size-fluid-sm); }
+.text-base { font-size: var(--font-size-fluid-base); }
+.text-lg   { font-size: var(--font-size-fluid-lg); }
+.text-xl   { font-size: var(--font-size-fluid-xl); }
+.text-2xl  { font-size: var(--font-size-fluid-2xl); }
+.text-3xl  { font-size: var(--font-size-fluid-3xl); }
+.text-4xl  { font-size: var(--font-size-fluid-4xl); }
+
+/* ── Monospace — addresses, ledger numbers, transaction hashes ──────────── */
+code, kbd, samp,
+.mono,
+.address,
+.ledger-number,
+.tx-hash {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono-base);
+  line-height: var(--line-height-snug);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--font-feature-settings-tabular);
+  letter-spacing: var(--letter-spacing-wider);
+  /* Prevent line-break at separators in addresses */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Inline address (shorter, fits within prose) */
+.address-inline {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono-sm);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--font-feature-settings-tabular);
+}
+
+/* ── Numeric amounts (token balances, rates) ────────────────────────────── */
+.amount,
+.amount-value {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--font-feature-settings-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* Large claim/balance display */
+.amount-display {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-fluid-3xl);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--font-feature-settings-tabular);
+  line-height: var(--line-height-none);
+}
+
+/* ── Secondary / muted text ─────────────────────────────────────────────── */
+.text-secondary,
+.text-muted {
+  font-size: var(--font-size-fluid-sm);
+  line-height: var(--line-height-body);
+}
+
+/* ── Label / caption ────────────────────────────────────────────────────── */
+.label,
+label {
+  font-size: var(--font-size-fluid-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+/* ── Uppercase small-caps labels (badge text, status) ───────────────────── */
+.label-caps {
+  font-size: var(--font-size-fluid-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-wider);
+}
+
+/* ==========================================================================
+   Dark mode — typography colour tokens
+   These map to the contrast-audited values in globals.css / tokens.css.
+   Typography structure is identical; only colour changes.
+   ========================================================================== */
+/* Colour assignments are handled by --color-text-primary / --color-text-secondary
+   in tokens.css. No typography-specific dark overrides needed. */

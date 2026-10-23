@@ -1,0 +1,141 @@
+/* =========================================================
+   Tooltip component styles
+   ========================================================= */
+
+.tooltip-content {
+  background: #1e293b;
+  color: #f8fafc;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 280px;
+  width: max-content;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 9999;
+  word-wrap: break-word;
+}
+
+.tooltip-term {
+  display: block;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.tooltip-definition {
+  display: block;
+  color: #f8fafc;
+}
+
+.tooltip-example {
+  display: block;
+  margin-top: 6px;
+  color: #7dd3fc;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Arrow */
+.tooltip-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #1e293b;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* Animate in/out */
+.tooltip-enter {
+  animation: tooltip-in 120ms ease forwards;
+}
+
+.tooltip-leave {
+  animation: tooltip-out 80ms ease forwards;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tooltip-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* Inline term trigger */
+.term-trigger {
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: help;
+}
+
+.term-with-tooltip {
+  border-bottom: 1px dashed currentColor;
+  opacity: 0.85;
+}
+
+.term-with-tooltip:hover,
+.term-with-tooltip:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+/* Info button trigger */
+.tooltip-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--color-text-secondary, #94a3b8);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  margin-left: 5px;
+  vertical-align: middle;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.tooltip-info-btn:hover,
+.tooltip-info-btn:focus-visible {
+  color: var(--color-accent, #06b6d4);
+  border-color: var(--color-accent, #06b6d4);
+  outline: 2px solid var(--color-accent, #06b6d4);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-enter,
+  .tooltip-leave {
+    animation: none;
+  }
+}

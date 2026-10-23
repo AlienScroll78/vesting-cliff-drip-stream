@@ -8,10 +8,15 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check-translations": "node scripts/check-translations.mjs",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:visual": "playwright test --config=playwright.visual.config.ts",
+    "test:visual:update": "playwright test --config=playwright.visual.config.ts --update-snapshots"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.5.7",
     "@stellar/freighter-api": "^6.0.1",
     "framer-motion": "^12.42.0",
     "i18next": "^26.3.2",
@@ -21,9 +26,13 @@
     "posthog-js": "^1.393.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-i18next": "^17.0.8"
+    "react-hook-form": "^7.83.0",
+    "react-i18next": "^17.0.8",
+    "recharts": "^2.15.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@pact-foundation/pact": "13.1.4",
     "@playwright/test": "^1.61.1",
     "@sentry/react": "^10.62.0",
     "@testing-library/dom": "^10.4.1",
@@ -38,6 +47,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^2.1.9",
     "jsdom": "^25.0.1",
+    "msw": "^2.15.0",
     "oxlint": "^1.69.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.0",

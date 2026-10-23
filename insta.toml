@@ -1,0 +1,14 @@
+# insta snapshot configuration
+# https://insta.rs/docs/settings/
+
+# Store snapshots next to test sources, inside the existing snapshots/ dir.
+snapshot_path = "src/tests/snapshots"
+
+# Glob pattern for snapshot files managed by insta.
+# Non-insta JSON snapshots (event_*.json) co-exist in the same directory.
+snapshot_suffix = ""
+
+# In CI (INSTA_UPDATE=no), fail immediately on any snapshot mismatch rather
+# than writing a .snap.new file. This ensures unapproved schema changes are
+# always caught.
+# Locally, run `cargo insta review` to interactively approve changes.

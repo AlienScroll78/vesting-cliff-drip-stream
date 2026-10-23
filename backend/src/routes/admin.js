@@ -19,11 +19,13 @@
  */
 
 const { StellarSdk, loadConfig } = require("../lib");
+const { logger, redactAddress } = require("../logger");
 
 function requireAdminAuth(req, res) {
   const { ADMIN_API_KEY } = loadConfig();
   const auth = req.headers["authorization"] ?? "";
   if (!auth.startsWith("Bearer ") || auth.slice(7) !== ADMIN_API_KEY) {
+    logger.warn({ event: "admin_auth_failed", path: req.url }, "Unauthorized admin access attempt");
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Unauthorized" }));
     return false;
@@ -107,6 +109,11 @@ async function bulkClaimHandler(req, res) {
     return;
   }
 
+  logger.info(
+    { event: "bulk_claim_started", count: recipients.length },
+    `Starting bulk claim for ${recipients.length} recipient(s)`,
+  );
+
   const config = loadConfig();
   const results = [];
 
@@ -115,10 +122,45 @@ async function bulkClaimHandler(req, res) {
     try {
       const outcome = await claimForRecipient(String(recipient), config);
       results.push({ recipient, ...outcome });
+
+      if (outcome.success) {
+        logger.info(
+          {
+            event: "claim_success",
+            recipient: redactAddress(String(recipient)),
+            amount_claimed: outcome.amount_claimed,
+          },
+          `Claim succeeded for ${redactAddress(String(recipient))}`,
+        );
+      } else {
+        logger.warn(
+          {
+            event: "claim_failed",
+            recipient: redactAddress(String(recipient)),
+            error: outcome.error,
+          },
+          `Claim failed for ${redactAddress(String(recipient))}: ${outcome.error}`,
+        );
+      }
     } catch (err) {
-      results.push({ recipient, success: false, error: String(err.message ?? err) });
+      const errMsg = String(err.message ?? err);
+      results.push({ recipient, success: false, error: errMsg });
+      logger.error(
+        {
+          event: "claim_exception",
+          recipient: redactAddress(String(recipient)),
+          err,
+        },
+        `Exception during claim for ${redactAddress(String(recipient))}`,
+      );
     }
   }
+
+  const succeeded = results.filter((r) => r.success).length;
+  logger.info(
+    { event: "bulk_claim_completed", total: results.length, succeeded, failed: results.length - succeeded },
+    `Bulk claim completed: ${succeeded}/${results.length} succeeded`,
+  );
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ results }));

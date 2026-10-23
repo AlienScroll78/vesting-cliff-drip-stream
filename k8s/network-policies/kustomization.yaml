@@ -1,0 +1,33 @@
+# kustomization.yaml — Network Policy overlay for the vesting namespace
+#
+# Apply all policies at once:
+#   kubectl apply -k k8s/network-policies/
+#
+# Or preview what would be applied:
+#   kubectl kustomize k8s/network-policies/
+#
+# Ordering matters: the default-deny policies (00-*) must be applied before
+# the allow policies so that a partial apply never leaves pods unrestricted.
+# Kustomize applies resources in the order they are listed here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vesting
+
+resources:
+  # ── Baseline: deny everything first ───────────────────────────────────────
+  - 00-default-deny.yaml
+
+  # ── Explicit allow rules (applied after the deny baseline) ────────────────
+  - 01-frontend-to-backend.yaml
+  - 02-backend-to-datastores.yaml
+  - 03-event-worker-to-horizon.yaml
+  - 04-prometheus-scrape.yaml
+  - 05-ingress-controller.yaml
+
+# Common labels stamped on every resource managed by this overlay.
+# This makes it easy to query all policies at once:
+#   kubectl get networkpolicy -n vesting -l app.kubernetes.io/part-of=vesting
+commonLabels:
+  app.kubernetes.io/part-of: vesting
+  app.kubernetes.io/managed-by: kustomize
