@@ -27,7 +27,12 @@ import {
 
 const STELLAR_EXPERT_TX = "https://stellar.expert/explorer";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const TYPE_LABELS: Record<TxType | "all", string> = {
+  all: "all",
+  claim: "claim",
+  create: "create",
+  cancel: "cancel",
+};
 
 function explorerTxUrl(network: string, txHash: string): string {
   const explorer = network === "mainnet" ? "public" : "testnet";
@@ -45,9 +50,10 @@ function localDate(iso: string): string {
   }).format(date);
 }
 
-function abbreviateHash(hash: string): string {
-  return `${hash.slice(0, 8)}…${hash.slice(-4)}`;
-}
+export default function TransactionHistoryPage() {
+  const { t, i18n } = useTranslation();
+  const { transactions, total, page, pageSize, loading, error, setPage, filter, setFilter } =
+    useTransactions();
 
 const TYPE_LABELS: Record<HistoryEvent["type"], string> = {
   created: "Created",
@@ -173,9 +179,9 @@ export default function TransactionHistoryPage() {
   return (
     <main className="page">
       <header className="header">
-        <h1>Transaction History</h1>
+        <h1>{t("history.title")}</h1>
         <a href="/" className="btn btn-outline" style={{ fontSize: "0.875rem" }}>
-          ← Back
+          ← {t("history.back")}
         </a>
       </header>
 

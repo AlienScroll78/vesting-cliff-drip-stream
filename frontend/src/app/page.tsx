@@ -171,8 +171,9 @@ function StreamClaimCell({ stream, currentLedger, onOpenBottomSheet }: StreamCla
 }
 
 function StreamList() {
-  const { t } = useTranslation();
-  const { address } = useWallet();
+  const { t, i18n } = useTranslation();
+  const { setPending, setConfirmed, setFailed } = useTx();
+  const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [cancelTarget, setCancelTarget] = useState<VestingStream | null>(null);
   const [claimTarget, setClaimTarget] = useState<VestingStream | null>(null);
   const [timelineTarget, setTimelineTarget] = useState<VestingStream | null>(null);

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
@@ -73,7 +74,10 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   if (stream === null) {
     return (
       <main className="page">
-        <SearchResultsEmpty address={recipient} />
+        <h1 style={{ marginBottom: "0.5rem" }}>{t("home.scheduleNotFound")}</h1>
+        <p style={{ color: "#6b7280" }}>
+          {t("home.noSchedule", { address: recipient })}
+        </p>
       </main>
     );
   }
@@ -104,7 +108,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   return (
     <main className="page">
       <header className="header">
-        <h1>Vesting Schedule</h1>
+        <h1>{t("home.vestingSchedule")}</h1>
         <button
           type="button"
           className="btn btn-outline"
@@ -132,7 +136,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: "1.5rem" }}>
-              {stream.claimableAmount.toLocaleString()} {stream.token}
+              {stream.claimableAmount.toLocaleString(i18n.language)} {stream.token}
             </div>
             <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>claimable</div>
             {/* Claim button only shown when the connected wallet IS the recipient */}
@@ -151,9 +155,9 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         </div>
 
         <dl style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem 1rem", fontSize: "0.875rem" }}>
-          <dt style={{ color: "#6b7280" }}>Drip rate</dt>
-          <dd>{stream.rate} tokens / ledger</dd>
-          <dt style={{ color: "#6b7280" }}>Sponsor</dt>
+          <dt style={{ color: "#6b7280" }}>{t("home.dripRate")}</dt>
+          <dd>{stream.rate.toLocaleString(i18n.language)} {t("home.tokensPerLedger")}</dd>
+          <dt style={{ color: "#6b7280" }}>{t("sponsor")}</dt>
           <dd style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "monospace" }}>
             {stream.sponsor}
             <CopyButton text={stream.sponsor} label="Copy sponsor address" />

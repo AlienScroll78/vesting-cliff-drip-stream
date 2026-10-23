@@ -15,14 +15,16 @@ interface AdminAction {
 }
 
 export default function AdminPage() {
-  const { address, openModal } = useWallet();
-  const [minDeposit, setMinDeposit] = useState(import.meta.env.VITE_MIN_DEPOSIT ?? "300000");
-  const [newMinDeposit, setNewMinDeposit] = useState("");
-  const [allowedTokens, setAllowedTokens] = useState(initialAllowedTokens);
-  const [newToken, setNewToken] = useState("");
-  const [pendingAction, setPendingAction] = useState<AdminAction | null>(null);
-  const [notice, setNotice] = useState("");
-  const [audit, setAudit] = useState<AdminAction[]>([]);
+  const { t, i18n } = useTranslation();
+  const [token, setToken] = useState<string>(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(ADMIN_TOKEN_KEY) ?? "") : ""
+  );
+  const [inputToken, setInputToken] = useState("");
+  const [stats, setStats] = useState<IndexerStats | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   if (!address) {
     return <AccessState title="Admin access" detail="Connect the contract administrator wallet to continue." action={openModal} />;
@@ -44,11 +46,23 @@ export default function AdminPage() {
   };
 
   return (
-    <main style={{ maxWidth: 1000, margin: "0 auto", padding: "2rem 1rem 5rem", color: "#182d35" }}>
-      <header style={{ display: "flex", flexWrap: "wrap", alignItems: "end", justifyContent: "space-between", gap: "1rem", borderBottom: "1px solid #cbd8d5", paddingBottom: "1rem" }}>
-        <div>
-          <p style={{ margin: 0, color: "#147768", fontSize: ".72rem", fontWeight: 700, letterSpacing: ".1em" }}>CONTRACT CONTROL</p>
-          <h1 style={{ margin: ".35rem 0 0", fontSize: "1.8rem" }}>Administration</h1>
+    <main style={{ maxWidth: 720, margin: "0 auto", padding: "1.5rem 1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+        <h1>{t("admin.title")}</h1>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>
+            {t("admin.autoRefresh")}
+            {lastRefresh && <> — {lastRefresh.toLocaleTimeString(i18n.language)}</>}
+          </span>
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={handleReindex}
+            disabled={reindexing}
+            aria-busy={reindexing}
+          >
+            {reindexing ? "…" : t("admin.reindex")}
+          </button>
         </div>
         <p style={{ margin: 0, maxWidth: "100%", overflowWrap: "anywhere", fontFamily: "monospace", fontSize: ".78rem", color: "#53686e" }}>{address}</p>
       </header>

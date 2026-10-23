@@ -249,6 +249,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Check translation keys
+        run: npm run check-translations
+
       - name: Typecheck
         run: npm run typecheck
 
