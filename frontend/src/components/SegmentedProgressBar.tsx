@@ -61,7 +61,7 @@ export function SegmentedProgressBar({
   const shownCliffPct   = filled ? cliffPct   : 0;
 
   return (
-    <div style={{ width: "100%" }} data-tour={dataTour}>
+    <div style={{ width: "100%" }}>
       {/* Screen-reader summary */}
       <p id={id} className="sr-only">
         Vesting progress: {fmt(released, tokenSymbol)} released of {fmt(total, tokenSymbol)}.

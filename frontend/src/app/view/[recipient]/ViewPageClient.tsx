@@ -1,13 +1,19 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { CopyButton } from "@/components/CopyButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ClaimBottomSheet } from "@/components/ClaimBottomSheet";
 import { VestingTimeline } from "@/components/VestingTimeline";
+import { StreamAcknowledgmentBanner } from "@/components/StreamAcknowledgmentBanner";
 import { StreamDetailSkeleton } from "@/components/Skeletons";
-import { ShareStreamModal } from "@/components/ShareStreamModal";
+import {
+  ExpiredFullyClaimedState,
+  SearchResultsEmpty,
+} from "@/components/EmptyStates";
+import { isExpiredAndFullyClaimed } from "@/utils/streamCompletion";
 import { VestingStream } from "@/types";
-import { useWallet } from "@/contexts/WalletContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Stub lookup — replace with real contract read
 async function fetchSchedule(recipient: string): Promise<VestingStream | null> {
@@ -35,11 +41,17 @@ async function claimVested(_recipient: string): Promise<void> {
 }
 
 export default function ViewPageClient({ recipient }: { recipient: string }) {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const [stream, setStream] = useState<VestingStream | null | undefined>(undefined);
   const [showClaim, setShowClaim] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [currentLedger] = useState(51_200_000);
+  const [shareUrl, setShareUrl] = useState("");
+
+  // Populate the share URL client-side (window is not available during SSR)
+  useEffect(() => {
+    setShareUrl(window.location.href);
+  }, []);
 
   useEffect(() => {
     fetchSchedule(recipient).then(setStream);
@@ -56,10 +68,31 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   if (stream === null) {
     return (
       <main className="page">
-        <h1 style={{ marginBottom: "0.5rem" }}>Schedule not found</h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>{t("home.scheduleNotFound")}</h1>
         <p style={{ color: "#6b7280" }}>
-          No vesting schedule was found for <code>{recipient}</code>.
+          {t("home.noSchedule", { address: recipient })}
         </p>
+      </main>
+    );
+  }
+
+  if (
+    isExpiredAndFullyClaimed({
+      status: stream.status,
+      currentLedger,
+      endLedger: stream.endLedger,
+      claimableAmount: stream.claimableAmount,
+      totalReceived: stream.totalReceived,
+    })
+  ) {
+    return (
+      <main className="page">
+        <ExpiredFullyClaimedState
+          token={stream.token}
+          totalReceived={stream.totalReceived ?? 0}
+          recipient={stream.recipient}
+          celebrate
+        />
       </main>
     );
   }
@@ -69,7 +102,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   return (
     <main className="page">
       <header className="header">
-        <h1>Vesting Schedule</h1>
+        <h1>{t("home.vestingSchedule")}</h1>
         <button
           type="button"
           className="btn btn-outline"
@@ -80,12 +113,15 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         </button>
       </header>
 
+      {isRecipient && (
+        <StreamAcknowledgmentBanner stream={stream} network={network} />
+      )}
+
       <section className="stream-card" style={{ flexDirection: "column", gap: "0.75rem", marginTop: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-              {stream.recipient}
-              <CopyButton text={stream.recipient} label="Copy recipient address" />
+              <CopyableAddress value={stream.recipient} />
             </div>
             <div style={{ marginTop: "0.25rem" }}>
               <StatusBadge status={stream.status} />
@@ -93,9 +129,10 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: "1.5rem" }}>
-              {stream.claimableAmount.toLocaleString()} {stream.token}
+              {stream.claimableAmount.toLocaleString(i18n.language)} {stream.token}
             </div>
             <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>claimable</div>
+            {/* Claim button only shown when the connected wallet IS the recipient */}
             {isRecipient && stream.status !== "completed" && stream.status !== "cancelled" && (
               <button
                 type="button"
@@ -111,12 +148,11 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         </div>
 
         <dl style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem 1rem", fontSize: "0.875rem" }}>
-          <dt style={{ color: "#6b7280" }}>Drip rate</dt>
-          <dd>{stream.rate} tokens / ledger</dd>
-          <dt style={{ color: "#6b7280" }}>Sponsor</dt>
+          <dt style={{ color: "#6b7280" }}>{t("home.dripRate")}</dt>
+          <dd>{stream.rate.toLocaleString(i18n.language)} {t("home.tokensPerLedger")}</dd>
+          <dt style={{ color: "#6b7280" }}>{t("sponsor")}</dt>
           <dd style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "monospace" }}>
-            {stream.sponsor}
-            <CopyButton text={stream.sponsor} label="Copy sponsor address" />
+            <CopyableAddress value={stream.sponsor} />
           </dd>
           {stream.totalDeposit && (
             <>
@@ -144,6 +180,61 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         )}
       </section>
 
+      {/* Share section — enhanced for issue #765.
+          Shows a copyable URL input alongside the copy button. */}
+      <section
+        aria-label="Share this stream"
+        style={{
+          marginTop: "1.25rem",
+          padding: "1rem",
+          borderRadius: "0.5rem",
+          background: "var(--card-bg, #f9fafb)",
+          border: "1px solid var(--card-border, #e5e7eb)",
+        }}
+      >
+        <p style={{ fontWeight: 600, marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+          Share this stream
+        </p>
+        <p style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: "0.75rem" }}>
+          Anyone with this link can view the schedule — no wallet required.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          {/* Read-only URL input so users can triple-click and copy manually */}
+          <input
+            type="text"
+            readOnly
+            value={shareUrl}
+            aria-label="Public share URL"
+            data-testid="share-url-input"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+            style={{
+              flex: 1,
+              fontFamily: "monospace",
+              fontSize: "0.8rem",
+              padding: "0.4rem 0.6rem",
+              border: "1px solid var(--input-border, #d1d5db)",
+              borderRadius: "0.375rem",
+              background: "var(--input-bg, #fff)",
+              color: "inherit",
+              outline: "none",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={copyShareUrl}
+            aria-label={urlCopied ? "Link copied!" : "Copy share link"}
+            data-testid="share-copy-btn"
+            style={{ whiteSpace: "nowrap" }}
+          >
+            {urlCopied ? "✓ Copied!" : "Copy link"}
+          </button>
+        </div>
+      </section>
+
       {showClaim && (
         <ClaimBottomSheet
           stream={stream}
@@ -155,4 +246,8 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
       {showShare && <ShareStreamModal stream={stream} onClose={() => setShowShare(false)} />}
     </main>
   );
+}
+
+export default function ViewPageClient({ recipient }: { recipient: string }) {
+  return <ErrorBoundary><ViewPageContent recipient={recipient} /></ErrorBoundary>;
 }

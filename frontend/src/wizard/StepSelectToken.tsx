@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useWallet } from '../contexts/WalletContext'
 import { Tooltip } from '../Tooltip'
 import { tokenSchema } from './useWizard'
@@ -62,13 +62,13 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
   }, [touch])
 
   return (
-    <div className={styles.step}>
-      <h2 className={styles.stepHeading}>Select token</h2>
-      <p className={styles.stepSub}>
-        Choose the SAC token to stream. The sponsor wallet must hold enough to cover the full deposit.
+    <div style={styles.card}>
+      <h2 style={styles.heading}>{t('wizard.selectToken')}</h2>
+      <p style={styles.sub}>
+        {t('wizard.tokenDescription')}
       </p>
 
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div style={styles.presets}>
         {PRESETS.map(p => (
           <button
             key={p.address}
@@ -82,38 +82,36 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
         ))}
       </div>
 
-      <label className={styles.field}>
+      <label style={styles.label}>
         <span>
-          Custom token contract{' '}
-          <Tooltip content="Stellar Asset Contract (SAC) address starting with C. Must be an issued Soroban token on this network." />
+          {t('wizard.customToken')}{' '}
+          <Tooltip content={t('wizard.customTokenHelp')} />
         </span>
         <input
+          id="wizard-token-custom-input"
           type="text"
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="C…"
+          placeholder={t('wizard.tokenPlaceholder')}
           value={custom}
           onChange={e => handleCustomChange(e.target.value.trim())}
           onBlur={handleBlur}
           aria-invalid={!!schemaError}
-          className={styles.input}
+          aria-describedby={schemaError ? "wizard-token-custom-error" : undefined}
           style={{
-            borderColor: schemaError ? 'var(--color-cancelled, #b91c1c)' : 'var(--color-border, #e5e7eb)',
+            ...styles.input,
+            borderColor: schemaError ? 'var(--color-cancelled)' : 'var(--color-border)',
           }}
           data-testid="wizard-token-custom"
         />
         {schemaError && (
-          <span role="alert" className={styles.error} data-testid="token-error">
+          <span id="wizard-token-custom-error" role="alert" style={styles.error} data-testid="token-error">
             {schemaError}
           </span>
         )}
       </label>
 
       {data.tokenAddress && balanceOk === false && (
-        <p role="alert" className={styles.warning}>
-          ⚠️ Your wallet has 0 {selectedBalance?.assetCode || 'tokens'}.
+        <p role="alert" style={styles.warning}>
+          ⚠ Your wallet has 0 {selectedBalance?.assetCode || 'tokens'}.
           You need a positive balance to fund the stream deposit.
         </p>
       )}
@@ -124,30 +122,44 @@ export function StepSelectToken({ data, update, touch, touched, onNext, onBack }
 
       {data.tokenAddress && selectedBalance && balanceOk && (
         <p style={{ fontSize: '0.8rem', color: 'var(--color-completed)' }}>
-          ✔ Balance: {parseFloat(selectedBalance.balance).toLocaleString()} {selectedBalance.assetCode}
+          ✓ Balance: {parseFloat(selectedBalance.balance).toLocaleString()} {selectedBalance.assetCode}
         </p>
       )}
 
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={styles.secondaryBtn}
-          onClick={onBack}
-          data-testid="wizard-back-btn"
-        >
-          ← Back
+      <div style={styles.actions}>
+        <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
+          ← {t('history.back')}
         </button>
         <button
           type="button"
-          className={styles.primaryBtn}
+          className="btn btn-primary"
           disabled={!canContinue}
           onClick={onNext}
           data-testid="wizard-next-btn"
         >
-          Continue →
+          {t('wizard.continue')} →
         </button>
       </div>
     </div>
   )
 }
 
+const styles: Record<string, React.CSSProperties> = {
+  card: { display: 'flex', flexDirection: 'column', gap: '1rem' },
+  heading: { fontSize: '1.25rem', fontWeight: 700 },
+  sub: { fontSize: '0.9rem', color: '#6b7280' },
+  presets: { display: 'flex', gap: '0.75rem', flexWrap: 'wrap' },
+  label: { display: 'flex', flexDirection: 'column', gap: '0.375rem', fontSize: '0.875rem', fontWeight: 600 },
+  input: {
+    padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+    border: '1px solid var(--color-border)', fontFamily: 'monospace', fontSize: '0.875rem',
+    outline: 'none', width: '100%',
+  },
+  actions: { display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' },
+  warning: {
+    fontSize: '0.85rem', padding: '0.5rem 0.75rem',
+    background: '#fffbeb', border: '1px solid #fde68a',
+    borderRadius: 'var(--radius)',
+  },
+  error: { fontSize: '0.8rem', color: 'var(--color-cancelled)' },
+}

@@ -261,42 +261,41 @@ export function FormSkeleton({ fields = 4 }: { fields?: number }) {
   );
 }
 
-// ─── SponsorStreamListSkeleton (#823) ──────────────────────────────────────────
+// ─── SponsorStreamListSkeleton ────────────────────────────────────────────────
 
 /**
- * Sponsor stream list. Row widths deliberately vary so the placeholder reads as
- * a list of real records rather than a uniform grid.
+ * Sponsor stream list rows (#823).  Text widths vary row to row so the
+ * placeholder reads as a list of records rather than a uniform grid.
  */
-const SPONSOR_ROW_WIDTHS: string[][] = [
-  ["70%", "45%", "55%"],
-  ["55%", "60%", "40%"],
-  ["80%", "35%", "65%"],
-  ["62%", "50%", "48%"],
-  ["72%", "42%", "58%"],
-];
-
-const MAX_SPONSOR_ROWS = 5;
-
 export function SponsorStreamListSkeleton({ rows = 5 }: { rows?: number }) {
-  const count = Math.min(rows, MAX_SPONSOR_ROWS);
   return (
     <ul
       style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}
       aria-busy="true"
       aria-label="Loading sponsor streams"
     >
-      {Array.from({ length: count }).map((_, i) => {
-        const w = SPONSOR_ROW_WIDTHS[i % SPONSOR_ROW_WIDTHS.length]!;
+      {Array.from({ length: rows }).map((_, i) => {
+        const widths = ["70%", "55%", "80%", "60%", "75%"];
         return (
-          <li key={i} className={styles.streamCard} data-testid="sponsor-stream-skeleton-row" aria-hidden="true">
-            <div className={styles.row} style={{ justifyContent: "space-between" }}>
-              <div className={styles.stack} style={{ gap: "0.4rem" }}>
-                <Skeleton width={w[0]!} height="0.9rem" />
-                <Skeleton width={w[1]!} height="0.7rem" />
-              </div>
-              <Skeleton width="4.5rem" height="1.25rem" shape="rect" />
+          <li
+            key={i}
+            data-testid="sponsor-stream-skeleton-row"
+            aria-hidden="true"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              padding: "0.75rem",
+              border: "1px solid var(--color-border, #e5e7eb)",
+              borderRadius: "0.5rem",
+            }}
+          >
+            <Skeleton width="2.25rem" height="2.25rem" shape="circle" />
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", flex: 1 }}>
+              <Skeleton width={widths[i % widths.length]} height="0.85rem" />
+              <Skeleton width="45%" height="0.7rem" />
             </div>
-            <Skeleton width="100%" height="0.5rem" shape="rect" />
+            <Skeleton width="4.5rem" height="1.25rem" shape="circle" />
           </li>
         );
       })}
@@ -304,140 +303,340 @@ export function SponsorStreamListSkeleton({ rows = 5 }: { rows?: number }) {
   );
 }
 
-// ─── StreamExplorerSkeleton (#823) ─────────────────────────────────────────────
+// ─── StreamExplorerSkeleton ───────────────────────────────────────────────────
 
 /**
- * Stream explorer table. Mirrors the explorer's column set so column widths
- * survive the load and the table doesn't reflow when data arrives.
+ * Explorer table rows (#823).  Column widths are locked in while loading so the
+ * table doesn't reflow when data arrives.
  */
-const EXPLORER_COLUMNS = ["2fr", "1.5fr", "1.25fr", "1fr"] as const;
-const MAX_EXPLORER_ROWS = 6;
-
 export function StreamExplorerSkeleton({ rows = 6 }: { rows?: number }) {
-  const count = Math.min(rows, MAX_EXPLORER_ROWS);
-  const cols = EXPLORER_COLUMNS.join(" ");
   return (
-    <div className={styles.table} aria-busy="true" aria-label="Loading stream explorer">
-      <div className={styles.tableHeader} style={{ gridTemplateColumns: cols }} aria-hidden="true">
-        {EXPLORER_COLUMNS.map((_, i) => (
-          <Skeleton key={i} width="70%" height="0.65rem" />
+    <div aria-busy="true" aria-label="Loading stream explorer">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "2fr 1fr 1fr 1fr",
+          gap: "0.75rem",
+          marginBottom: "0.75rem",
+        }}
+        aria-hidden="true"
+      >
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} width="60%" height="0.65rem" />
         ))}
       </div>
-      {Array.from({ length: count }).map((_, i) => (
+      {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className={styles.tableRow}
           data-testid="explorer-skeleton-row"
-          style={{ gridTemplateColumns: cols }}
           aria-hidden="true"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr 1fr 1fr",
+            gap: "0.75rem",
+            padding: "0.6rem 0",
+            borderBottom: "1px solid var(--color-border, #e5e7eb)",
+          }}
         >
-          {EXPLORER_COLUMNS.map((_, j) => (
-            <Skeleton
-              key={j}
-              width={j === 0 ? "85%" : "65%"}
-              height="0.875rem"
-              style={{ fontFamily: j === 0 ? "monospace" : undefined }}
-            />
-          ))}
+          <Skeleton width="85%" height="0.85rem" />
+          <Skeleton width="70%" height="0.85rem" />
+          <Skeleton width="60%" height="0.85rem" />
+          <Skeleton width="75%" height="0.85rem" />
         </div>
       ))}
     </div>
   );
 }
 
-// ─── NotificationListSkeleton (#823) ───────────────────────────────────────────
+// ─── NotificationListSkeleton ─────────────────────────────────────────────────
 
-/** Notification item: leading icon, two text lines, and a trailing timestamp. */
-const MAX_NOTIFICATION_ITEMS = 6;
-
+/**
+ * Notification items (#823): leading icon circle, two text lines, and a
+ * trailing timestamp placeholder.
+ */
 export function NotificationListSkeleton({ items = 4 }: { items?: number }) {
-  const count = Math.min(items, MAX_NOTIFICATION_ITEMS);
   return (
     <ul
-      style={{ listStyle: "none", padding: 0, margin: 0 }}
+      style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}
       aria-busy="true"
       aria-label="Loading notifications"
     >
-      {Array.from({ length: count }).map((_, i) => (
+      {Array.from({ length: items }).map((_, i) => (
         <li
           key={i}
           data-testid="notification-skeleton-item"
           aria-hidden="true"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            padding: "0.875rem 1rem",
-            borderBottom: "1px solid var(--color-border, #e5e7eb)",
-          }}
+          style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
         >
           <Skeleton width="2rem" height="2rem" shape="circle" />
-          <div className={styles.stack} style={{ gap: "0.35rem" }}>
-            <Skeleton width={i % 2 === 0 ? "60%" : "48%"} height="0.8rem" />
-            <Skeleton width={i % 2 === 0 ? "40%" : "55%"} height="0.7rem" />
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", flex: 1 }}>
+            <Skeleton width="65%" height="0.8rem" />
+            <Skeleton width="40%" height="0.7rem" />
           </div>
-          <Skeleton width="3.5rem" height="0.65rem" style={{ marginLeft: "auto" }} />
+          <Skeleton width="3.5rem" height="0.65rem" />
         </li>
       ))}
     </ul>
   );
 }
 
-// ─── AnalyticsSummarySkeleton (#823) ───────────────────────────────────────────
-
-/** Analytics page: a row of stat cards above a chart placeholder. */
-const ANALYTICS_CARDS = 4;
-const CHART_BAR_HEIGHTS = [45, 70, 55, 85, 60, 75, 50, 90];
+// ─── AnalyticsSummarySkeleton ─────────────────────────────────────────────────
 
 /**
- * Analytics summary. Pass `showChart={false}` for contexts that only render the
- * stat cards (e.g. the sponsor dashboard header), so no phantom chart is
- * reserved for content that will never appear.
+ * Analytics page (#823): a row of stat cards above a fixed-height chart
+ * placeholder, so the page doesn't jump when data loads.
  */
 export function AnalyticsSummarySkeleton({
-  cards = ANALYTICS_CARDS,
+  cards = 4,
   showChart = true,
 }: {
   cards?: number;
   showChart?: boolean;
 }) {
-  const count = Math.min(cards, ANALYTICS_CARDS);
   return (
     <div aria-busy="true" aria-label="Loading analytics">
       <div
-        className={styles.statsGrid}
-        style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${cards}, 1fr)`,
+          gap: "0.75rem",
+          marginBottom: showChart ? "1rem" : 0,
+        }}
       >
-        {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className={styles.statCell} data-testid="analytics-skeleton-card" aria-hidden="true">
-            <Skeleton width="55%" height="0.65rem" />
+        {Array.from({ length: cards }).map((_, i) => (
+          <div
+            key={i}
+            data-testid="analytics-skeleton-card"
+            className={styles.statCell}
+            aria-hidden="true"
+          >
+            <Skeleton width="50%" height="0.65rem" />
             <Skeleton width="70%" height="1.5rem" />
-            <Skeleton width="40%" height="0.6rem" />
           </div>
         ))}
       </div>
-
-      {/* Chart placeholder — fixed height so the page doesn't jump on load. */}
       {showChart && (
-        <div
-          aria-hidden="true"
-          style={{
-            height: "12rem",
-            marginTop: "1rem",
-            border: "1px solid var(--color-border, #e5e7eb)",
-            borderRadius: "0.5rem",
-            padding: "1rem",
-            display: "flex",
-            alignItems: "flex-end",
-            gap: "0.5rem",
-          }}
-        >
-          {CHART_BAR_HEIGHTS.map((h, i) => (
-            <Skeleton key={i} width="100%" height={`${h}%`} shape="rect" style={{ flex: 1 }} />
-          ))}
+        <Skeleton
+          width="100%"
+          height="16rem"
+          shape="rect"
+          style={{ borderRadius: "0.5rem" }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Generic full-page loading skeleton for routes with no specific skeleton. */
+export function FullPageSkeleton() {
+  return (
+    <div
+      style={{ padding: "2rem", maxWidth: 720, margin: "0 auto" }}
+      aria-busy="true"
+      aria-label="Loading page"
+    >
+      <Skeleton width="40%" height="1.75rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="1rem" style={{ marginBottom: "0.5rem" }} />
+      <Skeleton width="80%" height="1rem" style={{ marginBottom: "1.5rem" }} />
+      <Skeleton width="100%" height="8rem" shape="rect" style={{ borderRadius: "0.5rem" }} />
+    </div>
+  );
+}
+
+// ─── SponsorStreamListSkeleton (#823) ─────────────────────────────────────────
+
+/**
+ * Sponsor stream list rows.
+ * Text widths vary row-to-row so the placeholder reads as a list of real records
+ * rather than a uniform grid.  Capped at 5 rows.
+ */
+const MAX_SPONSOR_ROWS = 5;
+
+// Width sequences for recipient, rate, cliff, status columns per row.
+const SPONSOR_ROW_WIDTHS = [
+  ["70%", "55%", "60%", "4rem"],
+  ["85%", "45%", "75%", "4.5rem"],
+  ["60%", "65%", "50%", "4rem"],
+  ["78%", "50%", "68%", "5rem"],
+  ["65%", "60%", "55%", "4rem"],
+];
+
+export function SponsorStreamListSkeleton({ rows = 5 }: { rows?: number }) {
+  const count = Math.min(rows, MAX_SPONSOR_ROWS);
+  return (
+    <ul
+      className={styles.sponsorStreamList}
+      aria-busy="true"
+      aria-label="Loading sponsor streams"
+    >
+      {Array.from({ length: count }).map((_, i) => {
+        const [w0, w1, w2, w3] = SPONSOR_ROW_WIDTHS[i % SPONSOR_ROW_WIDTHS.length];
+        return (
+          <li key={i} className={styles.sponsorStreamRow} data-testid="sponsor-stream-skeleton-row" aria-hidden="true">
+            <Skeleton width={w0} height="0.875rem" />
+            <Skeleton width={w1} height="0.875rem" />
+            <Skeleton width={w2} height="0.875rem" />
+            <Skeleton width={w3} height="1.5rem" shape="circle" />
+            <Skeleton width="0.75rem" height="0.75rem" shape="circle" />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// ─── StreamExplorerSkeleton (#823) ────────────────────────────────────────────
+
+/**
+ * Explorer table rows.  5-column layout: recipient, token, rate, cliff, status.
+ * Column widths are fixed while loading so the table doesn't reflow when data
+ * arrives.
+ */
+const MAX_EXPLORER_ROWS = 10;
+
+export function StreamExplorerSkeleton({ rows = 5 }: { rows?: number }) {
+  const count = Math.min(rows, MAX_EXPLORER_ROWS);
+  return (
+    <div
+      className={styles.explorerTable}
+      aria-busy="true"
+      aria-label="Loading stream explorer"
+    >
+      {/* Column headers */}
+      <div className={styles.explorerHeader} aria-hidden="true">
+        {["50%", "40%", "35%", "40%", "45%"].map((w, i) => (
+          <Skeleton key={i} width={w} height="0.65rem" />
+        ))}
+      </div>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className={styles.explorerRow} data-testid="explorer-skeleton-row" aria-hidden="true">
+          <Skeleton width="80%" height="0.875rem" />
+          <Skeleton width="65%" height="0.875rem" />
+          <Skeleton width="55%" height="0.875rem" />
+          <Skeleton width="60%" height="0.875rem" />
+          <Skeleton width="4.5rem" height="1.5rem" shape="circle" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── NotificationListSkeleton (#823) ──────────────────────────────────────────
+
+/**
+ * Notification items: leading icon circle, title + body text lines, trailing
+ * timestamp placeholder.  Capped at 8 items.
+ */
+const MAX_NOTIFICATION_ITEMS = 8;
+
+export function NotificationListSkeleton({ items = 4 }: { items?: number }) {
+  const count = Math.min(items, MAX_NOTIFICATION_ITEMS);
+  return (
+    <ul
+      className={styles.notificationList}
+      aria-busy="true"
+      aria-label="Loading notifications"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <li key={i} className={styles.notificationItem} data-testid="notification-skeleton-item" aria-hidden="true">
+          {/* Icon */}
+          <Skeleton width="2rem" height="2rem" shape="circle" />
+          {/* Text body */}
+          <div className={styles.notificationBody}>
+            <Skeleton width={i % 2 === 0 ? "75%" : "85%"} height="0.85rem" />
+            <Skeleton width={i % 2 === 0 ? "55%" : "65%"} height="0.75rem" />
+          </div>
+          {/* Timestamp */}
+          <Skeleton width="3rem" height="0.65rem" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ─── AnalyticsSummarySkeleton (#823) ─────────────────────────────────────────
+
+/**
+ * Analytics page: a row of stat cards above a fixed-height chart placeholder.
+ * Prevents the page from jumping when data arrives.
+ * Pass `showChart={false}` for pages that never show a chart.
+ */
+const MAX_ANALYTICS_CARDS = 8;
+
+export function AnalyticsSummarySkeleton({
+  cards = 4,
+  showChart = true,
+}: {
+  cards?: number;
+  showChart?: boolean;
+}) {
+  const count = Math.min(cards, MAX_ANALYTICS_CARDS);
+  return (
+    <div
+      className={styles.analyticsSummary}
+      aria-busy="true"
+      aria-label="Loading analytics"
+    >
+      {/* Stat cards */}
+      <div className={styles.analyticsCards}>
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className={styles.analyticsCard} data-testid="analytics-skeleton-card" aria-hidden="true">
+            <Skeleton width="50%" height="0.65rem" />
+            <Skeleton width="65%" height="1.5rem" />
+            <Skeleton width="40%" height="0.65rem" />
+          </div>
+        ))}
+      </div>
+      {/* Chart placeholder */}
+      {showChart && (
+        <div className={styles.analyticsChart} aria-hidden="true">
+          <Skeleton width="100%" height="14rem" shape="rect" style={{ borderRadius: 0 }} />
         </div>
       )}
     </div>
   );
 }
 
+// ─── DashboardStatsSkeleton ───────────────────────────────────────────────────
+
+/**
+ * Dashboard stats row: up to 4 stat cards in a responsive grid.
+ * Each card has a label, a large metric value, and a small trend line.
+ * Used at the top of both the recipient and sponsor dashboards.
+ */
+export function DashboardStatsSkeleton({ count = 4 }: { count?: number }) {
+  const safeCount = Math.min(count, 4);
+  return (
+    <div
+      className={styles.dashboardStats}
+      aria-busy="true"
+      aria-label="Loading dashboard stats"
+    >
+      {Array.from({ length: safeCount }).map((_, i) => (
+        <div key={i} className={styles.dashboardStatCard} data-testid="dashboard-stat-skeleton-card" aria-hidden="true">
+          <Skeleton width="50%" height="0.65rem" />
+          <Skeleton width="70%" height="1.75rem" />
+          <Skeleton width="40%" height="0.65rem" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── StreamTableRowSkeleton ───────────────────────────────────────────────────
+
+/**
+ * A single row in the stream table (5-column: recipient, token, rate, cliff,
+ * status). Compose multiples inside a `<div role="table">` wrapper.
+ */
+export function StreamTableRowSkeleton() {
+  return (
+    <div className={styles.streamTableRow} data-testid="stream-table-row-skeleton" aria-hidden="true">
+      <Skeleton width="75%" height="0.875rem" />
+      <Skeleton width="55%" height="0.875rem" />
+      <Skeleton width="60%" height="0.875rem" />
+      <Skeleton width="50%" height="0.875rem" />
+      <Skeleton width="4.5rem" height="1.5rem" shape="circle" />
+    </div>
+  );
+}

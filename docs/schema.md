@@ -12,6 +12,47 @@ migrate -path backend/migrations -database "$DATABASE_URL" up
 migrate -path backend/migrations -database "$DATABASE_URL" down 1
 ```
 
+### Automatic at startup (Issue #1013)
+
+The backend applies pending migrations automatically before the HTTP server
+begins accepting traffic, so a deploy cannot serve requests against a stale
+schema. This is wired into `src/server.ts` via `runMigrationsOrExit()`
+(`src/migrate.ts`).
+
+- **Ordering:** `runMigrationsOrExit()` is awaited before `httpServer.listen()`.
+- **Concurrency:** migrations are guarded by a PostgreSQL advisory lock
+  (`pg_try_advisory_lock`, lock id `7241865325823964`). In a multi-replica
+  rollout, one replica applies migrations while the others detect the held lock,
+  wait for a current schema, and continue booting.
+- **Failure:** a migration that cannot be applied aborts startup with a
+  non-zero exit code and a descriptive error, stopping a bad deploy from
+  rolling forward.
+- **Health:** `GET /health` and `GET /ready` report
+  `db_migrations: "current" | "pending" | "failed"`.
+- **Dry run:** set `MIGRATE_DRY_RUN=true` to log the migrations that would be
+  applied without applying them. (`DB_MIGRATE_DRY_RUN` is a deprecated alias.)
+
+```bash
+# Preview pending migrations without applying them
+MIGRATE_DRY_RUN=true npm run dev
+
+# Equivalent one-off against the migration tool
+npm run migrate:dry-run
+```
+
+#### Managed vs unmanaged migration tracks
+
+The `migrations/` directory contains two conventions:
+
+| Track | Example | Applied at startup? |
+|-------|---------|---------------------|
+| `node-pg-migrate` (`.ts`) | `001_create_vesting_streams.ts` | Yes — recorded in `pgmigrations` |
+| `V{n}__*.sql` | `V1__create_schedules.sql` | No — reported as "unmanaged" in the startup log |
+
+The `V*__*.sql` files are a separate track and are **not** applied on startup,
+because running them against a schema where they are already applied can abort
+the boot. They are listed in the startup log so drift stays visible.
+
 ## Seed (local development)
 
 ```bash

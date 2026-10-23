@@ -13,8 +13,8 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
+import { WalletButton } from "@/components/WalletButton";
 import {
-  SponsorStreamListEmpty,
   SearchResultsEmpty,
   SponsorDashboardEmpty,
 } from "@/components/EmptyStates";

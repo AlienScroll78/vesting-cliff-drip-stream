@@ -1,8 +1,8 @@
-﻿import { useState, useEffect, useCallback, type ChangeEvent } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Tooltip } from '../Tooltip'
-import { ledgersToDuration, scheduleSchema, isDepositOverflow, LEDGERS_PER_SECOND } from './useWizard'
+import { CostCalculator } from '../components/CostCalculator'
+import { ledgersToDuration, scheduleSchema, isDepositOverflow } from './useWizard'
 import type { WizardFormData } from './useWizard'
-import styles from './wizard.module.css'
 
 interface Props {
   data: WizardFormData
@@ -104,63 +104,47 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
   ]
 
   return (
-    <div className={styles.step}>
-      <h2 className={styles.stepHeading}>Schedule</h2>
-      <p className={styles.stepSub}>
+    <div style={styles.card}>
+      <h2 style={styles.heading}>Schedule</h2>
+      <p style={styles.sub}>
         Set the vesting rate, cliff period, and total duration. Values update in real time.
       </p>
 
       {fields.map(f => (
-        <label key={f.key} className={styles.field}>
+        <label key={f.key} style={styles.fieldLabel}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {f.label}
+            {/* Visual required indicator — aria-required on the input conveys this to AT */}
+            <span aria-hidden="true" style={{ color: 'var(--color-cancelled)', marginLeft: 2 }}>*</span>
             <Tooltip content={f.tooltip} />
           </span>
           <input
+            id={`wizard-${f.key}-input`}
             type="number"
-            inputMode="numeric"
             min={1}
             placeholder={f.placeholder}
             value={data[f.key]}
             onChange={e => update({ [f.key]: e.target.value })}
             onBlur={() => handleBlur(f.key)}
+            required
+            aria-required="true"
             aria-invalid={!!fieldError(f.key)}
-            className={styles.input}
+            aria-describedby={fieldError(f.key) ? `wizard-${f.key}-error` : undefined}
             style={{
-              borderColor: fieldError(f.key) ? 'var(--color-cancelled, #b91c1c)' : 'var(--color-border, #e5e7eb)',
+              ...styles.input,
+              borderColor: fieldError(f.key) ? 'var(--color-cancelled)' : 'var(--color-border)',
             }}
             data-testid={f.testId}
           />
           {fieldError(f.key) && (
-            <span role="alert" className={styles.error} data-testid={`${f.testId}-error`}>
+            <span id={`wizard-${f.key}-error`} role="alert" style={styles.error} data-testid={`${f.testId}-error`}>
               {fieldError(f.key)}
             </span>
           )}
         </label>
       ))}
 
-      {/* Native date picker for the cliff — converts to ledgers on change (#822). */}
-      <label className={styles.field}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          Cliff date
-          <Tooltip content="Pick the date your cliff lands on. This is converted to a ledger count (~5 s per ledger)." />
-        </span>
-        <input
-          type="date"
-          className={styles.input}
-          value={cliffDate}
-          onChange={handleCliffDateChange}
-          data-testid="wizard-cliff-date"
-          aria-label="Cliff date"
-        />
-        <span className={styles.hint}>
-          {cliffDate
-            ? `≈ ${ledgersToDuration(dateToLedgers(cliffDate) ?? 0)} from now`
-            : 'Optional — pick a date instead of counting ledgers by hand.'}
-        </span>
-      </label>
-
-      <p className={styles.deposit}>
+      <p style={styles.deposit}>
         Total deposit: <strong data-testid="wizard-deposit">{debouncedDeposit}</strong>{' '}
         {data.tokenSymbol || 'tokens'}
         {data.rate && data.totalDuration && (
@@ -171,24 +155,37 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
       </p>
 
       {overflow && (
-        <div role="alert" className={styles.warning} data-testid="overflow-warning">
-          ⚠️ï¸ <strong>Too large:</strong> rate × total duration is more than this contract can
-          track. Reduce the rate or duration before continuing.
+        <div
+          role="alert"
+          data-testid="overflow-warning"
+          style={{
+            padding: '0.75rem',
+            background: '#fef2f2',
+            border: '1px solid var(--color-cancelled)',
+            borderRadius: 'var(--radius)',
+            fontSize: '0.85rem',
+            color: 'var(--color-cancelled)',
+          }}
+        >
+          ⚠️ <strong>Overflow:</strong> rate × total_duration exceeds i128::MAX. Reduce rate or duration before continuing.
         </div>
       )}
 
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={styles.secondaryBtn}
-          onClick={onBack}
-          data-testid="wizard-back-btn"
-        >
+      {/* #538 — live sponsor cost calculator */}
+      <CostCalculator
+        rate={rate}
+        cliffDuration={cliff}
+        totalDuration={total}
+        tokenSymbol={data.tokenSymbol || 'tokens'}
+      />
+
+      <div style={styles.actions}>
+        <button type="button" className="btn btn-ghost" onClick={onBack} data-testid="wizard-back-btn">
           ← Back
         </button>
         <button
           type="button"
-          className={styles.primaryBtn}
+          className="btn btn-primary"
           disabled={!canContinue}
           onClick={onNext}
           data-testid="wizard-next-btn"
@@ -200,3 +197,20 @@ export function StepSchedule({ data, update, touch, touched, onNext, onBack }: P
   )
 }
 
+const styles: Record<string, React.CSSProperties> = {
+  card: { display: 'flex', flexDirection: 'column', gap: '1rem' },
+  heading: { fontSize: '1.25rem', fontWeight: 700 },
+  sub: { fontSize: '0.9rem', color: '#6b7280' },
+  fieldLabel: { display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.875rem', fontWeight: 600 },
+  input: {
+    padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+    border: '1px solid var(--color-border)', fontSize: '0.875rem',
+    outline: 'none', width: '100%',
+  },
+  deposit: {
+    fontSize: '0.875rem', padding: '0.5rem 0.75rem',
+    background: '#eff6ff', borderRadius: 'var(--radius)',
+  },
+  error: { fontSize: '0.8rem', color: 'var(--color-cancelled)' },
+  actions: { display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' },
+}

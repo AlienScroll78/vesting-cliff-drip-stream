@@ -71,7 +71,7 @@ fn test_new_recipient_can_claim_after_transfer() {
 
     // Advance past cliff and claim as new_recipient
     advance_ledger(&env, 60);
-    let claimed = client.claim_vested(&new_recipient);
+    let claimed = client.claim_vested(&new_recipient, &None);
     assert_eq!(claimed, 600);
     assert_eq!(tc.balance(&new_recipient), 600);
 }
@@ -90,7 +90,7 @@ fn test_old_recipient_cannot_claim_after_transfer() {
     advance_ledger(&env, 60);
 
     let err = client
-        .try_claim_vested(&old_recipient)
+        .try_claim_vested(&old_recipient, &None)
         .unwrap_err()
         .unwrap();
     assert_eq!(err, VestingError::ScheduleNotFound);
@@ -138,8 +138,8 @@ fn test_transfer_to_existing_recipient_fails() {
     let (token_id, _) = setup_token(&env, &sponsor, 4_000);
     let rate = 10 * RATE_DECIMALS;
 
-    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate, &50, &200);
-    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate, &50, &200);
+    client.create_vesting_stream(&sponsor, &alice, &token_id, &rate, &50, &200, &None);
+    client.create_vesting_stream(&sponsor, &bob, &token_id, &rate, &50, &200, &None);
 
     let err = client
         .try_transfer_stream(&alice, &bob)
@@ -188,7 +188,7 @@ fn test_transfer_preserves_claim_state() {
 
     // Claim 100 ledgers' worth as old_recipient
     advance_ledger(&env, 100);
-    let claimed = client.claim_vested(&old_recipient);
+    let claimed = client.claim_vested(&old_recipient, &None);
     assert_eq!(claimed, 1_000);
 
     // Transfer
@@ -202,6 +202,6 @@ fn test_transfer_preserves_claim_state() {
 
     // New recipient can only claim the remaining tokens
     advance_ledger(&env, 50);
-    let claimed2 = client.claim_vested(&new_recipient);
+    let claimed2 = client.claim_vested(&new_recipient, &None);
     assert_eq!(claimed2, 500);
 }

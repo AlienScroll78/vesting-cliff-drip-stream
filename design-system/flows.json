@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "source": "docs/flows.md and frontend/src/wizard",
+  "flows": [
+    {
+      "id": "create-flow",
+      "name": "Create stream",
+      "figmaFlowName": "Prototype/Create stream",
+      "nodes": [
+        {
+          "id": "recipient",
+          "label": "Recipient",
+          "figmaNodeName": "Create/Recipient",
+          "source": "frontend/src/wizard/StepRecipient.tsx"
+        },
+        {
+          "id": "token",
+          "label": "Token",
+          "figmaNodeName": "Create/Token",
+          "source": "frontend/src/wizard/StepSelectToken.tsx"
+        },
+        {
+          "id": "schedule",
+          "label": "Schedule",
+          "figmaNodeName": "Create/Schedule",
+          "source": "frontend/src/wizard/StepSchedule.tsx"
+        },
+        {
+          "id": "review",
+          "label": "Review",
+          "figmaNodeName": "Create/Review",
+          "source": "frontend/src/wizard/StepReview.tsx"
+        },
+        {
+          "id": "created",
+          "label": "Stream created",
+          "figmaNodeName": "Create/Success",
+          "source": "frontend/src/wizard/StepReview.tsx"
+        }
+      ],
+      "edges": [
+        {
+          "from": "recipient",
+          "to": "token",
+          "trigger": "Next"
+        },
+        {
+          "from": "token",
+          "to": "schedule",
+          "trigger": "Next"
+        },
+        {
+          "from": "schedule",
+          "to": "review",
+          "trigger": "Review"
+        },
+        {
+          "from": "review",
+          "to": "created",
+          "trigger": "Confirm and sign"
+        },
+        {
+          "from": "schedule",
+          "to": "schedule",
+          "trigger": "Back"
+        }
+      ]
+    },
+    {
+      "id": "claim-flow",
+      "name": "Claim vested tokens",
+      "figmaFlowName": "Prototype/Claim tokens",
+      "nodes": [
+        {
+          "id": "pre-cliff",
+          "label": "Pre-cliff",
+          "figmaNodeName": "Claim/Pre-cliff",
+          "source": "docs/mobile-claim-bottom-sheet.md"
+        },
+        {
+          "id": "ready",
+          "label": "Claimable",
+          "figmaNodeName": "Claim/Ready",
+          "source": "frontend/src/components/ClaimBottomSheet.tsx"
+        },
+        {
+          "id": "loading",
+          "label": "Submitting",
+          "figmaNodeName": "Claim/Loading",
+          "source": "frontend/src/components/ClaimBottomSheet.tsx"
+        },
+        {
+          "id": "success",
+          "label": "Claimed",
+          "figmaNodeName": "Claim/Success",
+          "source": "frontend/src/components/ClaimBottomSheet.tsx"
+        },
+        {
+          "id": "error",
+          "label": "Retry",
+          "figmaNodeName": "Claim/Error",
+          "source": "frontend/src/components/ClaimBottomSheet.tsx"
+        }
+      ],
+      "edges": [
+        {
+          "from": "pre-cliff",
+          "to": "ready",
+          "trigger": "Current ledger reaches cliff"
+        },
+        {
+          "from": "ready",
+          "to": "loading",
+          "trigger": "Claim tokens"
+        },
+        {
+          "from": "loading",
+          "to": "success",
+          "trigger": "Transaction confirmed"
+        },
+        {
+          "from": "loading",
+          "to": "error",
+          "trigger": "Transaction rejected"
+        },
+        {
+          "from": "error",
+          "to": "loading",
+          "trigger": "Retry"
+        }
+      ]
+    }
+  ]
+}

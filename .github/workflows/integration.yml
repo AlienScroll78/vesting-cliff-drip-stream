@@ -1,0 +1,160 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  STELLAR_NETWORK: local
+  RPC_URL: http://localhost:8000/soroban/rpc
+  HORIZON_URL: http://localhost:8000
+  NETWORK_PASSPHRASE: "Standalone Network ; February 2017"
+
+jobs:
+  integration-test:
+    name: integration-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      stellar:
+        image: stellar/quickstart:testing
+        ports:
+          - "8000:8000"
+        env:
+          NETWORK: local
+          ENABLE_SOROBAN_RPC: "true"
+        options: >-
+          --health-cmd "curl -sf http://localhost:8000"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 60
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-integration-
+
+      - name: Install Stellar CLI
+        run: |
+          curl -sSfL https://github.com/stellar/stellar-cli/releases/download/v21.3.0/stellar-cli-21.3.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar -xz -C /usr/local/bin stellar
+          stellar --version
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Wait for Stellar node to be ready
+        run: |
+          echo "Waiting for Stellar quickstart node..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000 > /dev/null 2>&1; then
+              echo "✅ Stellar node is ready (attempt $i)"
+              break
+            fi
+            echo "  Attempt $i/60 — not ready yet, sleeping 5s..."
+            sleep 5
+          done
+          curl -sf http://localhost:8000 || { echo "❌ Stellar node never became ready"; exit 1; }
+
+      - name: Configure Stellar CLI network
+        run: |
+          stellar network add local \
+            --rpc-url http://localhost:8000/soroban/rpc \
+            --network-passphrase "Standalone Network ; February 2017" \
+            2>/dev/null || true
+
+      - name: Fund test accounts
+        run: |
+          chmod +x scripts/fund_accounts.sh
+          source scripts/fund_accounts.sh
+          echo "SPONSOR_ADDRESS=$SPONSOR_ADDRESS" >> $GITHUB_ENV
+          echo "RECIPIENT_ADDRESS=$RECIPIENT_ADDRESS" >> $GITHUB_ENV
+          echo "SPONSOR2_ADDRESS=$SPONSOR2_ADDRESS" >> $GITHUB_ENV
+          echo "RECIPIENT2_ADDRESS=$RECIPIENT2_ADDRESS" >> $GITHUB_ENV
+          echo "CALLER_ADDRESS=$CALLER_ADDRESS" >> $GITHUB_ENV
+          echo "ADMIN_ADDRESS=$ADMIN_ADDRESS" >> $GITHUB_ENV
+          echo "TREASURY_ADDRESS=$TREASURY_ADDRESS" >> $GITHUB_ENV
+
+      - name: Build contract WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Deploy contract
+        run: |
+          VESTING_CONTRACT=$(bash scripts/deploy_contract.sh)
+          echo "VESTING_CONTRACT=$VESTING_CONTRACT" >> $GITHUB_ENV
+          echo "Contract deployed: $VESTING_CONTRACT"
+
+      - name: Deploy SAC test token
+        run: |
+          # Deploy a Stellar Asset Contract (SAC) for integration tests.
+          # The stellar CLI's `asset deploy` command deploys a SAC for a
+          # classic asset; we use a test asset issued by the admin account.
+          ADMIN_ADDRESS="${{ env.ADMIN_ADDRESS }}"
+
+          TOKEN_CONTRACT=$(stellar contract asset deploy \
+            --asset "VEST:${ADMIN_ADDRESS}" \
+            --source integration-admin \
+            --network local \
+            --rpc-url http://localhost:8000/soroban/rpc \
+            2>/dev/null)
+          echo "TOKEN_CONTRACT=$TOKEN_CONTRACT" >> $GITHUB_ENV
+          echo "Test token deployed: $TOKEN_CONTRACT"
+
+          # Mint tokens to sponsor accounts for test use
+          for KEY in integration-sponsor integration-sponsor2; do
+            ADDR=$(stellar keys address "$KEY")
+            stellar contract invoke \
+              --id "$TOKEN_CONTRACT" \
+              --source integration-admin \
+              --network local \
+              --rpc-url http://localhost:8000/soroban/rpc \
+              -- mint \
+              --to "$ADDR" \
+              --amount 1000000 \
+              2>/dev/null || true
+          done
+
+      - name: Run integration tests
+        timeout-minutes: 5
+        run: |
+          python3 tests/integration/test_lifecycle.py
+        env:
+          SOROBAN_RPC_URL: http://localhost:8000/soroban/rpc
+          HORIZON_URL: http://localhost:8000
+          NETWORK_PASSPHRASE: "Standalone Network ; February 2017"
+          STELLAR_NETWORK: local
+          VESTING_CONTRACT: ${{ env.VESTING_CONTRACT }}
+          TOKEN_CONTRACT: ${{ env.TOKEN_CONTRACT }}
+          SPONSOR_KEY: integration-sponsor
+          RECIPIENT_KEY: integration-recipient
+          SPONSOR2_KEY: integration-sponsor2
+          RECIPIENT2_KEY: integration-recipient2
+          CALLER_KEY: integration-caller
+          ADMIN_KEY: integration-admin
+
+      - name: Upload integration test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            .integration_accounts
+          retention-days: 7

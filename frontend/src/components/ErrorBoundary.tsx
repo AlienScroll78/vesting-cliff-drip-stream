@@ -148,7 +148,13 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   error: Error | null;
-  componentStack: string | null;
+  correlationId: string | null;
+}
+
+function makeCorrelationId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `err-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -161,25 +167,26 @@ interface ErrorBoundaryState {
  *  - "Retry" button that resets boundary state
  *  - "Go to home page" link
  */
-export class ErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
-  state: ErrorBoundaryState = { error: null, componentStack: null };
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { error: null, correlationId: null };
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    return { error };
+  static getDerivedStateFromError(error: Error): State {
+    return { error, correlationId: makeCorrelationId() };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    this.setState({ componentStack: info.componentStack ?? null });
-    logError(error, info);
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    const correlationId = this.state.correlationId;
+    console.error("[ErrorBoundary] Uncaught error:", { correlationId, error, componentStack: info.componentStack });
+
+    // Optional Sentry integration — only active when DSN env var is present.
+    if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SENTRY_DSN) {
+      import("@sentry/react")
+        .then(({ captureException }) => captureException(error, { tags: { correlationId: correlationId ?? "unknown" }, extra: { ...info, correlationId } }))
+        .catch(() => {/* Sentry unavailable — fail silently */});
+    }
   }
 
-  reset = (): void => this.setState({ error: null, componentStack: null });
-
-  render(): ReactNode {
-    const { error, componentStack } = this.state;
+  reset = () => this.setState({ error: null, correlationId: null });
 
     if (error) {
       if (this.props.fallback) {
@@ -232,11 +239,15 @@ function TopLevelFallback({
       </span>
 
       <h1
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
         style={{
           fontSize: "1.5rem",
           fontWeight: 700,
           margin: 0,
           color: "var(--color-text, #111827)",
+          outline: "none",
         }}
       >
         Something went wrong
@@ -424,4 +435,51 @@ function StreamCardFallback({
       <ErrorDetails error={error} componentStack={componentStack} />
     </div>
   );
+}
+
+// ─── Convenience hook: useErrorBoundaryReset ──────────────────────────────────
+
+/**
+ * Returns a `resetKey` string that updates on route-pathname changes.
+ * Pass this as `routeKey` to `RouteErrorBoundary` so it auto-resets on navigation.
+ *
+ * ```tsx
+ * const routeKey = useRouteResetKey();
+ * <RouteErrorBoundary routeKey={routeKey}>…</RouteErrorBoundary>
+ * ```
+ */
+export function useRouteResetKey(): string {
+  const [key, setKey] = useState(() =>
+    typeof window !== "undefined" ? window.location.pathname : "/",
+  );
+
+  useEffect(() => {
+    // Listen to popstate (back/forward) and custom pushstate events
+    function onLocationChange() {
+      setKey(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", onLocationChange);
+
+    // Intercept history.pushState / replaceState
+    const origPush = history.pushState.bind(history);
+    const origReplace = history.replaceState.bind(history);
+
+    history.pushState = function (...args) {
+      origPush(...args);
+      onLocationChange();
+    };
+    history.replaceState = function (...args) {
+      origReplace(...args);
+      onLocationChange();
+    };
+
+    return () => {
+      window.removeEventListener("popstate", onLocationChange);
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+    };
+  }, []);
+
+  return key;
 }

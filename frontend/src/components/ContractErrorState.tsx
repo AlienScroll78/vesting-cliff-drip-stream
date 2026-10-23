@@ -1,11 +1,10 @@
 "use client";
 
-import { useTranslation } from "react-i18next";
-import { getErrorInfo } from "@/lib/errorMessages";
+import { getErrorInfo } from "@/errorMessages";
 import { ErrorStateIllustration } from "@/components/ErrorStateIllustration";
 
 interface ContractErrorStateProps {
-  /** VestingError code (1–26). Unknown codes fall back to "unexpected" category. */
+  /** VestingError code (1–11). Unknown codes fall back to "unexpected" category. */
   code: number;
   /** Called when the user clicks "Try Again". Only shown for retryable errors. */
   onRetry?: () => void;
@@ -55,9 +54,9 @@ export function ContractErrorState({
 
       {/* Text */}
       <div style={styles.textBlock}>
-        <h2 style={styles.title}>{title}</h2>
-        <p style={styles.explanation}>{explanation}</p>
-        <p style={styles.action}>{action}</p>
+        <h2 style={styles.title}>{info.title}</h2>
+        <p style={styles.explanation}>{info.explanation}</p>
+        <p style={styles.action}>{info.action}</p>
       </div>
 
       {/* Actions */}
@@ -72,7 +71,7 @@ export function ContractErrorState({
               ...(isNetwork ? styles.networkBtn : {}),
             }}
           >
-            {isNetwork ? t("errors.tryAgain", "Try Again") : t("errors.retry", "Retry")}
+            {isNetwork ? "Try Again" : "Retry"}
           </button>
         )}
 
@@ -93,9 +92,9 @@ export function ContractErrorState({
           <a
             href={info.faqUrl}
             style={styles.faqLink}
-            aria-label={`${t("errors.learnMore", "Learn more")}: ${title}`}
+            aria-label={`Learn more: ${info.title}`}
           >
-            {t("errors.learnMore", "Learn more")}
+            Learn more
           </a>
         )}
       </div>

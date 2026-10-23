@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Build the Soroban WASM contract
 # ─────────────────────────────────────────────────────────────────────────────
-FROM rust:1.82-slim AS builder
+FROM rust:1.84-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock* ./
-COPY .cargo .cargo
 COPY src src
 
 RUN cargo build --release --target wasm32-unknown-unknown

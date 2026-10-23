@@ -7,13 +7,15 @@ import './App.css'
 // #123 — field tooltips
 import { Tooltip } from './Tooltip'
 // #122 — error message map
-import { getErrorInfo } from './lib/errorMessages'
+import { getErrorInfo } from './errorMessages'
 // #121 — Framer Motion animations
-import { PageTransition, AnimatedBalance, AnimatedProgressBar } from './animations'
-// #120 — onboarding tour (state lives in useOnboardingTour)
-import { OnboardingTour } from './components/OnboardingTour'
+import { PageTransition, AnimatedProgressBar } from './animations'
+// #120 — onboarding tour
+import { useOnboardingTour } from './useOnboardingTour'
 // #125 — create stream wizard
 import { CreateStreamWizard } from './wizard/CreateStreamWizard'
+// #532 — real-time claimable amount display
+import { ClaimableAmountDisplay } from './components/ClaimableAmountDisplay'
 
 // #539 — register service worker for offline support
 function registerServiceWorker() {
@@ -32,14 +34,16 @@ function registerServiceWorker() {
 }
 
 function App() {
+  const { t } = useTranslation()
   const [count, setCount] = useState(0)
   const [wizardOpen, setWizardOpen] = useState(false)
   // demo: simulate an error code returned from the contract
   const [errorCode, setErrorCode] = useState<number | null>(null)
 
-  // #120 — the onboarding tour is rendered by <OnboardingTour /> below
+  // #120 — start tour for first-time users
+  useOnboardingTour()
 
-  const errorInfo = errorCode != null ? getErrorInfo(errorCode) : null
+  const errorInfo = errorCode != null ? getErrorInfo(errorCode, t) : null
 
   return (
     // #121 — page fade-in on mount
@@ -60,13 +64,10 @@ function App() {
           </p>
         </div>
 
-        {/* #121 — animated claimable balance */}
+        {/* #532 — real-time auto-refreshing claimable balance */}
         <p style={{ marginTop: '12px', color: 'var(--text)' }}>
           Claimable balance:{' '}
-          <strong>
-            <AnimatedBalance value={count * 100} />
-          </strong>{' '}
-          tokens
+          <ClaimableAmountDisplay recipient="GABC1...XYZ" intervalMs={5000} />
         </p>
 
         {/* #121 — animated progress bar */}
@@ -148,10 +149,10 @@ function App() {
           </div>
         )}
 
-        {/* #820 — tour anchors: wallet, claim, and timeline targets */}
+        {/* tour anchor for wallet */}
         <div data-tour="wallet" style={{ marginTop: '8px', opacity: 0, height: 1 }} aria-hidden="true" />
-        <div data-tour="timeline" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
-        <div data-tour="claimable" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
+        {/* tour anchor for create stream */}
+        <div data-tour="create-stream" style={{ opacity: 0, height: 1 }} aria-hidden="true" />
 
         {/* #125 — create stream wizard trigger */}
         <button

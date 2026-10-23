@@ -1,221 +1,171 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-/**
- * Onboarding tour — issue #820.
- *
- * A dependency-free, step-by-step overlay that walks first-time users through
- * the key UI elements (timeline, claimable balance, claim button, wallet).
- *
- * Behaviour:
- *  - Auto-starts on the first eligible visit (gated by `enabled`, which the
- *    app wires to "wallet is connected").
- *  - Shown only once: skipping or finishing persists a localStorage flag.
- *  - Content adapts to the stream state (pre-cliff vs post-cliff).
- *  - Fully keyboard accessible (handled in `components/OnboardingTour.tsx`).
- *  - Can be replayed at any time from Settings via `replayTour()`.
- */
+const STORAGE_KEY = "vesting_onboarding_complete";
+const REPLAY_EVENT = "vesting:replay-onboarding-tour";
 
-/** localStorage key holding the "tour already seen" flag. */
-export const TOUR_STORAGE_KEY = "vesting_onboarding_complete";
-
-/** Lifecycle state of the stream the user is looking at. */
 export type StreamState = "pre-cliff" | "active" | "completed";
+export type TourMode = "dashboard" | "create-stream";
 
 export interface TourStep {
-  /** Stable identifier, also used as the React key and test hook. */
   id: string;
-  /**
-   * CSS selector for the element to spotlight. `null` renders the step as a
-   * centred card with no highlight (used for the closing note).
-   */
-  targetSelector: string | null;
+  targetSelector: string;
   title: string;
   description: string;
 }
 
-/**
- * Builds the step list for a given stream state.
- *
- * Pre-cliff users see "your tokens are still locked" framing; post-cliff users
- * see "your cliff has passed, go claim" framing.
- */
-export function buildTourSteps(state: StreamState): TourStep[] {
-  const preCliff = state === "pre-cliff";
+export function buildTourSteps(
+  streamState: StreamState = "pre-cliff",
+  mode: TourMode = "dashboard",
+): TourStep[] {
+  if (mode === "create-stream") {
+    return [
+      {
+        id: "wallet",
+        targetSelector: '[data-tour="wallet"]',
+        title: "Connect your wallet",
+        description: "Connect the Stellar wallet that will sponsor and fund this stream.",
+      },
+      {
+        id: "streams",
+        targetSelector: '[data-tour="streams"]',
+        title: "Set the stream details",
+        description: "Enter the sponsor, recipient, token, and drip rate for the stream.",
+      },
+      {
+        id: "timeline",
+        targetSelector: '[data-tour="claimable"]',
+        title: "Choose the cliff",
+        description: "The cliff date is when the recipient can first claim accrued tokens.",
+      },
+      {
+        id: "create-stream",
+        targetSelector: '[data-tour="create-stream"]',
+        title: "Create the stream",
+        description: "Review the schedule, then create the stream to begin vesting.",
+      },
+    ];
+  }
+
+  const timelineDescription =
+    streamState === "pre-cliff"
+      ? "Your tokens accrue over time, but the cliff must pass before you can claim them."
+      : streamState === "active"
+        ? "The cliff has passed, so accrued tokens can now be claimed while the stream continues."
+        : "The stream has completed. This timeline shows how tokens unlocked over its lifetime.";
+
+  const claimDescription =
+    streamState === "pre-cliff"
+      ? "Claim becomes available after the cliff has passed."
+      : streamState === "completed"
+        ? "The stream is complete. Review its history to see what was claimed."
+        : "Choose Claim when you are ready to withdraw the tokens available now.";
 
   return [
     {
-      id: "timeline",
-      targetSelector: '[data-tour="timeline"]',
-      title: "Your vesting timeline",
-      description: preCliff
-        ? "This is your vesting timeline. The cliff must pass before you can claim."
-        : "This is your vesting timeline. Your cliff has passed, so tokens are unlocking now.",
+      id: "wallet",
+      targetSelector: '[data-tour="wallet"]',
+      title: "Your wallet",
+      description: "Connect your Stellar wallet to see streams associated with your address.",
     },
     {
-      id: "claimable",
+      id: "streams",
+      targetSelector: '[data-tour="streams"]',
+      title: "Your streams",
+      description: "Each card shows a stream's recipient, status, and token balance.",
+    },
+    {
+      id: "timeline",
       targetSelector: '[data-tour="claimable"]',
-      title: "Claimed and claimable",
-      description: preCliff
-        ? "This bar shows how much has been claimed (green) and what's claimable now (yellow). Right now the whole bar is locked until your cliff."
-        : "This bar shows how much has been claimed (green) and what's claimable now (yellow).",
+      title: "Vesting progress",
+      description: timelineDescription,
+    },
+    {
+      id: "create-stream",
+      targetSelector: '[data-tour="create-stream"]',
+      title: "Create a stream",
+      description:
+        "Sponsors choose a recipient, token allocation, cliff, and stream duration when creating a new stream.",
     },
     {
       id: "claim",
       targetSelector: '[data-tour="claim"]',
-      title: "The Claim button",
-      description: preCliff
-        ? "Once your cliff passes, the Claim button activates here. Until then it stays disabled."
-        : "Your cliff has passed, so the Claim button is active here.",
-    },
-    {
-      id: "wallet",
-      targetSelector: '[data-tour="wallet"]',
-      title: "Connect your wallet",
-      description: "Connect your wallet to sign and submit your claim transaction.",
-    },
-    {
-      id: "revisit",
-      targetSelector: null,
-      title: "That's everything",
-      description:
-        "You can come back to claim at any time — tokens drip linearly after the cliff.",
+      title: "Claim tokens",
+      description: claimDescription,
     },
   ];
 }
 
-/** Default (pre-cliff) step list, kept for direct access in tests and stories. */
-export const TOUR_STEPS: TourStep[] = buildTourSteps("pre-cliff");
+export const TOUR_STEPS = buildTourSteps();
 
-// ── Storage helpers (all guarded — localStorage can throw in private mode) ─────
-
-function hasSeenTour(): boolean {
-  try {
-    return localStorage.getItem(TOUR_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
+interface UseOnboardingTourOptions {
+  enabled?: boolean;
+  streamState?: StreamState;
+  mode?: TourMode;
 }
 
-function markTourSeen(): void {
-  try {
-    localStorage.setItem(TOUR_STORAGE_KEY, "true");
-  } catch {
-    /* storage unavailable — the tour will simply show again next visit */
-  }
-}
-
-function clearTourSeen(): void {
-  try {
-    localStorage.removeItem(TOUR_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-// ── Replay bus ────────────────────────────────────────────────────────────────
-// Lets the Settings "Replay tour" button restart the tour without prop drilling
-// or duplicating hook state.
-
-const REPLAY_EVENT = "vesting:replay-tour";
-
-/** Restarts the onboarding tour from step 0, wherever it is mounted. */
 export function replayTour(): void {
-  if (typeof window === "undefined") return;
+  localStorage.removeItem(STORAGE_KEY);
   window.dispatchEvent(new Event(REPLAY_EVENT));
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
-
-export interface UseOnboardingTourOptions {
-  /**
-   * Gate for auto-start. The app passes `address !== null` so the tour only
-   * appears after a wallet is connected. Defaults to `true`.
-   */
-  enabled?: boolean;
-  /** Stream state used to pick the step copy. Defaults to `"pre-cliff"`. */
-  streamState?: StreamState;
-}
-
 export function useOnboardingTour(options: UseOnboardingTourOptions = {}) {
-  const { enabled = true, streamState = "pre-cliff" } = options;
-
-  const [isActive, setIsActive] = useState(false);
+  const { enabled = true, streamState = "pre-cliff", mode = "dashboard" } = options;
+  const [isActive, setIsActive] = useState(
+    () => enabled && localStorage.getItem(STORAGE_KEY) !== "true",
+  );
   const [currentStep, setCurrentStep] = useState(0);
-
-  /**
-   * Guards the auto-start effect so it can only ever run once per mount. Without
-   * this, re-rendering after `finish()` would immediately restart the tour.
-   */
-  const autoStarted = useRef(false);
-
-  const steps = useMemo(() => buildTourSteps(streamState), [streamState]);
-  const totalSteps = steps.length;
-
-  // Auto-start on the first eligible visit.
-  useEffect(() => {
-    if (!enabled) return;
-    if (autoStarted.current) return;
-    autoStarted.current = true;
-    if (hasSeenTour()) return;
-    setCurrentStep(0);
-    setIsActive(true);
-  }, [enabled]);
-
-  // Listen for replay requests coming from the Settings screen.
-  useEffect(() => {
-    const handler = () => {
-      clearTourSeen();
-      setCurrentStep(0);
-      setIsActive(true);
-    };
-    window.addEventListener(REPLAY_EVENT, handler);
-    return () => window.removeEventListener(REPLAY_EVENT, handler);
-  }, []);
+  const steps = useMemo(() => buildTourSteps(streamState, mode), [mode, streamState]);
 
   const finish = useCallback(() => {
-    markTourSeen();
+    localStorage.setItem(STORAGE_KEY, "true");
     setIsActive(false);
     setCurrentStep(0);
   }, []);
 
-  const skip = useCallback(() => {
-    markTourSeen();
-    setIsActive(false);
-  }, []);
-
-  const restart = useCallback(() => {
-    clearTourSeen();
-    setCurrentStep(0);
-    setIsActive(true);
-  }, []);
+  const skip = finish;
 
   const next = useCallback(() => {
-    if (currentStep >= totalSteps - 1) {
+    if (currentStep >= steps.length - 1) {
       finish();
       return;
     }
-    setCurrentStep(currentStep + 1);
-  }, [currentStep, totalSteps, finish]);
+    setCurrentStep((step) => step + 1);
+  }, [currentStep, finish, steps.length]);
 
   const prev = useCallback(() => {
     setCurrentStep((step) => Math.max(0, step - 1));
   }, []);
 
-  /** Jumps to an absolute step index, clamped to the valid range. */
-  const goToStep = useCallback(
-    (index: number) => {
-      setCurrentStep(Math.min(Math.max(index, 0), totalSteps - 1));
-    },
-    [totalSteps],
-  );
+  const goToStep = useCallback((step: number) => {
+    setCurrentStep(Math.max(0, Math.min(steps.length - 1, step)));
+  }, [steps.length]);
 
-  const currentStepData = isActive ? (steps[currentStep] ?? null) : null;
+  const restart = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setCurrentStep(0);
+    setIsActive(true);
+  }, []);
+
+  useEffect(() => {
+    if (enabled && localStorage.getItem(STORAGE_KEY) !== "true") {
+      setIsActive(true);
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    const handleReplay = () => {
+      setCurrentStep(0);
+      setIsActive(true);
+    };
+    window.addEventListener(REPLAY_EVENT, handleReplay);
+    return () => window.removeEventListener(REPLAY_EVENT, handleReplay);
+  }, []);
 
   return {
     isActive,
     currentStep,
-    currentStepData,
-    totalSteps,
+    currentStepData: isActive ? steps[currentStep] ?? null : null,
+    totalSteps: steps.length,
     next,
     prev,
     skip,
@@ -224,6 +174,3 @@ export function useOnboardingTour(options: UseOnboardingTourOptions = {}) {
     goToStep,
   };
 }
-
-// __CHUNK2__
-

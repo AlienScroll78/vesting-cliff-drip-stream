@@ -33,17 +33,28 @@ import { GLOSSARY, type GlossaryKey } from "./glossary-tooltips";
 
 export interface TooltipProps {
   /** The trigger element. Must be a single React element that accepts ref. */
-  children: React.ReactElement;
+  children?: React.ReactElement;
   /** Tooltip content. Can be a string or JSX. */
-  content: React.ReactNode;
+  content?: React.ReactNode;
+  /** Alias for `content` (older call sites pass `text`). */
+  text?: React.ReactNode;
   /** Preferred placement (auto-adjusts to avoid viewport overflow). */
   side?: Placement;
 }
 
-export function Tooltip({ children, content, side = "top" }: TooltipProps) {
+export function Tooltip({ children, content, text, side = "top" }: TooltipProps) {
   const [open, setOpen] = useState(false);
   const arrowRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
+  const tooltipContent = content ?? text;
+  // Call sites that omit `children` expect a default info-icon trigger.
+  const trigger =
+    children ??
+    (
+      <button type="button" className="tooltip-trigger" aria-label="More information">
+        ℹ️
+      </button>
+    );
 
   const { refs, floatingStyles, context, middlewareData, placement } = useFloating({
     open,
@@ -86,11 +97,11 @@ export function Tooltip({ children, content, side = "top" }: TooltipProps) {
 
   return (
     <>
-      {React.cloneElement(children, {
+      {React.cloneElement(trigger, {
         ...getReferenceProps({
           ref: refs.setReference,
           "aria-describedby": open ? tooltipId : undefined,
-          ...(children.props as Record<string, unknown>),
+          ...(trigger.props as Record<string, unknown>),
         }),
       })}
 
@@ -103,7 +114,7 @@ export function Tooltip({ children, content, side = "top" }: TooltipProps) {
             className="tooltip-content tooltip-enter"
             {...getFloatingProps()}
           >
-            {content}
+            {tooltipContent}
             <div
               ref={arrowRef}
               className="tooltip-arrow"

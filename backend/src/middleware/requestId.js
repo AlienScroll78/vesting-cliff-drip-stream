@@ -46,6 +46,11 @@ export function createLogger(requestId) {
  */
 export function requestIdMiddleware(req, res, next) {
   const requestId = req.headers['x-request-id'] || randomUUID();
+  const correlationHeader = req.headers['x-correlation-id'];
+  const correlationId = typeof correlationHeader === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(correlationHeader)
+    ? correlationHeader
+    : randomUUID();
 
   // Preserve any IDs already propagated by a parent context (e.g. traceId
   // set by requestLoggerMiddleware).  If this middleware runs first, start
@@ -53,20 +58,35 @@ export function requestIdMiddleware(req, res, next) {
   const existing = correlationStorage.getStore() ?? {};
 
   req.requestId = requestId;
+  req.correlationId = correlationId;
   req.log = createLogger(requestId);
 
   // Always ensure X-Request-ID is in the response.
   res.setHeader('X-Request-ID', requestId);
+  res.setHeader('X-Correlation-ID', correlationId);
 
   runWithIds(
     {
       requestId,
       traceId:       existing.traceId       ?? null,
-      correlationId: existing.correlationId ?? req.headers['x-correlation-id'] ?? requestId,
+      correlationId,
     },
     () => {
+      const startedAt = process.hrtime.bigint();
       logger.info({ event: 'request_received', method: req.method, path: req.url },
         `${req.method} ${req.url}`);
+      const originalEnd = res.end.bind(res);
+      res.end = function (...args) {
+        const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+        logger.info({
+          event: 'request_completed',
+          method: req.method,
+          path: req.url,
+          status: res.statusCode,
+          duration_ms: Math.round(durationMs * 100) / 100,
+        }, `${req.method} ${req.url} ${res.statusCode}`);
+        return originalEnd(...args);
+      };
       next();
     },
   );

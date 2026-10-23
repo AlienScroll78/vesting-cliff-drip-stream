@@ -29,54 +29,66 @@ export function StepRecipient({ data, update, touch, touched, onNext }: Props) {
   }, [touch])
 
   return (
-    <div className={styles.step}>
-      <h2 className={styles.stepHeading}>Recipient</h2>
-      <p className={styles.stepSub}>
+    <div style={styles.card}>
+      <h2 style={styles.heading}>Recipient</h2>
+      <p style={styles.sub}>
         Enter the Stellar account address that will receive the streamed tokens.
       </p>
 
-      <label className={styles.field}>
-        <span>Recipient address</span>
+      <label style={styles.label}>
+        <span>Recipient address <span aria-hidden="true" style={{ color: "var(--color-cancelled)" }}>*</span></span>
         <input
+          id="wizard-recipient-input"
           type="text"
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
           placeholder="G…"
           value={data.recipient}
           onChange={e => handleChange(e.target.value.trim())}
           onBlur={handleBlur}
+          required
+          aria-required="true"
           aria-invalid={!!error}
+          aria-describedby={error ? "wizard-recipient-error" : undefined}
           data-testid="wizard-recipient"
-          className={styles.input}
           style={{
-            borderColor: error ? 'var(--color-cancelled, #b91c1c)' : 'var(--color-border, #e5e7eb)',
+            ...styles.input,
+            borderColor: error ? 'var(--color-cancelled)' : 'var(--color-border)',
           }}
           autoFocus
         />
-        <span className={styles.hint}>
+        <span style={styles.hint}>
           Stellar addresses start with <strong>G</strong> and are 56 characters long.
         </span>
         {error && (
-          <span role="alert" className={styles.error} data-testid="recipient-error">
+          <span id="wizard-recipient-error" role="alert" style={styles.error} data-testid="recipient-error">
             {error}
           </span>
         )}
       </label>
 
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={styles.primaryBtn}
-          disabled={!data.recipient || !!error}
-          onClick={onNext}
-          data-testid="wizard-next-btn"
-        >
-          Continue →
-        </button>
-      </div>
+      <button
+        type="button"
+        className="btn btn-primary btn-full"
+        disabled={!data.recipient || !!error}
+        onClick={onNext}
+        style={{ marginTop: '1rem' }}
+        data-testid="wizard-next-btn"
+      >
+        Continue →
+      </button>
     </div>
   )
 }
 
+const styles: Record<string, React.CSSProperties> = {
+  card: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
+  heading: { fontSize: '1.25rem', fontWeight: 700 },
+  sub: { fontSize: '0.9rem', color: '#6b7280' },
+  label: { display: 'flex', flexDirection: 'column', gap: '0.375rem', fontSize: '0.875rem', fontWeight: 600 },
+  input: {
+    padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+    border: '1px solid var(--color-border)', fontFamily: 'monospace', fontSize: '0.875rem',
+    outline: 'none', width: '100%',
+  },
+  hint: { fontSize: '0.8rem', color: '#6b7280', fontWeight: 400 },
+  error: { fontSize: '0.8rem', color: 'var(--color-cancelled)', fontWeight: 400 },
+}

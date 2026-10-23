@@ -47,6 +47,11 @@ export const GLOSSARY = {
       "The Stellar address that creates a vesting stream and deposits the full token allocation upfront. Only the original sponsor can cancel a stream.",
     example: "e.g. your wallet address (G… 56 characters)",
   },
+  persistent_storage: {
+    term: "Persistent Storage",
+    definition:
+      "Soroban storage for contract data that survives ledger closings, subject to time-to-live rent. Vesting schedules are stored here so they remain available while their streams are active.",
+  },
   recipient: {
     term: "Recipient",
     definition:
@@ -74,3 +79,30 @@ export const GLOSSARY = {
 } as const satisfies Record<string, GlossaryEntry>;
 
 export type GlossaryKey = keyof typeof GLOSSARY;
+
+export interface GlossaryTooltipEntry {
+  label: string;
+  definition: string;
+  anchor: string;
+}
+
+function normalizeTerm(term: string): string {
+  return term.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+export function lookupTerm(term: string): GlossaryTooltipEntry | undefined {
+  const normalized = normalizeTerm(term);
+  const glossaryEntry = Object.entries(GLOSSARY).find(
+    ([key, entry]) =>
+      key === normalized || normalizeTerm(entry.term) === normalized,
+  );
+
+  if (!glossaryEntry) return undefined;
+
+  const [key, entry] = glossaryEntry;
+  return {
+    label: entry.term,
+    definition: entry.definition,
+    anchor: key === "persistent_storage" ? "persistent-storage" : key,
+  };
+}

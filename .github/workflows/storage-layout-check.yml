@@ -1,0 +1,25 @@
+name: Storage Layout Check
+
+# Fails if src/types.rs DataKey enum is changed without updating
+# docs/storage-layout.md (issue #816).
+#
+# The check is a fast, pure-bash fingerprint comparison — no Rust toolchain
+# required. It runs on every PR and push regardless of which files changed, so
+# there is no risk of the guard being silently skipped.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  storage-layout-check:
+    name: storage-layout-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify DataKey fingerprint matches docs/storage-layout.md
+        run: bash scripts/check-storage-layout.sh

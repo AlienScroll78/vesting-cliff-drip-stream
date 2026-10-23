@@ -1,11 +1,9 @@
 import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  useOnboardingTour,
   buildTourSteps,
   replayTour,
+  useOnboardingTour,
   TOUR_STEPS,
-  TOUR_STORAGE_KEY,
   type StreamState,
 } from '../../useOnboardingTour';
 
@@ -13,20 +11,20 @@ import {
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
-    getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
-    removeItem: vi.fn((key: string) => { delete store[key]; }),
-    clear: vi.fn(() => { store = {}; }),
+    getItem: jest.fn((key: string) => store[key] ?? null),
+    setItem: jest.fn((key: string, value: string) => { store[key] = value; }),
+    removeItem: jest.fn((key: string) => { delete store[key]; }),
+    clear: jest.fn(() => { store = {}; }),
   };
 })();
 
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
-const STORAGE_KEY = TOUR_STORAGE_KEY;
+const STORAGE_KEY = 'vesting_onboarding_complete';
 
 beforeEach(() => {
   localStorageMock.clear();
-  vi.clearAllMocks();
+  jest.clearAllMocks();
 });
 
 describe('useOnboardingTour', () => {

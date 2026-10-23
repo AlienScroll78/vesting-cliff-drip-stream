@@ -1,6 +1,5 @@
 /** Estimate XLM transaction fee via Horizon simulation. */
 
-const XLM_USD_FALLBACK = 0.12; // fallback price if CoinGecko unreachable
 const HORIZON_BASE = "https://horizon-testnet.stellar.org";
 
 export interface FeeEstimate {
@@ -18,30 +17,37 @@ async function fetchBaseFeeLumens(): Promise<number> {
   return stroops / 10_000_000;
 }
 
-/** Fetch XLM/USD price from CoinGecko (best-effort). */
-async function fetchXlmUsd(): Promise<number> {
-  const res = await fetch(
-    "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd",
-    { signal: AbortSignal.timeout(4000) }
-  );
-  if (!res.ok) return XLM_USD_FALLBACK;
-  const json = await res.json();
-  return json?.stellar?.usd ?? XLM_USD_FALLBACK;
+/** Fetch XLM/USD price from CoinGecko. Returns null rather than guessing a price. */
+async function fetchXlmUsd(): Promise<number | null> {
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd",
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    const price = json?.stellar?.usd;
+    return typeof price === "number" ? price : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Estimate the fee for a single Stellar transaction.
- * Returns null if simulation fails (caller should show a warning).
+ * Returns null if the base fee cannot be read (caller should show a warning).
+ * `usd` is null when the XLM price is unavailable, so no guessed price is shown.
  */
 export async function estimateFee(): Promise<FeeEstimate | null> {
+  let feeXlm: number;
   try {
-    const [feeXlm, xlmUsd] = await Promise.all([fetchBaseFeeLumens(), fetchXlmUsd()]);
-    const usdValue = feeXlm * xlmUsd;
-    return {
-      xlm: feeXlm.toFixed(5),
-      usd: `$${usdValue.toFixed(6)}`,
-    };
+    feeXlm = await fetchBaseFeeLumens();
   } catch {
     return null;
   }
+  const xlmUsd = await fetchXlmUsd();
+  return {
+    xlm: feeXlm.toFixed(5),
+    usd: xlmUsd === null ? null : `$${(feeXlm * xlmUsd).toFixed(6)}`,
+  };
 }

@@ -2,13 +2,104 @@ locals {
   alb_metric_dimension = "app/${aws_lb.main.name}/${element(split("/", aws_lb.main.arn), 3)}"
 }
 
-resource "aws_ecs_cluster" "main" {
-  name = "${var.environment}-vesting"
+# ─── Security Groups ──────────────────────────────────────────────────────────
+
+resource "aws_security_group" "alb" {
+  name        = "${var.environment}-alb-sg"
+  description = "Security group for Application Load Balancer"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Outbound traffic to target tasks"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-alb-sg"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
-# Spot capacity for the interruptible workloads. The backend API stays on
-# on-demand Fargate; only the indexer runs on Spot, because an interrupted indexer
-# catches up from the event log rather than dropping user-facing work.
+resource "aws_security_group" "backend" {
+  name        = "${var.environment}-ecs-backend-sg"
+  description = "Security group for ECS backend API tasks: reachable from ALB only"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description     = "Inbound traffic from ALB only"
+    from_port       = var.container_port
+    to_port         = var.container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Outbound to internet via NAT and DB"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-ecs-backend-sg"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_security_group" "indexer" {
+  name        = "${var.environment}-ecs-indexer-sg"
+  description = "Security group for ECS event indexer tasks"
+  vpc_id      = var.vpc_id
+
+  egress {
+    description = "Outbound traffic for RPC and DB"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "${var.environment}-ecs-indexer-sg"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# ─── ECS Cluster ──────────────────────────────────────────────────────────────
+
+resource "aws_ecs_cluster" "main" {
+  name = "${var.environment}-vesting"
+
+  tags = {
+    Name        = "${var.environment}-vesting-cluster"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
 resource "aws_capacity_provider" "fargate_spot" {
   name = "${var.environment}-fargate-spot"
 
@@ -24,6 +115,32 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
   capacity_providers = ["FARGATE", aws_capacity_provider.fargate_spot.name]
 }
 
+# ─── Log Groups ───────────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.environment}-vesting-backend"
+  retention_in_days = 90
+
+  tags = {
+    Name        = "/ecs/${var.environment}-vesting-backend"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "indexer" {
+  name              = "/ecs/${var.environment}-vesting-indexer"
+  retention_in_days = 90
+
+  tags = {
+    Name        = "/ecs/${var.environment}-vesting-indexer"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# ─── ECS Task Definitions ─────────────────────────────────────────────────────
+
 resource "aws_ecs_task_definition" "backend" {
   family                   = "vesting-backend"
   requires_compatibilities = ["FARGATE"]
@@ -31,29 +148,78 @@ resource "aws_ecs_task_definition" "backend" {
   cpu                      = var.container_cpu
   memory                   = var.container_memory
   execution_role_arn       = aws_iam_role.ecs_exec.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([{
-    name  = var.container_name
-    image = var.container_image
+    name      = var.container_name
+    image     = var.container_image
+    essential = true
     portMappings = [{
       containerPort = var.container_port
+      hostPort      = var.container_port
+      protocol      = "tcp"
     }]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = aws_cloudwatch_log_group.backend.name
         "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
+        "awslogs-stream-prefix" = "backend"
       }
-    },
-  ])
+    }
+  }])
+
+  tags = {
+    Name        = "${var.environment}-vesting-backend-task"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
+
+resource "aws_ecs_task_definition" "indexer" {
+  family                   = "vesting-indexer"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.container_cpu
+  memory                   = var.container_memory
+  execution_role_arn       = aws_iam_role.ecs_exec.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([{
+    name      = "vesting-indexer"
+    image     = var.indexer_container_image
+    essential = true
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.indexer.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "indexer"
+      }
+    }
+  }])
+
+  tags = {
+    Name        = "${var.environment}-vesting-indexer-task"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# ─── Application Load Balancer ────────────────────────────────────────────────
 
 resource "aws_lb" "main" {
   name               = "${var.environment}-alb"
   load_balancer_type = "application"
   subnets            = var.public_subnet_ids
+  security_groups    = [aws_security_group.alb.id]
   idle_timeout       = var.alb_idle_timeout
+
+  tags = {
+    Name        = "${var.environment}-alb"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_lb_target_group" "backend" {
@@ -74,6 +240,12 @@ resource "aws_lb_target_group" "backend" {
   }
 
   deregistration_delay = 30
+
+  tags = {
+    Name        = "${var.environment}-backend-tg"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_lb_target_group" "backend_green" {
@@ -94,6 +266,12 @@ resource "aws_lb_target_group" "backend_green" {
   }
 
   deregistration_delay = 30
+
+  tags = {
+    Name        = "${var.environment}-backend-green-tg"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_lb_listener" "http" {
@@ -111,6 +289,7 @@ resource "aws_lb_listener" "test" {
   load_balancer_arn = aws_lb.main.arn
   port              = 8081
   protocol          = "HTTP"
+
   default_action {
     type = "fixed-response"
     fixed_response {
@@ -120,6 +299,8 @@ resource "aws_lb_listener" "test" {
     }
   }
 }
+
+# ─── ECS Services ─────────────────────────────────────────────────────────────
 
 resource "aws_ecs_service" "backend" {
   name                               = "vesting-backend"
@@ -136,8 +317,9 @@ resource "aws_ecs_service" "backend" {
   }
 
   network_configuration {
-    subnets          = var.public_subnet_ids
-    assign_public_ip = true
+    subnets          = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : var.public_subnet_ids
+    security_groups  = [aws_security_group.backend.id]
+    assign_public_ip = false
   }
 
   load_balancer {
@@ -149,28 +331,163 @@ resource "aws_ecs_service" "backend" {
   lifecycle {
     ignore_changes = [task_definition, load_balancer]
   }
+
+  tags = {
+    Name        = "${var.environment}-vesting-backend-service"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_ecs_service" "indexer" {
+  name            = "vesting-indexer"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.indexer.arn
+  desired_count   = 1
+
+  capacity_provider_strategy {
+    capacity_provider = aws_capacity_provider.fargate_spot.name
+    weight            = 1
+    base              = 0
+  }
+
+  network_configuration {
+    subnets          = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : var.public_subnet_ids
+    security_groups  = [aws_security_group.indexer.id]
+    assign_public_ip = false
+  }
+
+  tags = {
+    Name        = "${var.environment}-vesting-indexer-service"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+# ─── IAM Roles ────────────────────────────────────────────────────────────────
+
+data "aws_iam_policy_document" "ecs_assume" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "ecs_exec" {
+  statement {
+    sid    = "ECRImagePullAndLogging"
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["*"]
+  }
+
+  dynamic "statement" {
+    for_each = length(var.secret_arns) > 0 ? [1] : []
+    content {
+      sid       = "SecretsManagerAccess"
+      effect    = "Allow"
+      actions   = ["secretsmanager:GetSecretValue"]
+      resources = var.secret_arns
+    }
+  }
+
+  dynamic "statement" {
+    for_each = length(var.secrets_kms_key_arns) > 0 ? [1] : []
+    content {
+      sid       = "KMSDecryptAccess"
+      effect    = "Allow"
+      actions   = ["kms:Decrypt"]
+      resources = var.secrets_kms_key_arns
+    }
+  }
 }
 
 resource "aws_iam_role" "ecs_exec" {
-  name = "${var.environment}-ecs-exec"
+  name               = "${var.environment}-ecs-exec"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
-    }]
-  })
+  tags = {
+    Name        = "${var.environment}-ecs-exec"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_iam_role_policy" "ecs_exec" {
-  name   = "${var.environment}-ecs-exec"
+  name   = "${var.environment}-ecs-exec-policy"
   role   = aws_iam_role.ecs_exec.id
   policy = data.aws_iam_policy_document.ecs_exec.json
 }
+
+# ECS Task Role with least-privilege DB access, S3, and CloudWatch
+data "aws_iam_policy_document" "ecs_task_policy" {
+  statement {
+    sid    = "CloudWatchLogsAndMetrics"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+      "logs:DescribeLogStreams",
+      "cloudwatch:PutMetricData"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "S3Access"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:ListBucket"
+    ]
+    resources = [
+      "arn:aws:s3:::*vesting*",
+      "arn:aws:s3:::*vesting*/*"
+    ]
+  }
+
+  statement {
+    sid    = "DatabaseSecretsAccess"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+      "rds-db:connect"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name               = "${var.environment}-ecs-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+
+  tags = {
+    Name        = "${var.environment}-ecs-task"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task" {
+  name   = "${var.environment}-ecs-task-least-privilege"
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_policy.json
+}
+
+# ─── CodeDeploy Configuration ─────────────────────────────────────────────────
 
 resource "aws_iam_role" "codedeploy" {
   name = "${var.environment}-codedeploy"
@@ -185,6 +502,12 @@ resource "aws_iam_role" "codedeploy" {
       Action = "sts:AssumeRole"
     }]
   })
+
+  tags = {
+    Name        = "${var.environment}-codedeploy"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "codedeploy" {
@@ -195,6 +518,12 @@ resource "aws_iam_role_policy_attachment" "codedeploy" {
 resource "aws_sns_topic" "deployment_notifications" {
   name              = "${var.environment}-vesting-deployment-events"
   kms_master_key_id = "alias/aws/sns"
+
+  tags = {
+    Name        = "${var.environment}-deployment-events"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_sns_topic_subscription" "deployment_notifications" {
@@ -294,6 +623,12 @@ resource "aws_cloudwatch_metric_alarm" "deployment_health" {
     label       = "Target health failure percentage"
     return_data = true
   }
+
+  tags = {
+    Name        = "${var.environment}-deployment-health-alarm"
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_codedeploy_deployment_group" "api" {
@@ -308,9 +643,9 @@ resource "aws_codedeploy_deployment_group" "api" {
   }
 
   alarm_configuration {
-    alarms                     = [aws_cloudwatch_metric_alarm.deployment_health.alarm_name]
-    enabled                    = true
-    ignore_poll_alarm_failure  = false
+    alarms                    = [aws_cloudwatch_metric_alarm.deployment_health.alarm_name]
+    enabled                   = true
+    ignore_poll_alarm_failure = false
   }
 
   blue_green_deployment_config {
@@ -360,43 +695,4 @@ resource "aws_codedeploy_deployment_group" "api" {
     trigger_name       = "${var.environment}-deployment-events"
     trigger_target_arn = aws_sns_topic.deployment_notifications.arn
   }
-}
-
-# ─── Task role for the log shipper ────────────────────────────────────────────
-#
-# The execution role is for the ECS agent (pulling images, creating log streams
-# for the awslogs driver). The shipper is an ordinary container, so it needs a
-# task role of its own.
-
-data "aws_iam_policy_document" "ecs_task_logs" {
-  statement {
-    sid    = "WriteApplicationLogStreams"
-    effect = "Allow"
-    actions = [
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    # Fluent Bit scopes writes per stream, which is expressed as a suffix on
-    # the group ARN. Scoping to these groups means a compromised task cannot
-    # write into an account's other log groups.
-    resources = [for arn in var.app_log_group_arns : "${arn}:*"]
-  }
-}
-
-resource "aws_iam_role" "ecs_task" {
-  name = "${var.environment}-ecs-task"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "ecs_task_logs" {
-  role   = aws_iam_role.ecs_task.id
-  policy = data.aws_iam_policy_document.ecs_task_logs.json
 }

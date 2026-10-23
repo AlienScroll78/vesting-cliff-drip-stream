@@ -7,11 +7,15 @@ Operational procedures for the vesting-cliff-drip-stream production infrastructu
 | Runbook | When to use |
 |---------|-------------|
 | [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary |
+| [Schema Migration](./schema-migration.md) | Migrate on-chain `VestingSchedule` records after a struct field addition |
+| [Contract Upgrade](./contract-upgrade.md) | Upgrade the on-chain Soroban contract to a new WASM binary (planned release) |
+| [Emergency Contract Upgrade](./emergency-contract-upgrade.md) | Accelerated upgrade path during an active security incident or critical regression |
 
 ## Infrastructure
 
 | Runbook | When to use |
 |---------|-------------|
+| [Terraform Bootstrap](./terraform-bootstrap.md) | First-time remote state setup per environment, backend migration, stale state locks, state recovery, or MFA delete verification |
 | [Drift Reconciliation](./drift-reconciliation.md) | A daily drift-detection run has reported that live infrastructure diverges from Terraform configuration |
 | [Emergency Override](./emergency-override.md) | You must make a manual infrastructure change immediately to mitigate an active incident |
 | [Secrets Management](./secrets-management.md) | Rotate a secret manually, investigate a rotation failure, or audit who read a secret |

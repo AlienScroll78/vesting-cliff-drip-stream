@@ -5,26 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "node --loader tsx src/server.ts",
+    "backfill": "tsx scripts/backfill_stream_events.ts",
     "test": "node --test --import tsx tests/schedules.test.ts",
+    "test:snapshots": "node scripts/run-snapshot-tests.mjs",
+    "test:snapshots:update": "node scripts/run-snapshot-tests.mjs --update-snapshots",
+    "test:ws-e2e": "vitest run --config vitest.ws-e2e.config.ts",
     "migrate": "node-pg-migrate up --migration-file-language ts",
+    "migrate:dry-run": "node-pg-migrate up --migration-file-language ts --dry-run",
     "migrate:down": "node-pg-migrate down --migration-file-language ts",
     "migrate:down:all": "node-pg-migrate down --count 999 --migration-file-language ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "^1.26.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.53.0",
-    "@opentelemetry/instrumentation-http": "^0.53.0",
-    "@opentelemetry/instrumentation-pg": "^0.43.0",
-    "@opentelemetry/instrumentation-redis-4": "^0.43.0",
-    "@opentelemetry/resources": "^1.26.0",
-    "@opentelemetry/sdk-node": "^0.53.0",
-    "@opentelemetry/sdk-trace-node": "^1.26.0",
-    "@opentelemetry/semantic-conventions": "^1.27.0",
-    "express": "^4.19.0",
-    "express-rate-limit": "^7.0.0",
-    "pg": "^8.13.3",
+    "@types/jsonwebtoken": "^9.0.9",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^11.5.3",
+    "node-cron": "^3.0.3",
+    "node-pg-migrate": "^7.9.1",
+    "pino": "^9.5.0",
     "prom-client": "15.1.3",
+    "redis": "^4.7.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.2",
     "ws": "^8.18.0",
@@ -33,7 +34,7 @@
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
-    "@types/pg": "^8.11.10",
+    "@types/pg": "^8.11.1",
     "vitest": "^2.1.9"
   }
 }

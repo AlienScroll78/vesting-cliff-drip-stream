@@ -1,5 +1,15 @@
-import React, { useEffect, useRef, useCallback, useState, useId } from "react";
-import { useOnboardingTour, type StreamState } from "@/useOnboardingTour";
+import React, {
+  useEffect,
+  useRef,
+  useCallback,
+  useState,
+  useId,
+} from 'react';
+import {
+  useOnboardingTour,
+  type StreamState,
+  type TourMode,
+} from '../useOnboardingTour';
 
 /** Padding (px) added around the highlighted element's bounding box. */
 const HIGHLIGHT_PADDING = 8;
@@ -16,32 +26,30 @@ interface TooltipPosition {
 }
 
 interface OnboardingTourProps {
-  /**
-   * Stream state used to adapt the step copy. Defaults to `"pre-cliff"`.
-   * Pass `"active"` or `"completed"` to show post-cliff wording.
-   */
-  streamState?: StreamState;
-  /** Gate for auto-start — the app passes `address !== null`. */
   enabled?: boolean;
+  streamState?: StreamState;
+  mode?: TourMode;
 }
 
 /**
- * OnboardingTour — issue #820.
+ * OnboardingTour
  *
- * Renders a spotlight tooltip that walks the user through the key UI elements
- * using `data-tour` attribute selectors.
+ * Renders a floating spotlight tooltip that walks the user through key UI
+ * elements using `data-tour` attribute selectors.
  *
  * - Positions itself relative to each step's target element
  * - Repositions to the bottom of the viewport on narrow screens (mobile-friendly)
- * - Moves focus into the card and keeps Tab focus inside it
+ * - Traps keyboard focus within the tooltip
  * - Announces step transitions via an aria-live region
- * - Keyboard: Escape / Backspace = skip, ArrowRight = next, ArrowLeft = back,
- *   Home = first step, End = last step
  * - Closes on Escape
  */
-export function OnboardingTour({ streamState = "pre-cliff", enabled = true }: OnboardingTourProps) {
-  const { isActive, currentStep, currentStepData, totalSteps, next, prev, skip, goToStep } =
-    useOnboardingTour({ streamState, enabled });
+export function OnboardingTour({
+  enabled = true,
+  streamState,
+  mode,
+}: OnboardingTourProps) {
+  const { isActive, currentStep, currentStepData, totalSteps, next, prev, skip } =
+    useOnboardingTour({ enabled, streamState, mode });
 
   const [position, setPosition] = useState<TooltipPosition>({ top: 0, left: 0 });
   const [isMobile, setIsMobile] = useState(false);
@@ -87,7 +95,14 @@ export function OnboardingTour({ streamState = "pre-cliff", enabled = true }: On
     if (!isActive) return;
     updatePosition();
     window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    const observer = new MutationObserver(updatePosition);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      observer.disconnect();
+    };
   }, [isActive, currentStep, updatePosition]);
 
   // Focus the tooltip container when it appears
@@ -97,63 +112,41 @@ export function OnboardingTour({ streamState = "pre-cliff", enabled = true }: On
     }
   }, [isActive, currentStep]);
 
-  // Keyboard navigation + Escape to skip (#820 accessibility criteria)
-  useEffect(() => {
-    if (!isActive) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "Escape":
-        case "Backspace":
-          e.preventDefault();
-          skip();
-          break;
-        case "ArrowRight":
-        case "Enter":
-          e.preventDefault();
-          next();
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          prev();
-          break;
-        case "Home":
-          e.preventDefault();
-          goToStep(0);
-          break;
-        case "End":
-          e.preventDefault();
-          goToStep(totalSteps - 1);
-          break;
-        case "Tab": {
-          // Keep focus inside the tooltip so the tour is fully keyboard-navigable.
-          const focusables = tooltipRef.current?.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-          );
-          if (!focusables || focusables.length === 0) return;
-          const first = focusables[0]!;
-          const last = focusables[focusables.length - 1]!;
-          const active = document.activeElement;
-          if (e.shiftKey && (active === first || active === tooltipRef.current)) {
-            e.preventDefault();
-            last.focus();
-          } else if (!e.shiftKey && active === last) {
-            e.preventDefault();
-            first.focus();
-          }
-          break;
-        }
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isActive, skip, next, prev, goToStep, currentStep, totalSteps]);
-
   if (!isActive || !currentStepData) return null;
 
   const isFirst = currentStep === 0;
   const isLast = currentStep === totalSteps - 1;
 
   const highlightStyle = getHighlightStyle(currentStepData.targetSelector);
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      skip();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = tooltipRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (
+      event.shiftKey &&
+      (document.activeElement === first ||
+        document.activeElement === tooltipRef.current)
+    ) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <>
@@ -192,6 +185,7 @@ export function OnboardingTour({ streamState = "pre-cliff", enabled = true }: On
         aria-labelledby={`tour-title-${currentStep}`}
         aria-describedby={`tour-desc-${currentStep} ${liveRegionId}`}
         tabIndex={-1}
+        onKeyDown={handleKeyDown}
         style={{
           position: isMobile ? 'fixed' : 'absolute',
           top: isMobile ? undefined : position.top,
