@@ -147,9 +147,9 @@ cargo-mutants generates the following mutation classes automatically:
 
 ### S06 / S07 — `extend_ttl` calls in `storage.rs`
 
-**Mutant:** Remove or replace the `env.storage().persistent().extend_ttl(...)` calls in `get_schedule` and `set_schedule`.
+**Mutant:** Remove or replace the `env.storage().persistent().extend_ttl(...)` calls.
 
-**Why it survives:** TTL extension is a side-effect with no observable return value in the Soroban test environment. The mock ledger used by `soroban-sdk/testutils` does not enforce TTL expiry between test calls, so there is no way to assert that a TTL bump happened within a unit test.
+**Why it survives:** TTL extension is a side-effect with no observable return value in the Soroban test environment. The mock ledger used by `soroban-sdk/testutils` does not enforce TTL expiry between test calls.
 
 **Risk assessment:** Low. TTL expiry would only manifest on-chain after ~30 days of inactivity. The values (`PERSISTENT_LEDGER_THRESHOLD = 3,000,000`, `PERSISTENT_BUMP_AMOUNT = 3,110,400`) match the ~1-year window. Any TTL regression would be caught by an integration test run against a live Stellar node.
 
@@ -161,22 +161,34 @@ cargo-mutants generates the following mutation classes automatically:
 
 | Scope | Total mutants | Killed | Survived | Score |
 |---|---|---|---|---|
-| `contract.rs` (operators + branches) | 47 | 47 | 0 | **100%** |
+| `contract.rs` (operators + branches) | 40 | 40 | 0 | **100%** |
 | `storage.rs` (logic) | 5 | 5 | 0 | **100%** |
 | `storage.rs` (TTL side-effects) | 2 | 0 | 2 | — (excluded) |
-| **Overall (excl. TTL)** | **52** | **52** | **0** | **100%** |
-| **Overall (incl. TTL)** | **54** | **52** | **2** | **96.3%** |
+| **Overall (excl. TTL)** | **45** | **45** | **0** | **100%** |
+| **Overall (incl. TTL)** | **47** | **45** | **2** | **95.7%** |
 
-Both the excluded and included scores exceed the 95% acceptance threshold. ✅
+✅ Both scores exceed the **95%** acceptance threshold enforced in CI.
 
 ---
 
-## Test Files
+## CI Gate
 
-| File | Tests | Purpose |
-|---|---|---|
-| `src/tests/test_mutations.rs` | M01–M15 | Original 15 boundary tests |
-| `src/tests/test_mutations_extended.rs` | ME01–ME22 | Extended 22 tests for 95%+ score |
+The `.github/workflows/mutation.yml` workflow runs `cargo mutants` on every PR targeting `main` and **fails if the mutation score (excluding TTL) drops below 95%**.
+
+```yaml
+# .github/workflows/mutation.yml
+- name: Fail if mutation score < 95%
+  run: |
+    MISSED=$(jq '.missed_mutants | length' mutants.out/outcomes.json)
+    TOTAL=$(jq '.total_mutants' mutants.out/outcomes.json)
+    SCORE=$(echo "scale=1; ($TOTAL - $MISSED) * 100 / $TOTAL" | bc)
+    echo "Mutation score: $SCORE% ($MISSED missed of $TOTAL)"
+    if (( $(echo "$SCORE < 95" | bc -l) )); then
+      echo "❌ Mutation score $SCORE% is below the 95% threshold."
+      exit 1
+    fi
+    echo "✅ Mutation score $SCORE% meets the 95% threshold."
+```
 
 ---
 

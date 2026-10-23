@@ -9,6 +9,7 @@ const { startAdminServer } = require("./admin/server.ts");
 const { scheduleNotificationJob } = require("./jobs/notificationJob.js");
 const { scheduleHandler } = require("./routes/schedule");
 const { versionsHandler } = require("./routes/versions");
+const { sponsorStreamsRouter } = require("./routes/streams.ts");
 
 const app = express();
 app.use(express.json());
@@ -23,6 +24,7 @@ app.post("/notify/opt-out", authMiddleware, optOutHandler);
 // Vesting schedule endpoints
 app.get("/schedule/:recipient", scheduleHandler);
 app.get("/streams/:recipient/versions", versionsHandler);
+app.use("/api/streams", sponsorStreamsRouter);
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 

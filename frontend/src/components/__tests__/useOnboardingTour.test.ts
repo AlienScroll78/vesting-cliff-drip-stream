@@ -125,3 +125,103 @@ describe('useOnboardingTour', () => {
     expect(result.current.isActive).toBe(false);
   });
 });
+
+// ── Enabled gate (tour shows after wallet connection) ──────────────────────────
+
+describe('useOnboardingTour — enabled gate', () => {
+  it('does not auto-start when disabled (no wallet connected yet)', () => {
+    const { result } = renderHook(() => useOnboardingTour({ enabled: false }));
+    expect(result.current.isActive).toBe(false);
+  });
+
+  it('auto-starts once the wallet connects (enabled flips to true)', () => {
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useOnboardingTour({ enabled }),
+      { initialProps: { enabled: false } },
+    );
+    expect(result.current.isActive).toBe(false);
+
+    rerender({ enabled: true });
+    expect(result.current.isActive).toBe(true);
+  });
+});
+
+// ── Stream state adaptation ───────────────────────────────────────────────────
+
+describe('buildTourSteps — stream state adaptation', () => {
+  it('uses the same number of steps regardless of stream state', () => {
+    const states: StreamState[] = ['pre-cliff', 'active', 'completed'];
+    const counts = states.map((s) => buildTourSteps(s).length);
+    expect(new Set(counts).size).toBe(1);
+  });
+
+  it('pre-cliff copy explains tokens are still locked', () => {
+    const step = buildTourSteps('pre-cliff').find((s) => s.id === 'timeline')!;
+    expect(step.description).toMatch(/cliff must pass before you can claim/i);
+  });
+
+  it('post-cliff copy states the cliff has already passed', () => {
+    const step = buildTourSteps('active').find((s) => s.id === 'timeline')!;
+    expect(step.description).toMatch(/cliff has passed/i);
+  });
+
+  it('claim step differs between pre-cliff and post-cliff', () => {
+    const pre = buildTourSteps('pre-cliff').find((s) => s.id === 'claim')!;
+    const post = buildTourSteps('completed').find((s) => s.id === 'claim')!;
+    expect(pre.description).not.toBe(post.description);
+  });
+
+  it('hook exposes the adapted step for the given stream state', () => {
+    const { result } = renderHook(() => useOnboardingTour({ streamState: 'active' }));
+    expect(result.current.currentStepData?.description).toMatch(/cliff has passed/i);
+  });
+
+  it('every step has a unique id and non-empty title/description', () => {
+    const steps = buildTourSteps('pre-cliff');
+    expect(new Set(steps.map((s) => s.id)).size).toBe(steps.length);
+    for (const step of steps) {
+      expect(step.title.length).toBeGreaterThan(0);
+      expect(step.description.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// ── Navigation + replay ───────────────────────────────────────────────────────
+
+describe('useOnboardingTour — navigation and replay', () => {
+  it('goToStep() jumps to an absolute index', () => {
+    const { result } = renderHook(() => useOnboardingTour());
+    act(() => { result.current.goToStep(3); });
+    expect(result.current.currentStep).toBe(3);
+  });
+
+  it('goToStep() clamps out-of-range indices', () => {
+    const { result } = renderHook(() => useOnboardingTour());
+    act(() => { result.current.goToStep(999); });
+    expect(result.current.currentStep).toBe(result.current.totalSteps - 1);
+
+    act(() => { result.current.goToStep(-5); });
+    expect(result.current.currentStep).toBe(0);
+  });
+
+  it('replayTour() restarts a completed tour from step 0', () => {
+    localStorageMock.setItem(STORAGE_KEY, 'true');
+    const { result } = renderHook(() => useOnboardingTour());
+    expect(result.current.isActive).toBe(false);
+
+    act(() => { replayTour(); });
+    expect(result.current.isActive).toBe(true);
+    expect(result.current.currentStep).toBe(0);
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith(STORAGE_KEY);
+  });
+
+  it('replayTour() after finishing mid-tour returns to step 0', () => {
+    const { result } = renderHook(() => useOnboardingTour());
+    act(() => { result.current.next(); });
+    act(() => { result.current.next(); });
+    expect(result.current.currentStep).toBe(2);
+
+    act(() => { replayTour(); });
+    expect(result.current.currentStep).toBe(0);
+  });
+});

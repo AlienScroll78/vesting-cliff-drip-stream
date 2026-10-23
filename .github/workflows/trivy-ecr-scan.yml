@@ -1,0 +1,127 @@
+name: Trivy ECR Scan
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+  issues: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+
+jobs:
+  trivy-scan:
+    name: trivy-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate ECR configuration
+        env:
+          ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
+        run: |
+          if [ -z "$ECR_REGISTRY" ]; then
+            echo "Set the ECR_REGISTRY repository variable before running this workflow."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_SCAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: trivy-scan api-server:latest
+        id: api_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/api-server:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: trivy-scan indexer:latest
+        id: indexer_scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/indexer:latest
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Generate api-server SARIF report
+        if: always()
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/api-server:latest
+          format: sarif
+          output: trivy-api-server.sarif
+          exit-code: "0"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Generate indexer SARIF report
+        if: always()
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/indexer:latest
+          format: sarif
+          output: trivy-indexer.sarif
+          exit-code: "0"
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          severity: HIGH,CRITICAL,MEDIUM
+
+      - name: Upload api-server SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api-server.sarif
+          category: trivy-ecr-api-server
+
+      - name: Upload indexer SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-indexer.sarif
+          category: trivy-ecr-indexer
+
+      - name: Alert on ECR vulnerabilities
+        if: always() && (steps.api_scan.outcome == 'failure' || steps.indexer_scan.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Trivy ECR scan found vulnerabilities"
+          BODY="Weekly ECR scan found HIGH or CRITICAL vulnerabilities.\n\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --state open --search "Trivy ECR scan" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY" --label security
+          fi
+
+      - name: Enforce Trivy vulnerability gate
+        if: always() && (steps.api_scan.outcome == 'failure' || steps.indexer_scan.outcome == 'failure')
+        run: exit 1

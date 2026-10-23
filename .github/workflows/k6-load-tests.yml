@@ -1,0 +1,198 @@
+name: k6 Load Tests
+
+# Runs on every PR and push to main.
+# Full endurance scenario only on manual dispatch or nightly to keep CI fast.
+#
+# Issue #781 – Build API load test suite with k6 for performance benchmarking.
+
+on:
+  pull_request:
+    paths:
+      - 'tests/load/**'
+      - '.github/workflows/k6-load-tests.yml'
+      - 'backend/src/**'
+
+  push:
+    branches: [main]
+    paths:
+      - 'tests/load/**'
+      - 'backend/src/**'
+
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario to run (all | baseline | ramp_up | spike | endurance)'
+        required: false
+        default: 'all'
+      base_url:
+        description: 'API base URL'
+        required: false
+        default: 'http://localhost:3001'
+
+  schedule:
+    # Nightly full suite at 04:00 UTC.
+    - cron: '0 4 * * *'
+
+concurrency:
+  group: k6-load-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RESULTS_DIR: tests/load/results
+
+jobs:
+  # ── k6 load test suite ───────────────────────────────────────────────────────
+  load-test:
+    name: k6 – ${{ github.event.inputs.scenario || 'all scenarios (CI mode)' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      # Spin up a minimal mock API server so k6 has an endpoint to hit in CI.
+      # In staging/production runs, point BASE_URL at the real backend.
+      api-mock:
+        image: kennethreitz/httpbin
+        ports:
+          - '3001:80'
+        options: >-
+          --health-cmd "curl -sf http://localhost/get || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Install k6 ──────────────────────────────────────────────────────────
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] \
+            https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -q
+          sudo apt-get install -y -q k6
+          k6 version
+
+      # ── Prepare results directory ────────────────────────────────────────────
+      - name: Prepare results directory
+        run: mkdir -p ${{ env.RESULTS_DIR }}
+
+      # ── Mock health endpoint ─────────────────────────────────────────────────
+      # The httpbin mock doesn't have /health — add a wrapper via socat.
+      - name: Patch mock to respond on /health and /api/*
+        run: |
+          # Install a lightweight static file server to act as the API mock.
+          npm install --no-save http-server
+          cat > /tmp/mock-server.js << 'EOF'
+          const http = require("http");
+          const server = http.createServer((req, res) => {
+            res.setHeader("Content-Type", "application/json");
+            if (req.url === "/health") {
+              res.writeHead(200);
+              res.end(JSON.stringify({ status: "ok" }));
+            } else if (req.url.startsWith("/api/streams/")) {
+              res.writeHead(200);
+              res.end(JSON.stringify({ recipient: req.url.split("/")[3], status: "active" }));
+            } else if (req.url.startsWith("/api/claimable/")) {
+              res.writeHead(200);
+              res.end(JSON.stringify({ recipient: req.url.split("/")[3], amount: "0" }));
+            } else if (req.url.startsWith("/api/schedules/")) {
+              res.writeHead(200);
+              res.end(JSON.stringify({ recipient: req.url.split("/")[3], schedule: null }));
+            } else if (req.url.startsWith("/analytics/")) {
+              res.writeHead(200);
+              res.end(JSON.stringify({ data: [] }));
+            } else {
+              res.writeHead(404);
+              res.end(JSON.stringify({ error: "not found" }));
+            }
+          });
+          server.listen(3001, () => console.log("Mock API running on :3001"));
+          EOF
+          node /tmp/mock-server.js &
+          # Give the mock a moment to bind.
+          sleep 1
+          curl -sf http://localhost:3001/health && echo "Mock API ready"
+
+      # ── Run k6 ──────────────────────────────────────────────────────────────
+      - name: Run k6 load tests
+        id: k6
+        run: |
+          SCENARIO="${{ github.event.inputs.scenario || 'all' }}"
+          BASE_URL="${{ github.event.inputs.base_url || 'http://localhost:3001' }}"
+
+          # Enable CI mode for PRs and pushes (shorter durations).
+          CI_FLAG="0"
+          if [[ "${{ github.event_name }}" == "pull_request" ]] || \
+             [[ "${{ github.event_name }}" == "push" ]]; then
+            CI_FLAG="1"
+          fi
+
+          k6 run \
+            tests/load/tge_scenarios.js \
+            -e SCENARIO="${SCENARIO}" \
+            -e BASE_URL="${BASE_URL}" \
+            -e CI="${CI_FLAG}" \
+            -e HTML_REPORT="${{ env.RESULTS_DIR }}/report.html" \
+            --out json=${{ env.RESULTS_DIR }}/k6_raw.json \
+            2>&1 | tee ${{ env.RESULTS_DIR }}/k6_output.txt
+
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
+
+      # ── Post summary to PR ───────────────────────────────────────────────────
+      - name: Post results comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const summaryPath = "${{ env.RESULTS_DIR }}/summary.json";
+            let body = "## k6 Load Test Results\n\n";
+
+            if (fs.existsSync(summaryPath)) {
+              const s = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
+              const verdict = s.overall === "PASS" ? "✅ PASS" : "❌ FAIL";
+              body += `**Overall:** ${verdict}\n\n`;
+              body += "| SLA Target | Required | Actual | Result |\n";
+              body += "|---|---|---|---|\n";
+              for (const [name, t] of Object.entries(s.sla_targets || {})) {
+                const icon = t.pass ? "✅" : "❌";
+                body += `| ${name} | ${t.target} | ${t.actual} | ${icon} |\n`;
+              }
+              body += `\n**Throughput:** ${s.throughput?.requests_per_s} req/s over ${s.meta?.duration_s}s\n`;
+            } else {
+              body += "_Summary not available — see artifacts for k6 output._\n";
+            }
+
+            body += "\n---\n_[k6 load test suite — issue #781]_";
+
+            await github.rest.issues.createComment({
+              owner:      context.repo.owner,
+              repo:       context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      # ── Upload artifacts ─────────────────────────────────────────────────────
+      - name: Upload HTML report + raw results
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results-${{ github.run_number }}
+          path: ${{ env.RESULTS_DIR }}/
+          retention-days: 30
+
+      # ── Fail if k6 thresholds were breached ──────────────────────────────────
+      - name: Fail on SLA breach
+        if: steps.k6.outputs.exit_code != '0'
+        run: |
+          echo "k6 exited with code ${{ steps.k6.outputs.exit_code }}"
+          echo "One or more SLA thresholds were breached."
+          echo "See the uploaded HTML report artifact for details."
+          exit 1

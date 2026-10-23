@@ -7,6 +7,8 @@
  * LanguageDetector (LANG_STORAGE_KEY).
  *
  * Scaffolds RTL support: sets dir="rtl" on <html> for AR/HE.
+ *
+ * Languages: EN, ES, ZH, PT (#767)
  */
 
 import { useTranslation } from "react-i18next";
@@ -15,6 +17,7 @@ const LANGS = [
   { code: "en", label: "EN", fullName: "English" },
   { code: "es", label: "ES", fullName: "Español" },
   { code: "zh", label: "中文", fullName: "中文" },
+  { code: "pt", label: "PT", fullName: "Português" },
 ];
 
 /** Languages that require right-to-left layout. */

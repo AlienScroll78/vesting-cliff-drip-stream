@@ -1,13 +1,12 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# staging.yml – Automated staging environment pipeline
+# staging.yml – Legacy manual staging environment pipeline
 #
 # Triggers:
-#   • Push to main        → full deploy + smoke test
-#   • workflow_dispatch   → manual trigger; set reset=true for a fresh testnet
-#                           account (on-demand staging reset)
+#   • workflow_dispatch   → manual legacy staging deploy; set reset=true for a fresh
+#                           testnet account (on-demand staging reset)
 #
 # Acceptance criteria addressed (issue #400):
-#   ✅ Staging deploys automatically on merge to main
+#   ✅ Legacy staging deploy is available on demand
 #   ✅ Contract deployed to Stellar testnet via scripts/deploy.sh
 #   ✅ Backend deployed to staging cluster via Helm
 #   ✅ Frontend deployed to staging cluster via Helm
@@ -27,9 +26,6 @@
 name: Staging Deployment
 
 on:
-  push:
-    branches: [main]
-
   workflow_dispatch:
     inputs:
       reset:
@@ -347,6 +343,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/smoke/requirements.txt
+
+      - name: Install smoke test dependencies
+        run: pip install -r tests/smoke/requirements.txt
 
       - name: Install Stellar CLI
         run: |

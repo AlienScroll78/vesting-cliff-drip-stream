@@ -42,6 +42,7 @@ export default defineConfig({
         "**/claim-sheet.spec.ts",
         "**/badges.spec.ts",
         "**/create-wizard.spec.ts",
+        "**/claim-accessibility.spec.ts",
       ],
       use: {
         ...devices["Desktop Chrome"],

@@ -160,6 +160,22 @@ The sampler is a `ParentBasedSampler` wrapping `TraceIdRatioBasedSampler`, so:
 
 ## Structured Logging & Correlation IDs
 
+> **Status: partly aspirational.** The correlation fields, the pino logger and
+> the `AsyncLocalStorage` injection described below are the target design and are
+> **not implemented yet** — pino is not a dependency and there is no
+> `requestLoggerMiddleware`.
+>
+> What ships today is `src/server/logger.js`: a dependency-free logger that emits
+> one JSON object per line with `ts`, `level`, `service`, `env` and `msg`, plus
+> whatever a call site passes. Correlation IDs are passed explicitly
+> (`logger.child({ requestId })`) rather than injected, and are camelCase
+> (`requestId`, not `request_id`).
+>
+> The ECS pipeline, metric filters and Log Insights queries in
+> [runbooks/cloudwatch-logs.md](./runbooks/cloudwatch-logs.md) are built against
+> the fields that actually exist. Everything in this section below that mentions
+> `time`, `event`, `request_id` or `trace_id` describes work still to do.
+
 All backend log output is JSON-structured for CloudWatch Logs Insights ingestion and uses [pino](https://getpino.io) as the underlying logger.
 
 ### Correlation ID fields
@@ -170,7 +186,7 @@ Every log line emitted during an HTTP request includes three correlation fields:
 |------------------|------------------------------------------------------|-------------------------|
 | `request_id`     | UUID v4 generated per incoming HTTP request          | `X-Request-ID`          |
 | `trace_id`       | W3C `traceId` from the active OpenTelemetry span     | `traceparent`           |
-| `correlation_id` | Caller-supplied value, or `request_id` as fallback   | `X-Correlation-Id`      |
+| `correlation_id` | Valid caller-supplied UUID, or a generated UUID       | `X-Correlation-ID`      |
 
 The fields are injected automatically into every `logger.*` call via `AsyncLocalStorage` — route handlers and downstream services do not need to pass IDs explicitly.
 
@@ -179,16 +195,17 @@ The fields are injected automatically into every `logger.*` call via `AsyncLocal
 ```json
 {
   "level":          "info",
-  "time":           "2026-08-29T20:45:33.426Z",
+  "timestamp":      "2026-08-29T20:45:33.426Z",
   "service":        "vesting-backend",
   "version":        "1.0.0",
+  "duration_ms":    0,
   "request_id":     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "trace_id":       "4bf92f3577b34da6a3ce929d0e0e4736",
   "correlation_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "event":          "request_received",
   "method":         "GET",
   "path":           "/api/v1/schedules/GABCDEF...",
-  "msg":            "GET /api/v1/schedules/GABCDEF..."
+  "message":        "GET /api/v1/schedules/GABCDEF..."
 }
 ```
 
@@ -197,7 +214,7 @@ Fields produced at request completion:
 ```json
 {
   "level":          "info",
-  "time":           "2026-08-29T20:45:33.501Z",
+  "timestamp":      "2026-08-29T20:45:33.501Z",
   "service":        "vesting-backend",
   "version":        "1.0.0",
   "request_id":     "f47ac10b-58cc-4372-a567-0e02b2c3d479",
@@ -207,29 +224,36 @@ Fields produced at request completion:
   "method":         "GET",
   "path":           "/api/v1/schedules/GABCDEF...",
   "status":         200,
-  "durationMs":     75.4,
-  "msg":            "GET /api/v1/schedules/GABCDEF... 200 75ms"
+  "duration_ms":    75.4,
+  "message":        "GET /api/v1/schedules/GABCDEF... 200 75ms"
 }
 ```
 
-Database query log line (emitted at `debug` level):
+Database query log line:
 
 ```json
 {
   "level":            "debug",
-  "time":             "2026-08-29T20:45:33.480Z",
+  "timestamp":        "2026-08-29T20:45:33.480Z",
   "service":          "vesting-backend",
   "request_id":       "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "trace_id":         "4bf92f3577b34da6a3ce929d0e0e4736",
   "correlation_id":   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "event":            "db_query",
-  "db.system":        "postgresql",
-  "db.query":         "SELECT * FROM vesting_streams WHERE recipient = $1",
-  "db.row_count":     1,
-  "db.duration_ms":   3.2,
-  "msg":              "db query"
+  "query_hash":       "<sha256-of-normalized-sql>",
+  "rows_affected":    1,
+  "duration_ms":      3.2,
+  "message":          "Database query"
 }
 ```
+
+Set `LOG_LEVEL` to `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or
+`silent`. In Kubernetes, update the `log-level` key in the Fluent Bit ConfigMap
+and send `SIGHUP` to the application process; it rereads the projected
+`LOG_LEVEL_FILE` without restarting.
+When `LOG_FILE_PATH` is set, JSON lines are also written to that path; the Helm
+chart mounts this file for a Fluent Bit sidecar, which ships API and worker logs
+to `/vesting/<environment>/<service>` in CloudWatch Logs.
 
 ### How propagation works
 
@@ -239,10 +263,10 @@ HTTP request arrives
        ▼
 requestLoggerMiddleware
   ├── Reads / generates request_id  (UUID v4)
-  ├── Reads correlation_id          (X-Correlation-Id header, or request_id)
+  ├── Validates/generates correlation_id (X-Correlation-ID)
   ├── Reads trace_id                (active OTel span's traceId, or null)
   ├── Sets X-Request-ID response header
-  ├── Sets X-Correlation-Id response header
+  ├── Sets X-Correlation-ID response header
   └── Calls runWithIds({ requestId, traceId, correlationId }, next)
               │
               ▼  AsyncLocalStorage context is active for all code below

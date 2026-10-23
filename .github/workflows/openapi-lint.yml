@@ -1,0 +1,33 @@
+name: OpenAPI Lint
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "docs/api/openapi.yaml"
+      - ".spectral.yaml"
+      - ".github/workflows/openapi-lint.yml"
+  pull_request:
+    paths:
+      - "docs/api/openapi.yaml"
+      - ".spectral.yaml"
+      - ".github/workflows/openapi-lint.yml"
+
+jobs:
+  spectral-lint:
+    name: spectral-lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Spectral CLI
+        run: npm install -g @stoplight/spectral-cli@6
+
+      - name: Lint OpenAPI spec
+        run: spectral lint docs/api/openapi.yaml --ruleset .spectral.yaml --fail-severity error

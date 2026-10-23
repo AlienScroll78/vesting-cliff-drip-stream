@@ -232,11 +232,15 @@ function TopLevelFallback({
       </span>
 
       <h1
+        id={headingId}
+        ref={headingRef}
+        tabIndex={-1}
         style={{
           fontSize: "1.5rem",
           fontWeight: 700,
           margin: 0,
           color: "var(--color-text, #111827)",
+          outline: "none",
         }}
       >
         Something went wrong
@@ -424,4 +428,51 @@ function StreamCardFallback({
       <ErrorDetails error={error} componentStack={componentStack} />
     </div>
   );
+}
+
+// ─── Convenience hook: useErrorBoundaryReset ──────────────────────────────────
+
+/**
+ * Returns a `resetKey` string that updates on route-pathname changes.
+ * Pass this as `routeKey` to `RouteErrorBoundary` so it auto-resets on navigation.
+ *
+ * ```tsx
+ * const routeKey = useRouteResetKey();
+ * <RouteErrorBoundary routeKey={routeKey}>…</RouteErrorBoundary>
+ * ```
+ */
+export function useRouteResetKey(): string {
+  const [key, setKey] = useState(() =>
+    typeof window !== "undefined" ? window.location.pathname : "/",
+  );
+
+  useEffect(() => {
+    // Listen to popstate (back/forward) and custom pushstate events
+    function onLocationChange() {
+      setKey(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", onLocationChange);
+
+    // Intercept history.pushState / replaceState
+    const origPush = history.pushState.bind(history);
+    const origReplace = history.replaceState.bind(history);
+
+    history.pushState = function (...args) {
+      origPush(...args);
+      onLocationChange();
+    };
+    history.replaceState = function (...args) {
+      origReplace(...args);
+      onLocationChange();
+    };
+
+    return () => {
+      window.removeEventListener("popstate", onLocationChange);
+      history.pushState = origPush;
+      history.replaceState = origReplace;
+    };
+  }, []);
+
+  return key;
 }

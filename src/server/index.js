@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { ShutdownManager } from './shutdown.js';
 import { HorizonManager } from './horizon.js';
 import { AdminDrainManager } from './drain.js';
+import { logger } from './logger.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -26,7 +27,7 @@ const app = createApp({
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  logger.info('server listening', { port: Number(PORT) });
 });
 
 shutdownManager.registerSignalHandlers(server);

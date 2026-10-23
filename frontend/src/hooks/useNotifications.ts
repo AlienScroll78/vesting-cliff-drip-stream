@@ -117,6 +117,11 @@ export function useNotifications() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   }, []);
 
+  /** Permanently remove a single notification by id. */
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   /** Update a single preference. */
   const setPreference = useCallback(
     (type: NotificationEventType, enabled: boolean) => {
@@ -132,6 +137,7 @@ export function useNotifications() {
     addNotification,
     markRead,
     markAllRead,
+    dismissNotification,
     setPreference,
   };
 }

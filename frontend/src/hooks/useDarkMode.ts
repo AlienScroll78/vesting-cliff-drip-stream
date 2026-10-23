@@ -14,12 +14,26 @@ function getInitialDark(): boolean {
     : false;
 }
 
+/**
+ * Apply the resolved theme to the document root.
+ *
+ * Sets both the legacy `.dark` class and the `data-theme` attribute. The
+ * `data-theme` attribute is what drives the CSS-custom-property theming
+ * (`[data-theme='dark']` / `[data-theme='light']` in globals.css and the
+ * design-system tokens) without toggling component class names.
+ */
+export function applyTheme(dark: boolean): void {
+  const root = document.documentElement;
+  root.classList.toggle("dark", dark);
+  root.dataset.theme = dark ? "dark" : "light";
+}
+
 export function useDarkMode(): [boolean, () => void] {
   const [dark, setDark] = useState(getInitialDark);
 
-  // Apply class and persist preference whenever dark state changes
+  // Apply theme and persist preference whenever dark state changes
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
+    applyTheme(dark);
     try {
       localStorage.setItem(STORAGE_KEY, String(dark));
     } catch {

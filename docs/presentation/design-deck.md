@@ -552,7 +552,7 @@ Cancel stream → confirmation modal with explicit "Yes, cancel stream" button (
 
 ### Short-term (next sprint)
 
-- [ ] Commission Figma component library from design tokens
+- [x] Generate the Figma component library handoff from design tokens (`design-system/FIGMA.md`)
 - [ ] Record Loom walkthrough of recipient claim flow for async onboarding
 - [ ] Run formal usability study with 5 participants (plan in `docs/research/usability-study-1.md`)
 - [ ] Add `@axe-core/playwright` to CI to catch regressions automatically
@@ -581,6 +581,7 @@ Cancel stream → confirmation modal with explicit "Yes, cancel stream" button (
 | Usability study plan | `docs/research/usability-study-1.md` | Session format, tasks, metrics |
 | Mobile claim sheet spec | `docs/mobile-claim-bottom-sheet.md` | Detailed interaction spec |
 | Design tokens | `design-system/tokens/tokens.css` | All CSS custom properties |
+| Figma handoff | `design-system/FIGMA.md` | Importable tokens, component, screen, and flow manifests |
 | Typography system | `design-system/tokens/typography.css` | Fluid type scale |
 | Component styles | `design-system/components/components.css` | Button, input, card |
 | A11y audit | `docs/a11y-audit.md` | Zero critical violations |

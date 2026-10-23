@@ -40,10 +40,10 @@ Thank you for contributing! This guide covers everything you need to go from a c
 
 | Tool | Minimum Version | Install |
 |------|---------|---------|
-| Rust | stable (≥ 1.78) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| Rust | stable (≥ 1.84) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
 | wasm32 target | — | `rustup target add wasm32-unknown-unknown` |
-| Stellar CLI | ≥ 21.x | [Install guide](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) |
-| Node.js | ≥ 20 | [nodejs.org](https://nodejs.org) |
+| Stellar CLI | ≥ 22.x | [Install guide](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) |
+| Node.js | ≥ 22 | [nodejs.org](https://nodejs.org) |
 | Docker + Compose | any recent | [docs.docker.com](https://docs.docker.com/get-docker/) |
 
 Verify your setup:

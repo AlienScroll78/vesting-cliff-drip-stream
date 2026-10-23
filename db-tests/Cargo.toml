@@ -1,0 +1,17 @@
+[package]
+name = "db-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "db-tests"
+path = "src/main.rs"
+
+[dependencies]
+tokio               = { version = "1.38.0", features = ["rt-multi-thread", "macros", "time"] }
+tokio-postgres      = { version = "0.7.11" }
+testcontainers      = { version = "0.23.1" }
+testcontainers-modules = { version = "0.11.0", features = ["postgres"] }
+uuid                = { version = "1.10.0", features = ["v4"] }
+rust_decimal        = { version = "1.36.0", features = ["tokio-pg"] }

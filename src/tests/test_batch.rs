@@ -18,6 +18,9 @@ fn test_create_batch_streams_success() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -61,6 +64,9 @@ fn test_create_batch_streams_varied_parameters() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -102,6 +108,9 @@ fn test_create_batch_streams_invalid_rate_in_batch() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -134,6 +143,9 @@ fn test_create_batch_streams_invalid_duration_in_batch() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -163,6 +175,9 @@ fn test_create_batch_streams_sponsor_equals_recipient() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -190,6 +205,9 @@ fn test_create_batch_streams_schedule_already_exists() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -199,7 +217,7 @@ fn test_create_batch_streams_schedule_already_exists() {
 
     // Create a stream for recipient_a first
     client
-        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &100)
+        .create_vesting_stream(&sponsor, &recipient_a, &token_id, &10, &50, &100, &None)
         .unwrap();
 
     // Now try to batch create including recipient_a (should fail)
@@ -226,6 +244,9 @@ fn test_create_batch_streams_deposit_overflow() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -257,6 +278,9 @@ fn test_create_batch_streams_insufficient_balance() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -290,6 +314,9 @@ fn test_create_batch_streams_events_emitted() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -325,6 +352,9 @@ fn test_create_batch_streams_single_recipient() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -351,6 +381,9 @@ fn test_claim_from_batch_created_streams() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    client.initialize(&admin, &0u32, &treasury);
 
     let sponsor = Address::generate(&env);
     let recipient_a = Address::generate(&env);
@@ -372,8 +405,8 @@ fn test_claim_from_batch_created_streams() {
     advance_ledger(&env, 60);
 
     // Both recipients can claim
-    let claimed_a = client.claim_vested(&recipient_a, &None).unwrap();
-    let claimed_b = client.claim_vested(&recipient_b, &None).unwrap();
+    let claimed_a = client.claim_vested(&recipient_a).unwrap();
+    let claimed_b = client.claim_vested(&recipient_b).unwrap();
 
     assert_eq!(claimed_a, 600); // 60 ledgers × 10
     assert_eq!(claimed_b, 600);

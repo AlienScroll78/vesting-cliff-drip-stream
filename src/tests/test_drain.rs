@@ -112,7 +112,7 @@ fn test_drain_partial_claim_then_drain() {
 
     // Recipient claims at cliff (ledger 150 → claimed 500).
     advance_ledger_high_ttl(&env, 50);
-    client.claim_vested(&recipient);
+    client.claim_vested(&recipient, &None);
 
     // Advance past drain threshold.
     advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 151);
@@ -131,6 +131,12 @@ fn test_drain_nonexistent_stream_fails() {
     let env = setup_env();
     let contract_id = env.register(VestingDrips, ());
     let client = VestingDripsClient::new(&env, &contract_id);
+    let _adm_client = soroban_sdk::Address::generate(&env);
+    let _trs_client = soroban_sdk::Address::generate(&env);
+    client.initialize(&_adm_client, &0u32, &_trs_client);
+let _adm = soroban_sdk::Address::generate(&env);
+let _trs = soroban_sdk::Address::generate(&env);
+client.initialize(&_adm, &0u32, &_trs);
 
     let caller = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -169,4 +175,144 @@ fn test_drain_exact_boundary_still_fails() {
 
     let err = client.drain_expired_stream(&caller, &recipient).unwrap_err();
     assert_eq!(err, VestingError::DrainDelayNotExpired.into());
+}
+
+// ── Boundary tests for drain_expired_stream delay enforcement (Issue #734) ──
+//
+// The 1-year drain delay is: end_ledger + DRAIN_DELAY_LEDGERS.
+// For the test stream: end_ledger = 300, so drain_available_at = 300 + DRAIN_DELAY_LEDGERS.
+//
+// Three critical boundary points:
+//   1. At exactly end_ledger (ledger 300) → StreamNotExpired
+//   2. At drain_available_at - 1 (one ledger before threshold) → DrainDelayNotExpired
+//   3. At exactly drain_available_at → success
+
+/// At exactly `end_ledger`, the stream is expired but the drain delay has not
+/// started — `drain_expired_stream` should fail with `StreamNotExpired`.
+#[test]
+fn test_drain_at_exactly_end_ledger_fails_stream_not_expired() {
+    let env = setup_env();
+    let (_, client, _, recipient, _) = setup_drain_stream(&env);
+    let caller = Address::generate(&env);
+
+    // Stream: start_ledger=100, total_duration=200 → end_ledger=300.
+    // Advance from 100 to exactly 300 (advance 200 ledgers).
+    advance_ledger_high_ttl(&env, 200);
+
+    let err = client.drain_expired_stream(&caller, &recipient).unwrap_err();
+    assert_eq!(
+        err,
+        VestingError::StreamNotExpired.into(),
+        "at exactly end_ledger, expected StreamNotExpired"
+    );
+}
+
+/// One ledger before the drain threshold (`drain_available_at - 1`) must fail
+/// with `DrainDelayNotExpired`, not succeed.
+///
+/// drain_available_at = end_ledger + DRAIN_DELAY_LEDGERS = 300 + DRAIN_DELAY_LEDGERS
+/// Target ledger: drain_available_at - 1 = 299 + DRAIN_DELAY_LEDGERS
+/// Advance from 100: 299 + DRAIN_DELAY_LEDGERS - 100 = 199 + DRAIN_DELAY_LEDGERS
+#[test]
+fn test_drain_one_ledger_before_threshold_fails() {
+    let env = setup_env();
+    let (_, client, _, recipient, _) = setup_drain_stream(&env);
+    let caller = Address::generate(&env);
+
+    // Advance to drain_available_at - 1.
+    // end_ledger = 300; drain_available_at = 300 + DRAIN_DELAY_LEDGERS.
+    // current = 100 → advance (300 + DRAIN_DELAY_LEDGERS - 1 - 100) = 199 + DRAIN_DELAY_LEDGERS.
+    advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 199);
+
+    let err = client.drain_expired_stream(&caller, &recipient).unwrap_err();
+    assert_eq!(
+        err,
+        VestingError::DrainDelayNotExpired.into(),
+        "one ledger before threshold, expected DrainDelayNotExpired"
+    );
+}
+
+/// At exactly `drain_available_at` (`end_ledger + DRAIN_DELAY_LEDGERS`),
+/// `drain_expired_stream` must succeed and send all tokens to the sponsor.
+///
+/// Target ledger: 300 + DRAIN_DELAY_LEDGERS
+/// Advance from 100: 300 + DRAIN_DELAY_LEDGERS - 100 = 200 + DRAIN_DELAY_LEDGERS
+#[test]
+fn test_drain_at_exact_threshold_succeeds() {
+    let env = setup_env();
+    let (_, client, sponsor, recipient, token_id) = setup_drain_stream(&env);
+    let caller = Address::generate(&env);
+    let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
+
+    // Advance to exactly drain_available_at = 300 + DRAIN_DELAY_LEDGERS.
+    // current = 100 → advance 200 + DRAIN_DELAY_LEDGERS.
+    advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 200);
+
+    client
+        .drain_expired_stream(&caller, &recipient)
+        .expect("drain at exact threshold should succeed");
+
+    // All unclaimed tokens go to original sponsor.
+    assert_eq!(token_client.balance(&sponsor), 2_000);
+    assert_eq!(token_client.balance(&recipient), 0);
+    // Schedule is cleaned up.
+    assert!(client.get_schedule(&recipient).is_none());
+}
+
+/// `drain_expired_stream` does not require authentication — any address can
+/// trigger it. The caller receives nothing; tokens always go to the original
+/// sponsor.
+#[test]
+fn test_drain_permissionless_no_auth_required() {
+    let env = setup_env();
+    let (_, client, sponsor, recipient, token_id) = setup_drain_stream(&env);
+    let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
+
+    // Use a completely unrelated address (not sponsor, not recipient).
+    let unrelated_caller = Address::generate(&env);
+
+    advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 201);
+
+    // Must succeed without any auth mock for `unrelated_caller`.
+    client
+        .drain_expired_stream(&unrelated_caller, &recipient)
+        .expect("permissionless drain should succeed for any caller");
+
+    // Caller receives nothing; sponsor gets all unclaimed tokens.
+    assert_eq!(token_client.balance(&unrelated_caller), 0);
+    assert_eq!(token_client.balance(&sponsor), 2_000);
+}
+
+/// Fuzz-style test: 10 different random caller addresses all succeed and the
+/// economic outcome is always the same (tokens go to sponsor, not caller).
+#[test]
+fn test_drain_fuzz_random_callers_all_succeed() {
+    for _i in 0..10 {
+        let env = setup_env();
+        let (_, client, sponsor, recipient, token_id) = setup_drain_stream(&env);
+        let token_client = soroban_sdk::token::TokenClient::new(&env, &token_id);
+
+        // Generate a fresh random caller each iteration.
+        let random_caller = Address::generate(&env);
+
+        advance_ledger_high_ttl(&env, DRAIN_DELAY_LEDGERS + 201);
+
+        client
+            .drain_expired_stream(&random_caller, &recipient)
+            .unwrap_or_else(|e| panic!("drain failed for iteration {_i}: {e:?}"));
+
+        // Invariant: tokens go to sponsor, never to the caller.
+        assert_eq!(
+            token_client.balance(&sponsor),
+            2_000,
+            "iteration {_i}: sponsor should receive all tokens"
+        );
+        assert_eq!(
+            token_client.balance(&random_caller),
+            0,
+            "iteration {_i}: caller should receive nothing"
+        );
+        // Schedule removed after drain.
+        assert!(client.get_schedule(&recipient).is_none());
+    }
 }
