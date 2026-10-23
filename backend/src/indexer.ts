@@ -18,6 +18,49 @@ const FINALITY_DEPTH = 3;
 const POLL_INTERVAL_MS = parseInt(process.env.INDEXER_POLL_MS ?? "6000", 10);
 const PAGE_LIMIT = 200;
 
+// ── CloudWatch metric publishing for indexer lag (#1094) ────────────────────
+// Pushes the IndexerLag metric to CloudWatch (VestingApp namespace) so the
+// CloudWatch alarm can fire when the indexer falls behind. Uses the AWS SDK
+// v3 CloudWatchClient that ships with the Node.js Lambda runtime — in ECS,
+// the AWS SDK is available via the task role.
+let cloudwatch: any = null;
+async function getCw() {
+  if (!cloudwatch) {
+    try {
+      const { CloudWatchClient, PutMetricDataCommand } = await import("@aws-sdk/client-cloudwatch");
+      cloudwatch = { CloudWatchClient, PutMetricDataCommand };
+    } catch {
+      // SDK not available (e.g. local dev) — skip CloudWatch publishing
+      return null;
+    }
+  }
+  return cloudwatch;
+}
+
+let cwClient: any = null;
+async function publishIndexerLag(lag: number): Promise<void> {
+  const cw = await getCw();
+  if (!cw) return;
+  try {
+    if (!cwClient) cwClient = new cw.CloudWatchClient({});
+    await cwClient.send(
+      new cw.PutMetricDataCommand({
+        Namespace: "VestingApp",
+        MetricData: [
+          {
+            MetricName: "IndexerLag",
+            Value: lag,
+            Unit: "Count",
+            Dimensions: [{ Name: "Environment", Value: process.env.ENVIRONMENT ?? "unknown" }],
+          },
+        ],
+      })
+    );
+  } catch (err) {
+    console.warn("[indexer] failed to publish IndexerLag metric:", err);
+  }
+}
+
 // ── DB schema bootstrap ───────────────────────────────────────────────────────
 
 const CREATE_TABLES_SQL = `
@@ -99,6 +142,12 @@ export class EventIndexer {
             console.log(`[indexer] upserted ${finalised.length} events`);
           }
         }
+
+        // Publish indexer lag metric to CloudWatch for alarm #1094
+        // Lag = latest ledger on chain - latest ledger we have events for
+        const lastIndexedLedger = events.length > 0 ? (events[events.length - 1].ledger ?? 0) : 0;
+        const indexerLag = latestLedger - lastIndexedLedger;
+        await publishIndexerLag(indexerLag);
 
         if (lastCursor) await this.saveCursor(lastCursor);
       } catch (err) {

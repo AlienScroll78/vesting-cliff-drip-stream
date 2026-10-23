@@ -696,3 +696,234 @@ resource "aws_codedeploy_deployment_group" "api" {
     trigger_target_arn = aws_sns_topic.deployment_notifications.arn
   }
 }
+
+# ─── Task role for the log shipper ────────────────────────────────────────────
+#
+# The execution role is for the ECS agent (pulling images, creating log streams
+# for the awslogs driver). The shipper is an ordinary container, so it needs a
+# task role of its own.
+
+data "aws_iam_policy_document" "ecs_task_logs" {
+  statement {
+    sid    = "WriteApplicationLogStreams"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+    # Fluent Bit scopes writes per stream, which is expressed as a suffix on
+    # the group ARN. Scoping to these groups means a compromised task cannot
+    # write into an account's other log groups.
+    resources = [for arn in var.app_log_group_arns : "${arn}:*"]
+  }
+}
+
+resource "aws_iam_role" "ecs_task" {
+  name = "${var.environment}-ecs-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_logs" {
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_task_logs.json
+}
+
+# ─── Indexer ECS Service ─────────────────────────────────────────────────────
+#
+# Runs on Fargate Spot to reduce cost — an interrupted indexer catches up from
+# the event log rather than dropping user-facing work.
+
+resource "aws_ecs_task_definition" "indexer" {
+  family                   = "vesting-indexer"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.indexer_cpu
+  memory                   = var.indexer_memory
+  execution_role_arn       = aws_iam_role.ecs_exec.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
+
+  container_definitions = jsonencode([{
+    name  = "vesting-indexer"
+    image = var.container_image
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = "/ecs/indexer"
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
+    }
+  }])
+}
+
+resource "aws_ecs_service" "indexer" {
+  name            = "vesting-indexer"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.indexer.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  capacity_provider_strategy {
+    capacity_provider = aws_capacity_provider.fargate_spot.name
+    weight            = 1
+  }
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    assign_public_ip = false
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
+}
+
+# ─── WAF Web ACL ──────────────────────────────────────────────────────────────
+
+resource "aws_wafv2_web_acl" "main" {
+  name        = "${var.environment}-vesting-alb"
+  description = "WAF rules for the ${var.environment} ALB"
+  scope       = "REGIONAL"
+
+  default_action {
+    allow {}
+  }
+
+  # Rate-based rule: block IPs exceeding the threshold
+  rule {
+    name     = "rate-limit"
+    priority = 1
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = var.waf_rate_limit
+        aggregate_key_type = "IP"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name               = "${var.environment}-rate-limit"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # Geo-block sanctioned countries
+  rule {
+    name     = "geo-block"
+    priority = 2
+
+    action {
+      block {}
+    }
+
+    statement {
+      geo_match_statement {
+        country_codes = var.waf_sanctioned_country_codes
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name               = "${var.environment}-geo-block"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  # AWS Managed Rules Common Rule Set
+  rule {
+    name     = "aws-managed-common"
+    priority = 3
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name               = "${var.environment}-managed-common"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name               = "${var.environment}-vesting-waf"
+    sampled_requests_enabled   = true
+  }
+
+  tags = { Name = "${var.environment}-vesting-waf" }
+}
+
+# Associate the WAF with the ALB
+resource "aws_wafv2_web_acl_association" "alb" {
+  resource_arn = aws_lb.main.arn
+  web_acl_arn  = aws_wafv2_web_acl.main.arn
+}
+
+# WAF logging to CloudWatch
+resource "aws_cloudwatch_log_group" "waf" {
+  name              = "aws/wafv2/${var.environment}-vesting-alb"
+  retention_in_days = var.waf_log_retention_days
+  tags              = { Name = "aws/wafv2/${var.environment}-vesting-alb" }
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "alb" {
+  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
+  resource_arn            = aws_wafv2_web_acl.main.arn
+}
+
+# WAF dashboard
+resource "aws_cloudwatch_dashboard" "waf" {
+  dashboard_name = "${var.environment}-vesting-waf"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type = "metric", x = 0, y = 0, width = 12, height = 6
+        properties = {
+          title  = "Blocked requests"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            ["AWS/WAFV2", "BlockedRequests", "WebACL", "${var.environment}-vesting-alb"]
+          ]
+        }
+      },
+      {
+        type = "metric", x = 12, y = 0, width = 12, height = 6
+        properties = {
+          title  = "Allowed requests"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 300
+          metrics = [
+            ["AWS/WAFV2", "AllowedRequests", "WebACL", "${var.environment}-vesting-alb"]
+          ]
+        }
+      }
+    ]
+  })
+}

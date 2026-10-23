@@ -25,27 +25,57 @@ variable "container_name" {
 }
 
 variable "container_cpu" {
-  description = "CPU units for the backend container (1 vCPU = 1024)"
-  type        = number
-  default     = 256
-}
-
-variable "container_memory" {
-  description = "Memory for the backend container in MiB"
+  description = "CPU units for the backend ECS task"
   type        = number
   default     = 512
 }
 
-variable "container_port" {
-  description = "Port exposed by the backend container"
+variable "container_memory" {
+  description = "Memory (MB) for the backend ECS task"
   type        = number
-  default     = 8080
+  default     = 1024
+}
+
+variable "container_port" {
+  description = "Container port the backend listens on"
+  type        = number
+  default     = 3001
 }
 
 variable "indexer_container_image" {
   description = "Container image for the event indexer service"
   type        = string
   default     = "public.ecr.aws/amazonlinux/amazonlinux:latest"
+}
+
+variable "indexer_cpu" {
+  description = "CPU units for the indexer ECS task"
+  type        = number
+  default     = 256
+}
+
+variable "indexer_memory" {
+  description = "Memory (MB) for the indexer ECS task"
+  type        = number
+  default     = 512
+}
+
+variable "waf_rate_limit" {
+  description = "Requests per IP allowed during the five-minute window"
+  type        = number
+  default     = 1000
+}
+
+variable "waf_sanctioned_country_codes" {
+  description = "ISO country codes blocked by the WAF geo rule"
+  type        = list(string)
+  default     = ["AF", "BY", "CU", "IR", "KP", "LY", "MM", "RU", "SD", "SS", "SY", "VE", "YE", "ZW"]
+}
+
+variable "waf_log_retention_days" {
+  description = "Retention period for WAF decision logs"
+  type        = number
+  default     = 90
 }
 
 variable "secrets" {

@@ -156,3 +156,29 @@ output "monthly_cost_report_schedule" {
   description = "EventBridge Scheduler schedule that triggers the monthly report."
   value       = aws_scheduler_schedule.monthly_cost_report.name
 }
+
+# ─── Production alarms (#1094) ────────────────────────────────────────────────
+
+output "production_alarm_topic_arn" {
+  description = "SNS topic for production CloudWatch alarm notifications"
+  value       = aws_sns_topic.production_alarms.arn
+}
+
+output "alarm_slack_relay_function" {
+  description = "Lambda function that relays CloudWatch alarms to Slack #ops"
+  value       = aws_lambda_function.alarm_slack_relay.function_name
+}
+
+output "production_alarm_names" {
+  description = "Names of all individual CloudWatch production alarms"
+  value = [
+    aws_cloudwatch_metric_alarm.ecs_cpu_high.alarm_name,
+    aws_cloudwatch_metric_alarm.ecs_task_count_low.alarm_name,
+    aws_cloudwatch_metric_alarm.rds_cpu_high.alarm_name,
+    aws_cloudwatch_metric_alarm.rds_storage_low.alarm_name,
+    aws_cloudwatch_metric_alarm.alb_5xx_rate_high.alarm_name,
+    aws_cloudwatch_metric_alarm.indexer_lag_high.alarm_name,
+    aws_cloudwatch_metric_alarm.service_degraded.alarm_name,
+    aws_cloudwatch_metric_alarm.service_down.alarm_name,
+  ]
+}

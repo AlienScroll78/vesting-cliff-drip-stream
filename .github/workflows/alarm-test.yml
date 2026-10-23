@@ -1,0 +1,124 @@
+# ─── Alarm Test: trigger thresholds in staging (#1094) ─────────────────────────
+#
+# On-demand workflow that deliberately triggers CloudWatch alarm thresholds in
+# staging by putting test metric data into CloudWatch. This proves the alarm →
+# SNS → Slack relay pipeline end to end without having to actually degrade the
+# service.
+#
+# Usage:
+#   gh workflow run alarm-test.yml -f alarm=ecs-cpu-high
+#   Or trigger via the GitHub Actions "Run workflow" button.
+
+name: CloudWatch Alarm Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      alarm:
+        description: "Alarm name suffix to test (e.g. ecs-cpu-high, rds-cpu-high)"
+        required: true
+        default: "ecs-cpu-high"
+        type: choice
+        options:
+          - ecs-cpu-high
+          - ecs-task-count-low
+          - rds-cpu-high
+          - rds-storage-low
+          - alb-5xx-rate-high
+          - indexer-lag-high
+          - service-degraded
+          - service-down
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  trigger-alarm:
+    name: Trigger alarm threshold in staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ALARM_TEST_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Put test metric data to trigger alarm
+        run: |
+          ALARM="${{ github.event.inputs.alarm }}"
+          ENV="staging"
+          NAMESPACE="VestingApp"
+
+          echo "Triggering alarm: vesting-drips-${ENV}-${ALARM}"
+
+          case "$ALARM" in
+            ecs-cpu-high)
+              NAMESPACE="AWS/ECS"
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name CPUUtilization \
+                --value 95 \
+                --dimensions ClusterName="${ENV}-vesting",ServiceName=vesting-backend \
+                --unit Percent
+              ;;
+            ecs-task-count-low)
+              NAMESPACE="AWS/ECS"
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name RunningTaskCount \
+                --value 0 \
+                --dimensions ClusterName="${ENV}-vesting",ServiceName=vesting-backend \
+                --unit Count
+              ;;
+            rds-cpu-high)
+              NAMESPACE="AWS/RDS"
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name CPUUtilization \
+                --value 90 \
+                --dimensions DBInstanceIdentifier="${ENV}-vesting-db" \
+                --unit Percent
+              ;;
+            rds-storage-low)
+              NAMESPACE="AWS/RDS"
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name FreeStorageSpace \
+                --value 1073741824 \
+                --dimensions DBInstanceIdentifier="${ENV}-vesting-db" \
+                --unit Bytes
+              ;;
+            indexer-lag-high)
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name IndexerLag \
+                --value 200 \
+                --dimensions Environment="${ENV}" \
+                --unit Count
+              ;;
+            *)
+              echo "Alarm $ALARM is a composite alarm — triggering individual metrics"
+              # Trigger both ECS CPU and indexer lag to fire service-degraded
+              aws cloudwatch put-metric-data \
+                --namespace "AWS/ECS" \
+                --metric-name CPUUtilization \
+                --value 95 \
+                --dimensions ClusterName="${ENV}-vesting",ServiceName=vesting-backend \
+                --unit Percent
+
+              aws cloudwatch put-metric-data \
+                --namespace "$NAMESPACE" \
+                --metric-name IndexerLag \
+                --value 200 \
+                --dimensions Environment="${ENV}" \
+                --unit Count
+              ;;
+          esac
+
+          echo "Test metric data published. Check Slack #ops for the alarm notification."
+          echo "Wait 2-5 minutes for the alarm evaluation period to elapse."
