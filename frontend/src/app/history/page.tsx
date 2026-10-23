@@ -218,8 +218,41 @@ export default function TransactionHistoryPage() {
             style={{ fontSize: "0.875rem" }}
             onClick={refresh}
           >
-            Retry
-          </button>
+            <thead>
+              <tr style={{ borderBottom: "2px solid var(--color-border)", textAlign: "left" }}>
+                <th style={thStyle}>Type</th>
+                <th style={thStyle}>Amount</th>
+                <th style={thStyle}>Counterparty</th>
+                <th style={thStyle}>Date</th>
+                <th style={thStyle}>Tx</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((tx) => (
+                <tr
+                  key={tx.id}
+                  style={{ borderBottom: "1px solid var(--color-border)" }}
+                >
+                  <td style={tdStyle}>
+                    <span aria-hidden="true">{TYPE_EMOJI[tx.type]}</span>{" "}
+                    {TYPE_LABELS[tx.type]}
+                  </td>
+                  <td style={tdStyle}>
+                    {tx.amount.toLocaleString()} {tx.token}
+                  </td>
+                  <td style={{ ...tdStyle, fontFamily: "monospace", fontSize: "0.8rem" }}>
+                    {tx.counterparty}
+                  </td>
+                  <td style={tdStyle}>
+                    <time dateTime={tx.timestamp}>{localDate(tx.timestamp)}</time>
+                  </td>
+                  <td style={tdStyle}>
+                    <CopyableAddress value={tx.hash} kind="transaction" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

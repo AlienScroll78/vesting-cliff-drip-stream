@@ -254,8 +254,7 @@ function StreamList() {
             <div className="stream-card-row">
               <div>
                 <div style={{ fontFamily: "monospace", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                  {s.recipient}
-                  <CopyButton text={s.recipient} label="Copy recipient address" />
+                  <CopyableAddress value={s.recipient} />
                 </div>
                 <div style={{ marginTop: "0.25rem" }}>
                   <StatusBadge status={s.status} />
