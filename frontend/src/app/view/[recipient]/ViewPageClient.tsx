@@ -44,7 +44,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   const { address, network } = useWallet();
   const [stream, setStream] = useState<VestingStream | null | undefined>(undefined);
   const [showClaim, setShowClaim] = useState(false);
-  const [urlCopied, setUrlCopied] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [currentLedger] = useState(51_200_000);
   const [shareUrl, setShareUrl] = useState("");
 
@@ -56,12 +56,6 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
   useEffect(() => {
     fetchSchedule(recipient).then(setStream);
   }, [recipient]);
-
-  const copyShareUrl = useCallback(async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setUrlCopied(true);
-    setTimeout(() => setUrlCopied(false), 2000);
-  }, []);
 
   if (stream === undefined) {
     return (
@@ -112,10 +106,10 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
         <button
           type="button"
           className="btn btn-outline"
-          onClick={copyShareUrl}
-          aria-label={urlCopied ? "Link copied!" : "Copy share link"}
+          onClick={() => setShowShare(true)}
+          aria-label="Share stream"
         >
-          {urlCopied ? "✓ Copied!" : "Share"}
+          Share
         </button>
       </header>
 
@@ -249,6 +243,7 @@ export default function ViewPageClient({ recipient }: { recipient: string }) {
           onClose={() => setShowClaim(false)}
         />
       )}
+      {showShare && <ShareStreamModal stream={stream} onClose={() => setShowShare(false)} />}
     </main>
   );
 }
