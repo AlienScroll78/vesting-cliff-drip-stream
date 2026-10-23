@@ -5,6 +5,7 @@ import { rateLimitMiddleware } from './middleware/tokenBucketRateLimit.js';
 import { adminRouter } from './admin/index.js';
 import { healthHandler, readyHandler } from './routes/health.js';
 import { streamDetailsRouter } from './routes/streamDetails.js';
+import { sponsorDashboardRouter } from './routes/sponsorDashboard.js';
 import { createScheduleController } from './controllers/schedules.js';
 import { validate } from './middleware/validate.js';
 import { sponsorStreamsRouter } from './routes/streams.js';
@@ -36,6 +37,9 @@ app.get('/ready', readyHandler);
 app.use(rateLimitMiddleware);
 
 app.use('/api/streams', streamDetailsRouter);
+
+// Sponsor dashboard — GET /sponsors/:address/streams (Issue #1011)
+app.use('/api', sponsorDashboardRouter);
 
 app.get(
   '/api/v1/schedules/:recipient',
