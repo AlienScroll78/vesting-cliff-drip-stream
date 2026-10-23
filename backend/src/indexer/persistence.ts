@@ -7,6 +7,9 @@
  *   - Read / write the indexer cursor from `indexer_cursors`
  *   - Batch-upsert decoded events into `stream_events` with idempotency
  *     guarantee (ON CONFLICT (transaction_hash) DO NOTHING)
+ *   - For terminal events (StreamCancelled, StreamClawedBack), atomically
+ *     update the stream status and record terminal event details in the
+ *     same transaction
  *
  * All writes run inside a single transaction so a partial batch never
  * leaves the database in an inconsistent state.
@@ -14,6 +17,7 @@
 
 import { Pool } from 'pg';
 import type { DecodedStreamEvent } from './types.js';
+import { handleTerminalEvent } from './terminalEventHandlers.js';
 
 // ── Cursor management ─────────────────────────────────────────────────────────
 
@@ -58,6 +62,12 @@ const INSERT_SQL = `
  * `transaction_hash` means duplicate events (re-processed after a restart)
  * are silently skipped via `DO NOTHING`.
  *
+ * For terminal events (StreamCancelled, StreamClawedBack), the stream status
+ * is updated and terminal event details are recorded atomically in the same
+ * transaction — but only for rows that were actually inserted (not duplicates).
+ * This ensures idempotency: re-processing the same event does not re-apply
+ * the status transition.
+ *
  * @returns The number of rows actually inserted (rows skipped by DO NOTHING
  *          are NOT counted).
  */
@@ -83,6 +93,16 @@ export async function upsertStreamEvents(
         ev.ledger_sequence,
         ev.transaction_hash,
       ]);
+
+      // Only apply terminal event handlers for rows that were actually
+      // inserted (not duplicates skipped by ON CONFLICT DO NOTHING).
+      if ((result.rowCount ?? 0) > 0) {
+        // ── Terminal events: update stream status & record details ──────
+        if (ev.event_type === 'StreamCancelled' || ev.event_type === 'StreamClawedBack') {
+          await handleTerminalEvent(client, ev);
+        }
+      }
+
       inserted += result.rowCount ?? 0;
     }
 
