@@ -1,0 +1,138 @@
+name: Backup Restore Verification
+
+# Triggered weekly (Sunday 03:00 UTC) by EventBridge Scheduler via Lambda, but
+# also runnable on-demand via workflow_dispatch so engineers can verify a restore
+# without waiting for the schedule.
+#
+# This workflow is the CI-visible counterpart to the always-on Lambda schedule
+# defined in terraform/backup-verification.tf. The Lambda runs infrastructure-
+# side, this workflow lets you trigger an on-demand invocation and watch the log
+# output from GitHub Actions.
+
+on:
+  schedule:
+    # Sunday 03:00 UTC — immediately after the RDS automated backup window
+    # (02:00–03:00) that produces the snapshot being tested.
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  id-token: write   # Required for OIDC authentication with AWS
+
+jobs:
+  invoke-backup-verify:
+    name: Invoke Backup Verify Lambda (${{ github.event.inputs.environment || 'staging' }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_BACKUP_VERIFY_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Invoke backup-verify Lambda synchronously
+        id: invoke
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          FUNCTION_NAME="${ENVIRONMENT}-vesting-backup-verify"
+
+          echo "Invoking ${FUNCTION_NAME}..."
+
+          # Invoke synchronously (RequestResponse) and capture the full response.
+          # A non-zero FunctionError field means the Lambda itself threw.
+          aws lambda invoke \
+            --function-name "${FUNCTION_NAME}" \
+            --invocation-type RequestResponse \
+            --log-type Tail \
+            --cli-read-timeout 960 \
+            --payload '{}' \
+            response.json \
+            --query 'FunctionError' \
+            --output text > function_error.txt
+
+          FUNCTION_ERROR=$(cat function_error.txt)
+
+          # Decode and print the tail logs (last 4 KB of execution log)
+          aws lambda invoke \
+            --function-name "${FUNCTION_NAME}" \
+            --invocation-type DryRun \
+            --log-type None \
+            --payload '{}' \
+            /dev/null 2>/dev/null || true
+
+          echo "=== Lambda Response ==="
+          cat response.json | python3 -m json.tool 2>/dev/null || cat response.json
+
+          if [ "${FUNCTION_ERROR}" != "None" ] && [ -n "${FUNCTION_ERROR}" ]; then
+            echo "::error::Lambda reported a FunctionError: ${FUNCTION_ERROR}"
+            echo "verify_passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          echo "verify_passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Report result
+        if: always()
+        run: |
+          if [ "${{ steps.invoke.outputs.verify_passed }}" = "true" ]; then
+            echo "::notice::Backup restore verification PASSED for ${{ github.event.inputs.environment || 'staging' }}"
+          else
+            echo "::error::Backup restore verification FAILED for ${{ github.event.inputs.environment || 'staging' }}"
+          fi
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          payload: |
+            {
+              "text": ":red_circle: *Backup restore verification FAILED* for `${{ github.event.inputs.environment || 'staging' }}`.\nRun: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":red_circle: *Backup restore verification FAILED*\n*Environment:* `${{ github.event.inputs.environment || 'staging' }}`\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View details>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      - name: Notify Slack on success
+        if: success()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          payload: |
+            {
+              "text": ":white_check_mark: Backup restore verification PASSED for `${{ github.event.inputs.environment || 'staging' }}`.",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":white_check_mark: *Backup restore verification PASSED*\n*Environment:* `${{ github.event.inputs.environment || 'staging' }}`\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View details>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
