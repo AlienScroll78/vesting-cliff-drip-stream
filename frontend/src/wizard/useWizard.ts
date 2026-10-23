@@ -74,7 +74,7 @@ const INITIAL_DATA: WizardFormData = {
   walletAddress: '',
 }
 
-const LEDGERS_PER_SECOND = 0.2
+export const LEDGERS_PER_SECOND = 0.2
 
 /** i128::MAX value for overflow detection */
 export const I128_MAX = BigInt('170141183460469231731687303715884105727')
@@ -119,6 +119,7 @@ function setHash(step: WizardStep) {
 
 export function useWizard() {
   const [stepIndex, setStepIndex] = useState(getStepFromHash)
+  const [furthestStep, setFurthestStep] = useState(getStepFromHash)
   const [data, setData] = useState<WizardFormData>(INITIAL_DATA)
   const [touched, setTouched] = useState<Set<string>>(new Set())
   const initialized = useRef(false)
@@ -169,6 +170,7 @@ export function useWizard() {
 
   const reset = useCallback(() => {
     setStepIndex(0)
+    setFurthestStep(0)
     setData(INITIAL_DATA)
     setTouched(new Set())
     setHash(WIZARD_STEPS[0] as WizardStep)
@@ -180,7 +182,7 @@ export function useWizard() {
   }, [])
 
   return {
-    step, stepIndex, totalSteps, data,
+    step, stepIndex, furthestStep, totalSteps, data,
     touched, next, back, update, touch, reset, goToStep,
     WIZARD_STEPS,
   }
