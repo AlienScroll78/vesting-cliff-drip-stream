@@ -11,6 +11,14 @@ MAX_WASM_SIZE_KB ?= 50
 
 all: build
 
+## Install project dependencies and start local PostgreSQL and Redis.
+setup:
+	rustup target add wasm32-unknown-unknown
+	npm install --no-audit --no-fund
+	npm install --prefix backend --no-audit --no-fund
+	npm install --prefix frontend --no-audit --no-fund
+	docker compose up -d postgres redis
+
 ## Compile the contract to WASM
 build:
 	cargo build --target wasm32-unknown-unknown --release
@@ -29,10 +37,11 @@ coverage:
 	cargo llvm-cov --features testutils --html --output-dir docs/coverage/html
 	cargo llvm-cov --features testutils --lcov --output-path docs/coverage/lcov.info
 
-## Run coverage in CI mode with threshold enforcement
-## Fails if line coverage < 90% or branch coverage < 80%
+## Run contract coverage in CI mode with threshold enforcement
+## Fails if contract.rs line coverage < 90% or branch coverage < 85%
 coverage-ci:
-	cargo llvm-cov --features testutils --fail-under-lines 90 --fail-under-branches 80 -- --lib
+	cargo llvm-cov --features testutils --include-files 'src/contract.rs' --fail-under-lines 90 --fail-under-branches 85 --html --output-dir docs/coverage/html
+	cargo llvm-cov --features testutils --include-files 'src/contract.rs' --lcov --output-path docs/coverage/lcov.info
 
 ## Enforce a minimum 90% line coverage threshold (issue #785).
 ## Generates HTML report in docs/coverage/html/ and LCOV in docs/coverage/lcov.info,

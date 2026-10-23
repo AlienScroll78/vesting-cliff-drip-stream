@@ -73,18 +73,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Silent reconnect on mount: if a cached address exists, attempt to
   // verify Freighter is still connected before restoring state.
   useEffect(() => {
-    const cached = localStorage.getItem(STORAGE_KEY);
+    const cached = localStorage.getItem(KEY_ADDRESS);
     if (!cached) return;
     isConnected().then((result) => {
       if (result.isConnected) {
         setAddress(cached);
       } else {
         // Wallet locked or extension removed – clear stale cache
-        try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+        try { localStorage.removeItem(KEY_ADDRESS); } catch { /* ignore */ }
       }
     }).catch(() => {
       // On any error fall back gracefully to disconnected state
-      try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+      try { localStorage.removeItem(KEY_ADDRESS); } catch { /* ignore */ }
     });
   }, []);
 

@@ -2,16 +2,20 @@
  * Tests for the admin API.
  *
  * Covers:
- *   - Authentication rejection (missing header, wrong token, no config)
+ *   - JWT authentication (missing, invalid, expired, non-admin — issue #1003)
  *   - GET  /admin/streams
  *   - GET  /admin/indexer/status
- *   - POST /admin/indexer/restart
+ *   POST /admin/indexer/restart
  *   - GET  /admin/webhooks/dlq
  *   - POST /admin/webhooks/dlq/replay
+ *   - Router-level auth enforcement over HTTP (issue #1003)
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { Request, Response, NextFunction } from "express";
+import http from "node:http";
+import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,100 +47,169 @@ function makeRes(): MockRes {
 const next: NextFunction = vi.fn();
 
 // ---------------------------------------------------------------------------
-// auth.ts — requireAdminAuth middleware
+// JWT auth helpers (issue #1003)
 // ---------------------------------------------------------------------------
 
-describe("requireAdminAuth", () => {
-  const VALID_KEY = "test-admin-api-key-32-chars-long!!";
+const ADMIN_ADDR = `G${"ADMIN".repeat(11)}`;
+const USER_ADDR = `G${"USER".repeat(13)}USE`;
 
+/**
+ * Load the real authV2 middleware together with the key-store singleton so
+ * tokens are signed with the exact key the middleware verifies against.
+ * Must be called after vi.resetModules() so both imports share one registry.
+ */
+async function loadAuth(): Promise<{
+  authMiddleware: (req: Request, res: Response, next: NextFunction) => void;
+  roleGuard: (req: Request, res: Response, next: NextFunction) => void;
+  sign: (sub: string, role: "admin" | "user", ttlSeconds: number) => string;
+}> {
+  const { authMiddleware, requireRole } = await import("../routes/authV2.js");
+  const { getCurrentKey } = await import("../auth/keyStore.js");
+  const key = getCurrentKey();
+  const privPem = key.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+  return {
+    authMiddleware,
+    roleGuard: requireRole("admin"),
+    sign: (sub, role, ttlSeconds) =>
+      jwt.sign({ sub, role, kid: key.kid }, privPem, {
+        algorithm: "RS256",
+        expiresIn: ttlSeconds,
+        header: { alg: "RS256", kid: key.kid },
+      }),
+  };
+}
+
+/** Run the full adminRouter auth chain (authMiddleware → requireRole('admin')). */
+function runAuthChain(
+  authMiddleware: (req: Request, res: Response, next: NextFunction) => void,
+  roleGuard: (req: Request, res: Response, next: NextFunction) => void,
+  headers: Record<string, string>,
+): MockRes & { nextCalled: boolean; req: Request } {
+  const req = makeReq({ headers });
+  const { res, status, json } = makeRes();
+  let passed = false;
+  authMiddleware(req, res, () => {
+    roleGuard(req, res, () => {
+      passed = true;
+    });
+  });
+  return { res, status, json, nextCalled: passed, req };
+}
+
+describe("admin JWT auth middleware (issue #1003)", () => {
   beforeEach(() => {
     vi.resetModules();
-    process.env.ADMIN_API_KEY = VALID_KEY;
   });
 
   afterEach(() => {
-    delete process.env.ADMIN_API_KEY;
+    vi.restoreAllMocks();
   });
 
-  it("returns 503 when ADMIN_API_KEY is not configured", async () => {
-    delete process.env.ADMIN_API_KEY;
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status, json } = makeRes();
-    requireAdminAuth(makeReq(), res, next as NextFunction);
-    expect(status).toHaveBeenCalledWith(503);
-    expect(json.mock.calls[0][0]).toMatchObject({ error: expect.stringContaining("not configured") });
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  it("returns 401 when Authorization header is absent", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status, json } = makeRes();
-    requireAdminAuth(makeReq({ headers: {} }), res, next as NextFunction);
+  it("returns 401 { error: 'Unauthorized' } when the Authorization header is absent", async () => {
+    const { authMiddleware, roleGuard } = await loadAuth();
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {});
     expect(status).toHaveBeenCalledWith(401);
-    expect(json.mock.calls[0][0]).toMatchObject({ error: "Unauthorized" });
-    expect(next).not.toHaveBeenCalled();
+    expect(json.mock.calls[0][0]).toEqual({ error: "Unauthorized" });
+    expect(nextCalled).toBe(false);
   });
 
-  it("returns 401 when Authorization scheme is not Bearer", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status } = makeRes();
+  it("returns 401 { error: 'Unauthorized' } when the scheme is not Bearer", async () => {
+    const { authMiddleware, roleGuard } = await loadAuth();
     const encodedCreds = Buffer.from("admin:pass").toString("base64");
-    requireAdminAuth(
-      makeReq({ headers: { authorization: `Basic ${encodedCreds}` } }),
-      res,
-      next as NextFunction,
-    );
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Basic ${encodedCreds}`,
+    });
     expect(status).toHaveBeenCalledWith(401);
-    expect(next).not.toHaveBeenCalled();
+    expect(json.mock.calls[0][0]).toEqual({ error: "Unauthorized" });
+    expect(nextCalled).toBe(false);
   });
 
-  it("returns 403 when Bearer token is wrong", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status, json } = makeRes();
-    requireAdminAuth(
-      makeReq({ headers: { authorization: "Bearer wrong-token" } }),
-      res,
-      next as NextFunction,
-    );
+  it("returns 401 { error: 'Unauthorized' } for a malformed token", async () => {
+    const { authMiddleware, roleGuard } = await loadAuth();
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: "Bearer not.a.jsonwebtoken",
+    });
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json.mock.calls[0][0]).toEqual({ error: "Unauthorized" });
+    expect(nextCalled).toBe(false);
+  });
+
+  it("returns 401 { error: 'Unauthorized' } for a token signed with an unknown key", async () => {
+    const { authMiddleware, roleGuard } = await loadAuth();
+    const stranger = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const strangerPem = stranger.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    const strangerKid = crypto
+      .createHash("sha256")
+      .update(stranger.publicKey.export({ type: "spki", format: "der" }) as Buffer)
+      .digest("hex")
+      .slice(0, 16);
+    const token = jwt.sign({ sub: ADMIN_ADDR, role: "admin", kid: strangerKid }, strangerPem, {
+      algorithm: "RS256",
+      expiresIn: 3600,
+      header: { alg: "RS256", kid: strangerKid },
+    });
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Bearer ${token}`,
+    });
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json.mock.calls[0][0]).toEqual({ error: "Unauthorized" });
+    expect(nextCalled).toBe(false);
+  });
+
+  it("returns 401 { error: 'Unauthorized' } for a forged signature (kid claimed, wrong key)", async () => {
+    const { authMiddleware, roleGuard } = await loadAuth();
+    const { getCurrentKey } = await import("../auth/keyStore.js");
+    const key = getCurrentKey();
+    const stranger = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const strangerPem = stranger.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    // Claim the service's kid but sign with a different private key
+    const token = jwt.sign({ sub: ADMIN_ADDR, role: "admin", kid: key.kid }, strangerPem, {
+      algorithm: "RS256",
+      expiresIn: 3600,
+      header: { alg: "RS256", kid: key.kid },
+    });
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Bearer ${token}`,
+    });
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json.mock.calls[0][0]).toEqual({ error: "Unauthorized" });
+    expect(nextCalled).toBe(false);
+  });
+
+  it("returns 401 { error: 'TokenExpired' } for an expired token", async () => {
+    const { authMiddleware, roleGuard, sign } = await loadAuth();
+    const token = sign(ADMIN_ADDR, "admin", -10);
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Bearer ${token}`,
+    });
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json.mock.calls[0][0]).toEqual({ error: "TokenExpired" });
+    expect(nextCalled).toBe(false);
+  });
+
+  it("returns 403 for a valid token with a non-admin role", async () => {
+    const { authMiddleware, roleGuard, sign } = await loadAuth();
+    const token = sign(USER_ADDR, "user", 3600);
+    const { status, json, nextCalled } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Bearer ${token}`,
+    });
     expect(status).toHaveBeenCalledWith(403);
-    expect(json.mock.calls[0][0]).toMatchObject({ error: "Forbidden" });
-    expect(next).not.toHaveBeenCalled();
+    expect(json.mock.calls[0][0]).toMatchObject({ error: expect.stringContaining("Forbidden") });
+    expect(nextCalled).toBe(false);
   });
 
-  it("returns 403 for an empty Bearer token", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status } = makeRes();
-    requireAdminAuth(
-      makeReq({ headers: { authorization: "Bearer " } }),
-      res,
-      next as NextFunction,
-    );
-    expect(status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  it("calls next() when the correct Bearer token is supplied", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const nextMock = vi.fn() as NextFunction;
-    const { res } = makeRes();
-    requireAdminAuth(
-      makeReq({ headers: { authorization: `Bearer ${VALID_KEY}` } }),
-      res,
-      nextMock,
-    );
-    expect(nextMock).toHaveBeenCalledOnce();
-    expect(res.status).not.toHaveBeenCalled();
-  });
-
-  it("is case-sensitive — wrong casing is rejected", async () => {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status } = makeRes();
-    requireAdminAuth(
-      makeReq({ headers: { authorization: `Bearer ${VALID_KEY.toUpperCase()}` } }),
-      res,
-      next as NextFunction,
-    );
-    expect(status).toHaveBeenCalledWith(403);
+  it("admits a valid admin token and attaches req.user", async () => {
+    const { authMiddleware, roleGuard, sign } = await loadAuth();
+    const token = sign(ADMIN_ADDR, "admin", 3600);
+    const { status, json, nextCalled, req } = runAuthChain(authMiddleware, roleGuard, {
+      authorization: `Bearer ${token}`,
+    });
+    expect(status).not.toHaveBeenCalled();
+    expect(json).not.toHaveBeenCalled();
+    expect(nextCalled).toBe(true);
+    const user = (req as Request & { user?: { address: string; role: string } }).user;
+    expect(user?.address).toBe(ADMIN_ADDR);
+    expect(user?.role).toBe("admin");
   });
 });
 
@@ -494,74 +567,110 @@ describe("admin webhooks handlers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration: adminRouter enforces auth on every route
-//
-// We test the router without supertest by constructing a mock Express stack
-// that runs the router middleware chain directly against mock req/res objects.
+// Integration: adminRouter enforces JWT auth on every route over real HTTP
+// (issue #1003)
 // ---------------------------------------------------------------------------
 
-describe("adminRouter — auth guard integration", () => {
-  const VALID_KEY = "integration-test-key-32chars!!!";
+describe("adminRouter — JWT auth guard integration (HTTP)", () => {
+  let server: http.Server | null = null;
 
-  beforeEach(() => {
-    vi.resetModules();
-    process.env.ADMIN_API_KEY = VALID_KEY;
-  });
-
-  afterEach(() => {
-    delete process.env.ADMIN_API_KEY;
+  afterEach(async () => {
+    if (server) {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server!.close(resolve));
+      server = null;
+    }
+    vi.doUnmock("pg");
     vi.restoreAllMocks();
   });
 
   /**
-   * Run the requireAdminAuth middleware and return the mock response spy.
+   * Boot the real adminRouter on an ephemeral HTTP port. pg is mocked so no
+   * database is needed — the indexer status handler degrades gracefully and
+   * still returns 200, which proves a valid admin token reaches the handler.
    */
-  async function runAuth(headers: Record<string, string> = {}): Promise<MockRes & { nextCalled: boolean }> {
-    const { requireAdminAuth } = await import("./auth.js");
-    const { res, status, json } = makeRes();
-    const nextMock = vi.fn();
-    requireAdminAuth(makeReq({ headers }), res, nextMock as NextFunction);
-    return { res, status, json, nextCalled: nextMock.mock.calls.length > 0 };
+  async function bootAdminRouter(): Promise<{
+    baseUrl: string;
+    sign: (sub: string, role: "admin" | "user", ttlSeconds: number) => string;
+  }> {
+    vi.resetModules();
+    vi.doMock("pg", () => ({
+      Pool: vi.fn().mockImplementation(() => ({
+        query: vi.fn().mockRejectedValue(new Error("db unavailable in test")),
+      })),
+    }));
+
+    const { adminRouter } = await import("./index.js");
+    const { getCurrentKey } = await import("../auth/keyStore.js");
+    const key = getCurrentKey();
+    const privPem = key.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+    const sign = (sub: string, role: "admin" | "user", ttlSeconds: number): string =>
+      jwt.sign({ sub, role, kid: key.kid }, privPem, {
+        algorithm: "RS256",
+        expiresIn: ttlSeconds,
+        header: { alg: "RS256", kid: key.kid },
+      });
+
+    const express = (await import("express")).default;
+    const app = express();
+    app.use(express.json());
+    // Mirror production mounting (app.ts: app.use("/admin", adminRouter))
+    app.use("/admin", adminRouter);
+
+    server = http.createServer(app);
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    return { baseUrl: `http://127.0.0.1:${port}`, sign };
   }
 
-  it("blocks all routes with 401 when Authorization header is absent", async () => {
-    const { status, nextCalled } = await runAuth({});
-    expect(status).toHaveBeenCalledWith(401);
-    expect(nextCalled).toBe(false);
+  it("blocks every route with 401 Unauthorized when no token is supplied", async () => {
+    const { baseUrl } = await bootAdminRouter();
+    const res = await fetch(`${baseUrl}/admin/indexer/status`);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthorized" });
   });
 
-  it("blocks all routes with 401 when Basic scheme is used instead of Bearer", async () => {
-    const { status, nextCalled } = await runAuth({ authorization: "Basic dXNlcjpwYXNz" });
-    expect(status).toHaveBeenCalledWith(401);
-    expect(nextCalled).toBe(false);
+  it("blocks every route with 401 TokenExpired when the token is expired", async () => {
+    const { baseUrl, sign } = await bootAdminRouter();
+    const token = sign(ADMIN_ADDR, "admin", -10);
+    const res = await fetch(`${baseUrl}/admin/indexer/status`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "TokenExpired" });
   });
 
-  it("blocks all routes with 403 when Bearer token is incorrect", async () => {
-    const { status, json, nextCalled } = await runAuth({ authorization: "Bearer wrong-secret" });
-    expect(status).toHaveBeenCalledWith(403);
-    expect(json.mock.calls[0][0]).toMatchObject({ error: "Forbidden" });
-    expect(nextCalled).toBe(false);
+  it("blocks every route with 403 when the token role is not admin", async () => {
+    const { baseUrl, sign } = await bootAdminRouter();
+    const token = sign(USER_ADDR, "user", 3600);
+    const res = await fetch(`${baseUrl}/admin/indexer/status`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/Forbidden/);
   });
 
-  it("passes through to the handler when the correct Bearer token is provided", async () => {
-    const { status, nextCalled } = await runAuth({ authorization: `Bearer ${VALID_KEY}` });
-    expect(nextCalled).toBe(true);
-    expect(status).not.toHaveBeenCalled();
+  it("admits a valid admin token and reaches the handler (200)", async () => {
+    const { baseUrl, sign } = await bootAdminRouter();
+    const token = sign(ADMIN_ADDR, "admin", 3600);
+    const res = await fetch(`${baseUrl}/admin/indexer/status`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toHaveProperty("status");
   });
 
-  it("adminRouter exports a Router with the auth middleware applied", async () => {
+  it("adminRouter exports a Router and mounts streams, indexer, webhooks, and backfill", async () => {
+    vi.resetModules();
     const { adminRouter } = await import("./index.js");
-    // The router should be an Express Router (function with `stack` property)
     expect(typeof adminRouter).toBe("function");
     expect(adminRouter).toHaveProperty("stack");
-  });
-
-  it("adminRouter has routes for /streams, /indexer, and /webhooks", async () => {
-    const { adminRouter } = await import("./index.js");
-    const paths = (adminRouter.stack as any[])
-      .filter((layer: any) => layer.regexp)
-      .map((layer: any) => layer.regexp?.toString());
-    // Stack entries include the sub-router mounts
-    expect(paths.length).toBeGreaterThan(0);
+    const paths = (adminRouter.stack as unknown[])
+      .map((layer) => (layer as { regexp?: RegExp }).regexp?.toString())
+      .filter(Boolean);
+    // auth + role guards, 4 sub-router mounts, and the metrics route
+    expect(paths.length).toBeGreaterThanOrEqual(6);
   });
 });

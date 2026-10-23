@@ -1,0 +1,134 @@
+name: API Contract Tests
+
+on:
+  pull_request:
+    paths:
+      - "api/openapi.yaml"
+      - "backend/**"
+      - "scripts/validate-openapi.js"
+      - ".github/workflows/api-contract-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "api/openapi.yaml"
+      - "backend/**"
+      - "scripts/validate-openapi.js"
+      - ".github/workflows/api-contract-tests.yml"
+
+jobs:
+  validate-spec:
+    name: Validate OpenAPI spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install YAML parser
+        run: npm install --no-save --no-audit --no-fund yaml
+
+      - name: Structural validation (paths, operations, error responses, schemas)
+        run: node scripts/validate-openapi.js
+
+      - name: Install Spectral CLI
+        run: npm install -g @stoplight/spectral-cli@6
+
+      - name: Spectral lint
+        run: spectral lint api/openapi.yaml --ruleset .spectral.yaml --fail-severity error
+
+  contract-tests:
+    name: Schemathesis contract tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: vesting_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d vesting_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      # Backend service under test (issue #1006)
+      PORT: "3001"
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/vesting_test
+      REDIS_URL: redis://localhost:6379
+      # Unreachable local endpoints so upstream failures are fast and
+      # deterministic (contract tests assert documented error responses).
+      HORIZON_URL: http://127.0.0.1:19999
+      STELLAR_NETWORK: testnet
+      TESTNET_RPC_URL: http://127.0.0.1:19999
+      NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      VESTING_CONTRACT_ID: CTOKENCONTRACTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      TESTNET_CONTRACT_ID: CTOKENCONTRACTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+      # Lift rate limits so fuzzing traffic is never throttled.
+      RATE_LIMIT_IP_MAX: "1000000"
+      RATE_LIMIT_KEY_MAX: "1000000"
+      RATE_LIMIT_WRITE_MAX: "1000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Docs route tests (Swagger UI + non-production gating)
+        working-directory: backend
+        run: npx vitest run src/routes/docs.test.ts
+
+      - name: Run database migrations
+        working-directory: backend
+        run: npm run migrate
+
+      - name: Start backend server
+        working-directory: backend
+        run: |
+          npm run dev > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            sleep 1
+            if curl -s -o /dev/null http://localhost:3001/docs; then
+              echo "Backend is up"
+              exit 0
+            fi
+          done
+          echo "Backend failed to start:"
+          tail -50 server.log
+          exit 1
+
+      - name: Install Schemathesis
+        run: pip install --no-cache-dir schemathesis==4.32.2
+
+      - name: Run contract tests against the live API
+        run: |
+          schemathesis run api/openapi.yaml \
+            --url http://localhost:3001 \
+            --checks status_code_conformance,response_schema_conformance \
+            --max-examples 50
+
+      - name: Print server log on failure
+        if: failure()
+        working-directory: backend
+        run: tail -100 server.log

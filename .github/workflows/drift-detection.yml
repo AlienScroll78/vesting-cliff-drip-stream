@@ -175,7 +175,12 @@ jobs:
               '',
             ].join('\n');
 
-            let excerpt = plan || '(plan output unavailable)';
+            const planLines = plan ? plan.split('\n') : [];
+            const excerptLines = planLines.slice(0, 100);
+            let excerpt = excerptLines.length > 0 ? excerptLines.join('\n') : '(plan output unavailable)';
+            if (planLines.length > 100) {
+              excerpt += '\n\n... (plan truncated to first 100 lines; full plan attached as artifact)';
+            }
             let body = null;
             for (let attempt = 0; attempt < 12; attempt += 1) {
               const fence = fenceFor(excerpt);
@@ -204,7 +209,10 @@ jobs:
             });
             const managed = open
               .filter((issue) => !issue.pull_request)
-              .filter((issue) => (issue.labels || []).some((label) => label.name === 'drift'))
+              .filter((issue) => {
+                const labelNames = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
+                return labelNames.includes('infrastructure') && labelNames.includes('drift');
+              })
               .filter((issue) => (issue.body || '').includes(marker))
               .sort((a, b) => a.number - b.number);
 
@@ -266,6 +274,10 @@ jobs:
             });
             const managed = open
               .filter((issue) => !issue.pull_request)
+              .filter((issue) => {
+                const labelNames = (issue.labels || []).map((l) => (typeof l === 'string' ? l : l.name));
+                return labelNames.includes('infrastructure') && labelNames.includes('drift');
+              })
               .filter((issue) => (issue.body || '').includes(marker))
               .sort((a, b) => a.number - b.number);
 
@@ -297,6 +309,7 @@ jobs:
         with:
           payload: >
             {
+              "channel": "#ops",
               "text": ":warning: *Terraform drift detected* in *${{ steps.env.outputs.environment }}*.\n*Changes:* ${{ steps.drift.outputs.drift_summary }}\n*Issue:* <${{ steps.drift-issue.outputs.issue_url }}|#${{ steps.drift-issue.outputs.issue_number }}>\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>\n*Full plan:* artifact \`drift-plan-${{ steps.env.outputs.environment }}-${{ github.run_id }}\` on the run page\nFollow the <${{ github.server_url }}/${{ github.repository }}/blob/main/docs/runbooks/drift-reconciliation.md|Drift Reconciliation Runbook>."
             }
         env:
@@ -309,6 +322,7 @@ jobs:
         with:
           payload: >
             {
+              "channel": "#ops",
               "text": ":red_circle: Terraform drift detection *failed* for *${{ steps.env.outputs.environment }}* (status: `${{ steps.drift.outputs.drift_status || 'no output' }}`).\nThis is not a clean result: open drift issues are left open for review.\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.run_id }}>"
             }
         env:

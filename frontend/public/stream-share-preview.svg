@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f2f7f4"/>
+  <path d="M0 0h22v630H0z" fill="#176b60"/>
+  <g fill="none" stroke="#176b60" stroke-width="5">
+    <path d="M852 160h180M852 232h240M852 304h140M852 376h210" opacity=".35"/>
+    <path d="M884 160v144h68V232h68v144h68"/>
+  </g>
+  <circle cx="875" cy="160" r="15" fill="#176b60"/>
+  <circle cx="952" cy="232" r="15" fill="#176b60"/>
+  <circle cx="1020" cy="304" r="15" fill="#176b60"/>
+  <circle cx="1088" cy="376" r="15" fill="#176b60"/>
+  <text x="94" y="226" fill="#526a70" font-family="Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="4">STELLAR VESTING STREAMS</text>
+  <text x="90" y="330" fill="#172b35" font-family="Arial, sans-serif" font-size="72" font-weight="700">A promise,</text>
+  <text x="90" y="412" fill="#172b35" font-family="Arial, sans-serif" font-size="72" font-weight="700">made visible.</text>
+  <text x="94" y="482" fill="#526a70" font-family="Arial, sans-serif" font-size="28">Cliff + drip vesting on Stellar</text>
+</svg>

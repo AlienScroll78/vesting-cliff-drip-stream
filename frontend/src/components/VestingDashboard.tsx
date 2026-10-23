@@ -250,7 +250,7 @@ function TwoStageProgressBar({
 
 // ── Stream card ───────────────────────────────────────────────────────────────
 
-function StreamCard({
+export function StreamCard({
   stream,
   currentLedger,
   onClaim,

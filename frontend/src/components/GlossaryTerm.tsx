@@ -1,63 +1,72 @@
-import React from 'react';
-import { Tooltip } from './Tooltip';
-import { lookupTerm } from '../glossary-tooltips';
+import { useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import { lookupTerm } from "../glossary-tooltips";
+import styles from "./GlossaryTerm.module.css";
 
-const DOCS_BASE = 'docs/glossary.md';
+const GLOSSARY_URL =
+  "https://github.com/olarh0170-netizen/vesting-cliff-drip-stream/blob/main/docs/glossary.md";
 
 export interface GlossaryTermProps {
-  /** The term key — must match a key in GLOSSARY (case-insensitive) */
+  /** The term key — matches a key or canonical label in the glossary. */
   term: string;
   /** Optional custom display label. Defaults to the term's canonical label. */
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
-/**
- * GlossaryTerm
- *
- * Wraps any technical term and surfaces its definition as an accessible tooltip.
- * The tooltip body includes the definition and a link to docs/glossary.md.
- *
- * Usage:
- *   <GlossaryTerm term="cliff" />
- *   <GlossaryTerm term="ledger">current ledger</GlossaryTerm>
- */
 export function GlossaryTerm({ term, children }: GlossaryTermProps) {
   const entry = lookupTerm(term);
+  const [isOpen, setIsOpen] = useState(false);
+  const tooltipId = useId();
+  const wrapperRef = useRef<HTMLSpanElement>(null);
 
-  // If no glossary entry exists, render children (or term) without tooltip
-  if (!entry) {
-    return <>{children ?? term}</>;
+  if (!entry) return <>{children ?? term}</>;
+
+  function handleBlur(event: FocusEvent<HTMLSpanElement>) {
+    if (
+      !(event.relatedTarget instanceof Node) ||
+      !event.currentTarget.contains(event.relatedTarget)
+    ) {
+      setIsOpen(false);
+    }
   }
 
-  const tooltipContent = (
-    <span>
-      <strong style={{ display: 'block', marginBottom: '0.25rem' }}>
-        {entry.label}
-      </strong>
-      {entry.definition}
-      <a
-        href={`${DOCS_BASE}#${entry.anchor}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: 'block',
-          marginTop: '0.4rem',
-          fontSize: '0.78rem',
-          color: '#7eb8f7',
-          pointerEvents: 'auto',
-        }}
-        // Stop tooltip hide on link click
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        Learn more →
-      </a>
-    </span>
-  );
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (event.key === "Escape") setIsOpen(false);
+  }
 
   return (
-    <Tooltip content={tooltipContent}>
-      {children ?? entry.label}
-    </Tooltip>
+    <span
+      ref={wrapperRef}
+      className={styles.wrapper}
+      onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+      onFocus={() => setIsOpen(true)}
+      onBlur={handleBlur}
+    >
+      <button
+        type="button"
+        className={styles.trigger}
+        aria-describedby={isOpen ? tooltipId : undefined}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen(true)}
+        onKeyDown={handleKeyDown}
+      >
+        {children ?? entry.label}
+      </button>
+      {isOpen && (
+        <span id={tooltipId} role="tooltip" className={styles.tooltip}>
+          <strong className={styles.label}>{entry.label}</strong>
+          <span>{entry.definition}</span>
+          <a
+            className={styles.link}
+            href={`${GLOSSARY_URL}#${entry.anchor}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Learn more
+          </a>
+        </span>
+      )}
+    </span>
   );
 }
 

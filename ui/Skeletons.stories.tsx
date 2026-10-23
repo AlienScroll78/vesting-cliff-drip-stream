@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { expect, within } from "@storybook/test";
-import React from "react";
+import React, { useState } from "react";
 import {
   AnalyticsSummarySkeleton,
   DashboardSkeleton,
+  DashboardStatsSkeleton,
   FormSkeleton,
   NotificationListSkeleton,
   Skeleton,
@@ -12,9 +13,13 @@ import {
   StreamDetailSkeleton,
   StreamExplorerSkeleton,
   StreamListSkeleton,
+  StreamTableRowSkeleton,
   StatsRowSkeleton,
   TransactionHistorySkeleton,
 } from "../frontend/src/components/Skeletons";
+import { TxProgress } from "../frontend/src/components/TxProgress";
+import { NavLoadingBar } from "../frontend/src/components/NavLoadingBar";
+import { OptimisticStreamCard } from "../frontend/src/components/OptimisticStreamCard";
 
 const meta: Meta = {
   title: "Components/Skeletons",
@@ -389,3 +394,246 @@ export const AllPages: Story = {
   ),
 };
 
+
+// ─── DashboardStatsSkeleton ───────────────────────────────────────────────────
+
+export const DashboardStats: StoryObj = {
+  name: "DashboardStats skeleton",
+  parameters: {
+    layout: "padded",
+    docs: {
+      description: {
+        story:
+          "Top-of-dashboard stats row (4 cards). Used on both the recipient and sponsor dashboards while metrics are loading.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <DashboardStatsSkeleton count={4} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const region = canvas.getByRole("generic", { name: /loading dashboard stats/i });
+    expect(region).toHaveAttribute("aria-busy", "true");
+    expect(region.querySelectorAll('[data-testid="dashboard-stat-skeleton-card"]').length).toBe(4);
+  },
+};
+
+// ─── StreamTableRowSkeleton ───────────────────────────────────────────────────
+
+export const StreamTableRow: StoryObj = {
+  name: "StreamTableRow skeleton",
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Single 5-column stream table row skeleton. Compose several inside a container to build the full table loading state.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ maxWidth: 640, margin: "0 auto", border: "1px solid #e3eaee", borderRadius: "0.5rem", overflow: "hidden" }}>
+      {[1, 2, 3].map((i) => (
+        <StreamTableRowSkeleton key={i} />
+      ))}
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const rows = canvasElement.querySelectorAll('[data-testid="stream-table-row-skeleton"]');
+    expect(rows.length).toBe(3);
+    rows.forEach((row) => expect(row).toHaveAttribute("aria-hidden", "true"));
+  },
+};
+
+// ─── TxProgress ───────────────────────────────────────────────────────────────
+
+export const TxProgressSigned: StoryObj = {
+  name: "TxProgress / signed (step 1)",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story: "User's wallet has signed the transaction. Steps 2–4 are still pending.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 340, padding: "1.5rem", border: "1px solid #e3eaee", borderRadius: "0.75rem", background: "#fff" }}>
+      <TxProgress currentStep="signed" />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="tx-step-signed"][data-active]')).toBeInTheDocument();
+    expect(canvasElement.querySelector('[data-testid="tx-step-submitted"][data-pending]')).toBeInTheDocument();
+  },
+};
+
+export const TxProgressConfirming: StoryObj = {
+  name: "TxProgress / confirming (step 3)",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story: "Signed and submitted steps are done; the transaction is being confirmed by the ledger.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 340, padding: "1.5rem", border: "1px solid #e3eaee", borderRadius: "0.75rem", background: "#fff" }}>
+      <TxProgress currentStep="confirming" />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="tx-step-signed"][data-done]')).toBeInTheDocument();
+    expect(canvasElement.querySelector('[data-testid="tx-step-submitted"][data-done]')).toBeInTheDocument();
+    expect(canvasElement.querySelector('[data-testid="tx-step-confirming"][data-active]')).toBeInTheDocument();
+  },
+};
+
+export const TxProgressConfirmed: StoryObj = {
+  name: "TxProgress / confirmed (step 4)",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story: "All steps complete. The transaction hash is shown as a link to Stellar Expert.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 340, padding: "1.5rem", border: "1px solid #e3eaee", borderRadius: "0.75rem", background: "#fff" }}>
+      <TxProgress
+        currentStep="confirmed"
+        txHash="ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890"
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="tx-step-confirmed"][data-active]')).toBeInTheDocument();
+    expect(canvasElement.querySelector('[data-testid="tx-progress-hash-link"]')).toBeInTheDocument();
+  },
+};
+
+export const TxProgressFailed: StoryObj = {
+  name: "TxProgress / failed at confirming",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story: "Transaction failed during ledger confirmation. The failing step is shown in the error state.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 340, padding: "1.5rem", border: "1px solid #e3eaee", borderRadius: "0.75rem", background: "#fff" }}>
+      <TxProgress currentStep="confirming" failed />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="tx-step-confirming"][data-failed]')).toBeInTheDocument();
+  },
+};
+
+// ─── NavLoadingBar ────────────────────────────────────────────────────────────
+
+export const NavLoadingBarVisible: StoryObj = {
+  name: "NavLoadingBar / visible",
+  parameters: {
+    layout: "fullscreen",
+    docs: {
+      description: {
+        story:
+          "The 3 px top bar that animates left→right during route transitions. Render once at the app root, controlled by your router's navigation state.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ height: 200, background: "#f8fafc", paddingTop: "2rem", textAlign: "center", fontFamily: "sans-serif", color: "#475569", fontSize: 14 }}>
+      <NavLoadingBar visible />
+      <p>Page content would be here. The bar is fixed to the very top of the viewport.</p>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const bar = canvasElement.querySelector('[data-testid="nav-loading-bar"]');
+    expect(bar).toBeInTheDocument();
+    expect(bar).toHaveAttribute("role", "progressbar");
+  },
+};
+
+export const NavLoadingBarHidden: StoryObj = {
+  name: "NavLoadingBar / hidden (visible=false)",
+  parameters: {
+    layout: "fullscreen",
+    docs: {
+      description: {
+        story: "When navigation is complete, pass visible=false. The bar is removed from the DOM entirely — no invisible element left behind.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ height: 200, background: "#f8fafc", paddingTop: "2rem", textAlign: "center", fontFamily: "sans-serif", color: "#475569", fontSize: 14 }}>
+      <NavLoadingBar visible={false} />
+      <p>Navigation complete — no loading bar in the DOM.</p>
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="nav-loading-bar"]')).not.toBeInTheDocument();
+  },
+};
+
+// ─── OptimisticStreamCard ─────────────────────────────────────────────────────
+
+const address = "GABCDE1234567890ABCDE1234567890ABCDE1234567890ABCDE12345678";
+
+export const OptimisticStreamCardFull: StoryObj = {
+  name: "OptimisticStreamCard / all fields",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story:
+          "Shown immediately after the user submits a 'create stream' transaction — before the ledger confirms. Dashed border and pulsing badge signal the pending state. Replace with the real StreamCard once confirmed.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 380 }}>
+      <OptimisticStreamCard
+        recipient={address}
+        token="USDC"
+        rate={10}
+        cliffDays={30}
+        totalDays={365}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const card = canvasElement.querySelector('[data-testid="optimistic-stream-card"]');
+    expect(card).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-busy", "true");
+    expect(canvasElement.querySelector('[role="progressbar"]')).toBeInTheDocument();
+  },
+};
+
+export const OptimisticStreamCardMinimal: StoryObj = {
+  name: "OptimisticStreamCard / address only",
+  parameters: {
+    layout: "centered",
+    docs: {
+      description: {
+        story:
+          "Minimum viable optimistic card — only the recipient address is known at submission time. Unknown fields show em-dashes.",
+      },
+    },
+  },
+  render: () => (
+    <div style={{ width: 380 }}>
+      <OptimisticStreamCard recipient={address} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    expect(canvasElement.querySelector('[data-testid="optimistic-stream-card"]')).toBeInTheDocument();
+  },
+};

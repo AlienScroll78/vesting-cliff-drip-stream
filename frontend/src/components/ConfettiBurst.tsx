@@ -2,7 +2,7 @@
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 
-const DURATION_MS = 1100;
+const DURATION_MS = 900;
 const PARTICLE_COUNT = 48;
 const COLORS = ["#7C3AED", "#4F46E5", "#06B6D4", "#10B981", "#F59E0B"];
 
@@ -39,6 +39,8 @@ interface Props {
   active: boolean;
   /** Called once the burst has finished (or immediately if reduced motion / inactive). */
   onDone: () => void;
+  /** Optional immediate dismissal handler (defaults to onDone). */
+  onDismiss?: () => void;
   /** Screen-space origin of the burst. Defaults to viewport center. */
   originX?: number;
   originY?: number;
@@ -49,7 +51,7 @@ interface Props {
  * fixed, pointer-events-none canvas and cleans itself up after ~1.1s.
  * Renders nothing under prefers-reduced-motion (calls onDone immediately).
  */
-export function ConfettiBurst({ active, onDone, originX, originY }: Props) {
+export function ConfettiBurst({ active, onDone, onDismiss, originX, originY }: Props) {
   const reduced = useReducedMotion();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const onDoneRef = useRef(onDone);
@@ -117,17 +119,39 @@ export function ConfettiBurst({ active, onDone, originX, originY }: Props) {
   if (!active || reduced) return null;
 
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        width: "100vw",
-        height: "100vh",
-        pointerEvents: "none",
-        zIndex: 2000,
-      }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 2000,
+        }}
+      />
+      <button
+        type="button"
+        aria-label="Dismiss celebration"
+        onClick={onDismiss ?? onDone}
+        style={{
+          position: "fixed",
+          top: "1rem",
+          right: "1rem",
+          zIndex: 2001,
+          minHeight: 44,
+          padding: "0.5rem 0.75rem",
+          border: "1px solid rgba(255,255,255,0.65)",
+          borderRadius: "9999px",
+          background: "rgba(17,24,39,0.82)",
+          color: "#fff",
+          cursor: "pointer",
+        }}
+      >
+        Dismiss
+      </button>
+    </>
   );
 }

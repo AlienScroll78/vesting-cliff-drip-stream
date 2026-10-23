@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 
-const DURATION_MS = 500;
+const DURATION_MS = 300;
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);

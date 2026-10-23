@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.BASE_URL ?? "http://localhost:3000";
+const baseOrigin = new URL(baseURL).origin;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -7,8 +10,20 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: process.env.BASE_URL ?? "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: baseOrigin,
+          localStorage: [
+            { name: "vesting_intro_complete", value: "true" },
+            { name: "vesting_onboarding_complete", value: "true" },
+          ],
+        },
+      ],
+    },
   },
   projects: [
     // ── Chromium with Freighter extension (requires real extension & seed) ──
@@ -42,6 +57,7 @@ export default defineConfig({
         "**/claim-sheet.spec.ts",
         "**/badges.spec.ts",
         "**/create-wizard.spec.ts",
+        "**/stream-creation-flow.spec.ts",
       ],
       use: {
         ...devices["Desktop Chrome"],
@@ -53,6 +69,14 @@ export default defineConfig({
           permissions: ["clipboard-read", "clipboard-write"],
         },
       },
+    },
+
+    // ── Firefox without extension – cross-browser coverage for the ─────────
+    // dedicated flow specs (creation + claim). Mocked wallet only.
+    {
+      name: "firefox-mock",
+      testMatch: ["**/stream-creation-flow.spec.ts"],
+      use: { ...devices["Desktop Firefox"] },
     },
 
     // ── Mobile viewports (no extension needed – UI tests only) ──────────────
@@ -68,7 +92,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // Pin the dev server to the port the tests expect; without --port/--strictPort
+    // Vite falls back to 5173+ and the webServer wait times out.
+    command: "npm run dev -- --port 3000 --strictPort",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

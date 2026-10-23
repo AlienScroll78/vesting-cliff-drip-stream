@@ -7,11 +7,12 @@
  * transaction signing → optimistic status update with rollback on failure.
  */
 import { useState, useCallback, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { useWallet } from "@/contexts/WalletContext";
 import { VestingStream } from "@/types";
 import { AggregateStats } from "@/components/AggregateStats";
 import { SponsorStreamTable } from "@/components/SponsorStreamTable";
+import { CancelStreamModal } from "@/components/CancelStreamModal";
+import { ClawbackStreamModal } from "@/components/ClawbackStreamModal";
 import { CreateStreamWizard } from "@/wizard/CreateStreamWizard";
 import { generateStreamsCsv, downloadCsv } from "@/utils/exportCsv";
 import { SponsorStreamListEmpty } from "@/components/EmptyStates";
@@ -29,7 +30,6 @@ const PAGE_SIZE = 25;
  * - Empty state with CTA
  */
 export default function SponsorPage() {
-  const { t } = useTranslation();
   const { address } = useWallet();
 
   const [streams, setStreams] = useState<VestingStream[]>([]);
@@ -38,6 +38,9 @@ export default function SponsorPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [cancelTargetStream, setCancelTargetStream] = useState<VestingStream | null>(null);
+  const [clawbackTargetStream, setClawbackTargetStream] = useState<VestingStream | null>(null);
+  const [clawbackCompleted, setClawbackCompleted] = useState(false);
 
   // Mock data - replace with API call
   const MOCK_SPONSOR_STREAMS: VestingStream[] = [
@@ -124,10 +127,92 @@ export default function SponsorPage() {
   }, [streams]);
 
   const handleCancelStream = useCallback((streamId: string) => {
-    // TODO: Implement cancel stream action
-    console.log("Cancel stream:", streamId);
-    alert(`Implement cancel stream for ${streamId}`);
+    setCancelTargetStream(streams.find((stream) => stream.id === streamId) ?? null);
+  }, [streams]);
+
+  const handleCancelSuccess = useCallback((streamId: string) => {
+    setStreams((current) =>
+      current.map((stream) =>
+        stream.id === streamId ? { ...stream, status: "cancelled" } : stream
+      )
+    );
+    setCancelTargetStream(null);
   }, []);
+
+  const handleClawbackStream = useCallback((streamId: string) => {
+    setClawbackTargetStream(streams.find((stream) => stream.id === streamId) ?? null);
+    setClawbackCompleted(false);
+  }, [streams]);
+
+  const submitClawback = useCallback(async (
+    stream: VestingStream,
+    reason: string,
+  ): Promise<number> => {
+    if (!address) throw new Error("Connect the sponsoring wallet to continue.");
+    if (stream.streamId === undefined) {
+      throw new Error("The on-chain stream identifier is unavailable. Refresh the stream data and try again.");
+    }
+
+    const response = await fetch(
+      `/api/streams/${encodeURIComponent(stream.recipient)}/build-clawback-tx`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sponsor: address,
+          stream_id: stream.streamId,
+          reason,
+        }),
+      },
+    );
+    const body = await response.json().catch(() => ({})) as {
+      error?: string;
+      transaction_xdr?: string;
+      amount?: number | string;
+    };
+    if (!response.ok || !body.transaction_xdr || body.amount === undefined) {
+      throw new Error(body.error ?? `Unable to build clawback transaction (${response.status}).`);
+    }
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error("The clawback service returned an invalid recovered amount.");
+    }
+
+    const { signTransaction } = await import("@stellar/freighter-api");
+    const signed = await signTransaction(body.transaction_xdr, {
+      networkPassphrase:
+        process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE ??
+        "Test SDF Network ; September 2015",
+    });
+    if ("error" in signed && signed.error) throw new Error(String(signed.error));
+    const signedXdr =
+      "signedTxXdr" in signed
+        ? signed.signedTxXdr
+        : (signed as { signedXdr?: string }).signedXdr ?? body.transaction_xdr;
+    const submitResponse = await fetch("/api/tx/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ xdr: signedXdr }),
+    });
+    const submitBody = await submitResponse.json().catch(() => ({})) as { error?: string };
+    if (!submitResponse.ok) {
+      throw new Error(submitBody.error ?? `Clawback transaction failed (${submitResponse.status}).`);
+    }
+
+    setClawbackCompleted(true);
+    return amount;
+  }, [address]);
+
+  const handleClawbackClose = useCallback(() => {
+    if (clawbackCompleted && clawbackTargetStream) {
+      setStreams((current) =>
+        current.filter((stream) => stream.id !== clawbackTargetStream.id)
+      );
+      setTotal((current) => Math.max(current - 1, 0));
+    }
+    setClawbackCompleted(false);
+    setClawbackTargetStream(null);
+  }, [clawbackCompleted, clawbackTargetStream]);
 
   const handleViewDetails = useCallback((streamId: string) => {
     // TODO: Navigate to stream details
@@ -186,15 +271,22 @@ export default function SponsorPage() {
         isLoading={loading}
         onPageChange={setPage}
         onCancelStream={handleCancelStream}
+        onClawbackStream={handleClawbackStream}
         onViewDetails={handleViewDetails}
       />
 
-      {/* Cancel stream confirmation modal — rendered portal-style at page root */}
       {cancelTargetStream && (
         <CancelStreamModal
           stream={cancelTargetStream}
           onSuccess={handleCancelSuccess}
-          onClose={handleCancelClose}
+          onClose={() => setCancelTargetStream(null)}
+        />
+      )}
+      {clawbackTargetStream && (
+        <ClawbackStreamModal
+          stream={clawbackTargetStream}
+          onClawback={submitClawback}
+          onClose={handleClawbackClose}
         />
       )}
     </div>

@@ -1,4 +1,6 @@
 "use client";
+import { useState, type ChangeEvent, type FocusEvent } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { useEffect, useState, type ChangeEvent, type FocusEvent, type FormEvent, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { useWallet } from "@/contexts/WalletContext";
@@ -176,8 +178,24 @@ interface TxResult {
   hash: string;
 }
 
+/**
+ * Test hook (E2E): when `window.__mockCreateStreamError` is set to a contract
+ * error code, the next submission rejects with a message containing that code
+ * so the error-toast path can be exercised without a live RPC node.
+ */
+declare global {
+  interface Window {
+    __mockCreateStreamError?: number;
+  }
+}
+
 async function submitCreateStream(_params: CreateStreamRequest): Promise<TxResult> {
   await new Promise((resolve) => setTimeout(resolve, 1500));
+  const mockErrorCode =
+    typeof window !== "undefined" ? window.__mockCreateStreamError : undefined;
+  if (mockErrorCode) {
+    throw new Error(`Simulated RPC error: code ${mockErrorCode}`);
+  }
   return { hash: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("") };
 }
 
@@ -510,7 +528,13 @@ export function StreamCreateForm({ onSuccess }: Props) {
   );
 }
 
-interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
+export function StreamCreateForm(props: Props) {
+  return <ErrorBoundary><StreamCreateFormContent {...props} /></ErrorBoundary>;
+}
+
+// ── Field sub-component ───────────────────────────────────────────────────────
+
+interface FieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   id: string;
   label: string;
   error?: string;
