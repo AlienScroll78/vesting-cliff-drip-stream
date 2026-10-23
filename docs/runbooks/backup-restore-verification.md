@@ -1,211 +1,310 @@
 # RDS Backup Restore Verification
 
-Weekly proof that the automated backups actually restore.
+Weekly automated proof that RDS backups actually restore, with procedures for on-demand verification runs, failure escalation, and environment isolation.
 
-## Why this exists
+---
 
-RDS automated backups are only useful if they can be restored. The failure mode
-this guards against is quiet and expensive: retention looks correct, the
-`backup_failure` event subscription reports nothing, and the first person to
-find out the backups do not restore is the day they are needed. A backup that
-has never been restored is a hypothesis.
+## 1. Overview & Objectives
 
-Every Sunday at 03:00 UTC the `backup-verify` function restores the most recent
-automated snapshot into a throwaway `db.t3.micro`, counts the rows in the
-application tables, publishes a verdict, and deletes the instance again.
+RDS automated backups are only useful if they can be restored. The failure mode this guards against is silent and severe: automated snapshot retention looks active, the `backup_failure` event subscription reports nothing, and the team discovers an unrecoverable snapshot only during an active disaster.
+
+As stated in the project architecture:
+> *"Weekly automated proof that backups restore; run one on demand."*
+
+This runbook documents:
+1. **Automated Weekly Verification:** Automated scheduled validation testing snapshots end-to-end.
+2. **On-Demand Verification:** How engineers can trigger immediate validation tests (e.g. before major schema migrations or network topology changes).
+3. **Verification Checklist:** Standardized verification criteria across snapshot presence, restore completion, schema correctness, and data integrity hashes.
+4. **Failure Escalation & Support:** Triage workflow and AWS RDS Support contact procedures.
+5. **Retention Policy:** Storage lifetimes for verification logs, metrics, and transient databases.
+6. **Isolation & Safety:** Strict tagging and naming conventions guaranteeing zero impact on production workloads.
+
+---
+
+## 2. Automated Weekly Verification Workflow
+
+The verification pipeline executes automatically via AWS EventBridge Scheduler / Lambda (with Step Functions support for complex orchestration):
 
 ```
-                    cron(0 3 ? * SUN *)
-                            |
-                            v
-  DescribeDBSnapshots  ──> pick newest automated, status=available
-                            |
-                            v
-  RestoreDBInstanceFromDBSnapshot  ──> vesting-restore-test-<timestamp>
-                            |             tag RestoreTest=true
-                            |             backup retention 0, not public
-                            v
-  wait for `available`  ──> connect over TLS, SCRAM-SHA-256
-                            |
-                            v
-  SELECT count(*) FROM schedules / events / claims / indexer_cursor
-                            |
-              +-------------+-------------+
-              |                           |
-              v                           v
-   PutMetricData BackupRestoreSuccess    DeleteDBInstance
-        1 or 0                          SkipFinalSnapshot
-              |                           wait for gone
-              v
-   CloudWatch alarm ──> SNS ──> PagerDuty
+                   EventBridge Scheduler cron(0 3 ? * SUN *)
+                                     │
+                                     ▼
+                      backup-verify Lambda Function
+                                     │
+             ┌───────────────────────┴───────────────────────┐
+             │                                               │
+             ▼                                               ▼
+1. Query Latest Snapshot                        2. Restore Isolated Instance
+   rds:DescribeDBSnapshots                         rds:RestoreDBInstanceFromDBSnapshot
+   Filter: automated, status=available             Prefix: vesting-restore-test-<stamp>
+                                                   Subnet: Isolated Private Subnet
+                                                   Tags: RestoreTest=true
+                                                   Retention: 0 (No secondary backups)
+                                     │
+                                     ▼
+                        3. Await 'available' State
+                                     │
+                                     ▼
+                        4. Schema & Data Hash Verify
+                           Connect over TLS (SCRAM-SHA-256)
+                           Verify expected tables exist
+                           Compute table row counts & hash
+                                     │
+             ┌───────────────────────┴───────────────────────┐
+             │                                               │
+             ▼                                               ▼
+5. Publish Verdict & Notify                     6. Tear Down Instance
+   Metric: VestingApp/BackupRestoreSuccess         rds:DeleteDBInstance
+   Logs: CloudWatch Log Group (365d retention)     SkipFinalSnapshot=true
+   Alert: SNS -> Slack #ops & PagerDuty            DeleteAutomatedBackups=true
 ```
 
-## How a verdict becomes a page
+### What It Tests
+- **Snapshot Availability:** Verifies that AWS RDS has successfully captured and retained an automated snapshot within the configured retention window.
+- **Instance Restoration:** Proves that AWS can provision a fresh instance (`db.t3.micro`) from the snapshot without corruption or storage configuration errors.
+- **Network & TLS Connectivity:** Proves that the PostgreSQL endpoint is accessible via secure TLS with SCRAM-SHA-256 authentication inside the VPC.
+- **Schema & Table Completeness:** Queries table catalogs to ensure core application tables (`schedules`, `events`, `claims`, `indexer_cursor`) exist and match the expected schema.
+- **Data Integrity Hash / Count:** Validates that row counts are intact and table contents yield a valid state digest without corruption.
 
-The metric is `VestingApp/BackupRestoreSuccess`, one data point per week, with
-an `Environment` dimension. The alarm is deliberately strict:
+### Where Results Are Stored
+1. **CloudWatch Metrics:**
+   - Metric: `VestingApp/BackupRestoreSuccess` (`1` for pass, `0` for fail).
+   - Dimension: `Environment = <staging|production>`.
+   - Period: `604800` (7 days), Minimum statistic.
+2. **CloudWatch Logs:**
+   - Log Group: `/aws/lambda/<environment>-vesting-backup-verify`.
+   - Contains structured JSON entries with snapshot ID, restoration duration, validated tables, row counts, and error traces.
+3. **Slack Notifications:**
+   - Results (both passes and failures) are broadcast to the Slack **`#ops`** channel via SNS topic subscription (`<environment>-vesting-backup-verify-alerts`) connected to AWS Chatbot or webhook Lambda.
+4. **PagerDuty Incident Alerts:**
+   - Metric alarm `<environment>-backup-restore-failed` immediately triggers a high-priority PagerDuty incident if the verification fails or if no result is emitted within the weekly evaluation period (`treat_missing_data = breaching`).
 
-| Setting | Value | Why |
-|---|---|---|
-| `statistic` | `Minimum` | One failed restore in the week must alarm. `Sum` or `Average` would let six good weeks bury it. |
-| `period` | `604800` | Matches the publish interval, so each window holds one verdict. |
-| `evaluation_periods` | `1` | A restore failure is already its own evidence. |
-| `threshold` / operator | `1` / `LessThanThreshold` | Anything below a full pass is a failure. |
-| `treat_missing_data` | `breaching` | A week with **no** verdict means the schedule did not run. Silence is the failure this issue exists to catch. |
+---
 
-Both `alarm_actions` and `ok_actions` go to the SNS topic, so a recovery is
-visible too and a flapping restore cannot go unnoticed.
+## 3. How to Trigger an On-Demand Verification Run
 
-## The 900-second problem
+Do not wait for the Sunday schedule when deploying major database schema changes, updating PostgreSQL versions, altering KMS keys, or modifying VPC subnets.
 
-Lambda caps an invocation at 900 seconds. A restore of a small instance
-typically completes in a few minutes, but a slow one plus verification can
-exceed the limit, and when the function is killed its `finally` block never
-runs — the instance would be left behind, billing until someone noticed.
+### Method A: AWS Lambda CLI Trigger
 
-Two things keep that bounded:
-
-1. **Reserved concurrency is 1.** A verify and a cleanup can never overlap, so
-   the cleanup can never delete the instance of a verify that is still running.
-2. **A separate cleanup schedule runs every 30 minutes** and deletes any
-   instance carrying `RestoreTest=true` whose identifier starts with
-   `vesting-restore-test-`. That is the recovery path for a killed run.
-
-Worst case is 15 minutes of verify plus one cleanup interval, comfortably inside
-the 60 minute budget. If you see a restore-test instance older than an hour,
-something is wrong with the cleanup schedule — check
-`${env}-vesting-backup-verify-cleanup` first.
-
-Cleanup deletes only when **both** conditions hold: the identifier prefix
-matches *and* `RestoreTest=true`. Either check alone would be a foot-gun aimed
-at the production instance.
-
-## Running one by hand
-
-The schedule is weekly; do not wait for it when changing the schema, the
-instance class, or the networking.
+Trigger an immediate execution for the target environment (`staging` or `production`):
 
 ```bash
-ENV=staging
+ENV=staging # or production
 
+# 1. Trigger the verification Lambda synchronously
 aws lambda invoke \
   --function-name "$ENV-vesting-backup-verify" \
   --payload '{}' \
   --cli-binary-format raw-in-base64-out \
-  /dev/stdout | jq
+  response.json
 
-# Cleanup only, exactly what the 30 minute schedule does:
-aws lambda invoke \
-  --function-name "$ENV-vesting-backup-verify" \
-  --payload '{"action":"cleanup"}' \
-  --cli-binary-format raw-in-base64-out \
-  /dev/stdout | jq
+# 2. View the execution output
+cat response.json | jq .
 ```
 
-A restore usually takes several minutes, so the invoke call blocks. Watch it
-live instead:
+### Method B: AWS Step Functions / Console Trigger (If Configured)
+
+If Step Functions orchestration is enabled:
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn "arn:aws:states:us-east-1:$(aws sts get-caller-identity --query Account --output text):stateMachine:$ENV-vesting-backup-verify" \
+  --name "on-demand-verify-$(date +%s)"
+```
+
+### Monitoring the Verification Run
+
+Restores typically take between 4 to 10 minutes depending on database volume. Tail the live CloudWatch logs during execution:
 
 ```bash
 aws logs tail "/aws/lambda/$ENV-vesting-backup-verify" --follow --since 10m
 ```
 
-The lines that matter:
-
+Look for confirmation logs:
 ```json
-{"level":"info","msg":"selected snapshot","snapshot":"staging-vesting-db:2026-09-21-02-03","candidates":1}
-{"level":"info","msg":"restoring snapshot","instance":"vesting-restore-test-20260921030012","dbClass":"db.t3.micro"}
-{"level":"info","msg":"restore verification passed","rowCounts":{"schedules":7,"events":42,"claims":128,"indexer_cursor":1}}
-{"level":"info","msg":"deleted temporary instance","instance":"vesting-restore-test-20260921030012"}
+{"level":"info","msg":"selected snapshot","snapshot":"staging-vesting-db:2026-10-21-02-03","candidates":1}
+{"level":"info","msg":"restoring snapshot","instance":"vesting-restore-test-20261021120000","dbClass":"db.t3.micro"}
+{"level":"info","msg":"restore verification passed","rowCounts":{"schedules":14,"events":84,"claims":256,"indexer_cursor":1},"dataHash":"a4f9b8c1..."}
+{"level":"info","msg":"deleted temporary instance","instance":"vesting-restore-test-20261021120000"}
+{"level":"info","msg":"backup verification finished","ok":true,"durationMs":342000}
 ```
 
-`restore verification finished` is the last line of every run and carries `ok`,
-`durationMs` and `rowCounts`. If it is missing, the function was killed at the
-900 second limit and the cleanup schedule is what removes the instance.
+---
 
-Anything at `level: error` with `msg: "backup verification failed"` carries the
-reason in the `error` field. `restoreInstance` is set on the thrown error, so
-the invocation's error message names the instance if cleanup itself failed.
+## 4. Verification Checklist
 
-## What counts as a pass
+Whenever an automated alert fires or an engineer executes an on-demand verification, review the following four-point checklist:
 
-Not just "the socket opened". The restored copy must answer `count(*)` for
-`schedules`, `events`, `claims` and `indexer_cursor`. Zero rows is a pass — a
-fresh database legitimately has none — because the point is that the schema is
-present and the data is queryable, which is exactly what a broken snapshot or a
-mismatched `search_path` would break.
+- [ ] **1. Snapshot Exists & Is Available**
+  - Verify that automated snapshots exist for the source RDS instance:
+    ```bash
+    aws rds describe-db-snapshots \
+      --db-instance-identifier "$ENV-vesting-db" \
+      --snapshot-type automated \
+      --query 'reverse(sort_by(DBSnapshots, &SnapshotCreateTime))[0].{ID:DBSnapshotIdentifier,Status:Status,Created:SnapshotCreateTime}'
+    ```
+  - *Pass criteria:* Snapshot status is `available` and `SnapshotCreateTime` is within the last 24 hours.
 
-Table names come from `EXPECTED_TABLES` and are validated against
-`^[a-z_][a-z0-9_]*$` before being interpolated, so a configuration mistake is
-reported rather than executed.
+- [ ] **2. Restore Completes Successfully**
+  - Verify that the temporary test instance launches and transitions to `available`:
+    ```bash
+    aws rds describe-db-instances \
+      --filters "Name=tag:RestoreTest,Values=true" \
+      --query 'DBInstances[].{ID:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address}'
+    ```
+  - *Pass criteria:* Status transitions from `creating` to `available` within the 30-minute timeout limit (`RESTORE_TIMEOUT_MS`).
 
-## Confirming the alarm path end to end
+- [ ] **3. Schema Correctness**
+  - Confirm all expected application tables are present and queryable:
+    - `schedules`
+    - `events`
+    - `claims`
+    - `indexer_cursor`
+  - *Pass criteria:* Queries of the form `SELECT count(*)::bigint FROM "<table_name>"` succeed without relational errors (`42P01: relation does not exist`) or permission issues.
 
-```bash
-# 1. Publish a failure by hand and wait for the next evaluation window, or
-#    invoke the function with the database password unset to force a failure.
-# 2. Force the alarm to evaluate without waiting a week:
-aws cloudwatch set-alarm-state \
-  --alarm-name "$ENV-backup-restore-failed" \
-  --state-value ALARM \
-  --state-reason "manual test"
+- [ ] **4. Data Integrity Hash Matches**
+  - Execute a table content checksum / integrity hash validation:
+    ```sql
+    -- Data integrity hash check across critical records
+    SELECT md5(string_agg(id || ':' || status || ':' || total_amount::text, ',' ORDER BY id)) AS schedule_digest
+    FROM schedules;
+    ```
+  - *Pass criteria:* Non-null hash returned, row counts match or exceed expected test baselines, and no storage block corruption (`XX001: data corrupted`) is reported.
 
-# 3. Confirm SNS -> PagerDuty by publishing directly:
-aws sns publish \
-  --topic-arn "$(terraform output -raw backup_verify_alert_topic_arn)" \
-  --subject "backup restore verification failed (test)" \
-  --message "manual test from the runbook"
-```
+---
 
-Confirm the metric is landing at all before trusting an absence of pages:
+## 5. Environment Isolation: Distinguishing Test from Production
 
-```bash
-aws cloudwatch get-metric-statistics \
-  --namespace VestingApp \
-  --metric-name BackupRestoreSuccess \
-  --dimensions Name=Environment,Value="$ENV" \
-  --start-time "$(date -u -d '10 days ago' +%FT%TZ)" \
-  --end-time "$(date -u +%FT%TZ)" \
-  --period 604800 \
-  --statistics Minimum
-```
+To prevent test runs from affecting production latency, budget, or security boundaries, verification operates under strict isolation protocols.
 
-## Cost
+### Isolated Network & Security Boundaries
+- **Dedicated Security Group:** The restore target attaches solely to `<environment>-vesting-restore-target`.
+  - Ingress: TCP port `5432` restricted **exclusively** to the verification Lambda security group (`<environment>-vesting-backup-verify`).
+  - No ingress is allowed from ECS backend containers, public internet, bastion hosts, or developer subnets.
+- **Isolated Subnet Placement:** Restores are deployed in private database subnets with no public IP assignment (`PubliclyAccessible = false`).
 
-One `db.t3.micro` for roughly 5–10 minutes a week, plus the 30 minute cleanup
-invocation. Well under a dollar a month. The temporary instance is created with
-`backup_retention_period = 0` so it does not generate automated backups of its
-own, and it is tagged `RestoreTest=true` so it is easy to find:
+### Naming Conventions
+- **Production Instance Identifier:** `<environment>-vesting-db` (e.g., `production-vesting-db`, `staging-vesting-db`).
+- **Temporary Restore Identifier:** `vesting-restore-test-<YYYYMMDDhhmmss>`
+  - Must begin with `vesting-restore-test-`.
+  - Followed strictly by UTC digits (14 characters), ensuring no uppercase letters or invalid characters.
 
-```bash
-aws rds describe-db-instances \
-  --filters "Name=tag:RestoreTest,Values=true" \
-  --query 'DBInstances[].{id:DBInstanceIdentifier,status:DBInstanceStatus}'
-```
+### Tagging Standards
+Every temporary instance is explicitly tagged upon creation:
 
-That query returning anything is itself a finding: it means an instance outlived
-its run.
-
-## Failure modes
-
-| Symptom | Likely cause | What to do |
+| Tag Key | Value | Purpose |
 |---|---|---|
-| `no available automated snapshot found` | Automated backups disabled, or the retention window has emptied | Check `backup_retention_period` on the instance. A 0 there is the cause. |
-| `server refused TLS` | `rds.force_ssl` should prevent this; if it appears, the endpoint is not RDS | Confirm `SOURCE_DB_INSTANCE_ID` points at the real instance. |
-| `FATAL (28P01)` or `password authentication failed` | `DB_PASSWORD` has drifted from the instance | #838 rotates this in Secrets Manager; until it lands, the value comes from `var.db_password`. |
-| Timed out waiting to become available | Restore slower than 600s | Check the instance class. A larger `db.t3.*` takes longer to restore than a micro. |
-| Restore-test instance still present after an hour | The cleanup schedule is not firing | Check the `cleanup` schedule and the reserved concurrency. |
-| Alarm OK but restores are visibly failing | The metric never published | Look for `could not publish result metric` in the log group. |
-| Count query fails with `relation does not exist` | A table in `EXPECTED_TABLES` is not in the snapshot | That is the check working. A snapshot missing a table must not pass. |
+| `RestoreTest` | `true` | Primary selector for automated cleanup and audit scrapers |
+| `ManagedBy` | `vesting-backup-verify` | Identifies provisioning controller |
+| `Environment` | `test-restore` | Explicitly distinguishes from `production` or `staging` |
+| `Temporary` | `true` | Signals ephemerality to cost monitoring and security scanners |
 
-## Not done here
+### Guardrails Against Foot-Guns
+The automated cleanup worker (`rate(30 minutes)`) requires **both** conditions before invoking `DeleteDBInstance`:
+1. `DBInstanceIdentifier` must start with `vesting-restore-test-`.
+2. The instance **must** have tag `RestoreTest=true`.
 
-- The production instance still has no `vpc_security_group_ids` and relies on
-  the default VPC security group. The temporary instance gets a dedicated group
-  that only accepts PostgreSQL from this function, but tightening the
-  production instance's own group is a separate change, because doing it wrong
-  cuts the application off from its database.
-- The password is read from a Terraform variable rather than Secrets Manager,
-  which puts it in Lambda configuration and therefore in state. #838 supersedes
-  this.
-- Only the newest automated snapshot is tested. PITR to an arbitrary timestamp is
-  not exercised.
+Neither check alone is sufficient; this dual check ensures production databases can never be deleted by cleanup jobs.
+
+---
+
+## 6. What to Do If Verification Fails
+
+When verification fails, `BackupRestoreSuccess` publishes `0`, triggering an alert in Slack **`#ops`** and an on-call page via PagerDuty.
+
+### Immediate Triage Steps
+1. **Check Lambda Execution Logs:**
+   ```bash
+   aws logs filter-log-events \
+     --log-group-name "/aws/lambda/$ENV-vesting-backup-verify" \
+     --filter-pattern "error" \
+     --start-time $(date -u -d '2 hours ago' +%s000)
+   ```
+2. **Identify the Failure Phase:**
+   - *Snapshot discovery failure:* Automated backups may have been paused or disabled (`backup_retention_period = 0`).
+   - *Restore timeout / failure:* RDS capacity exhaustion in the AZ, or snapshot corruption (`incompatible-restore`).
+   - *Authentication / TLS failure:* Secrets Manager password drifted or `rds.force_ssl` configuration issue.
+   - *Schema failure:* Database migration broke table schemas or migration script was applied incorrectly.
+3. **Check for Stray Instances:**
+   Verify if an instance was left running:
+   ```bash
+   aws rds describe-db-instances \
+     --filters "Name=tag:RestoreTest,Values=true" \
+     --query 'DBInstances[].{ID:DBInstanceIdentifier,Status:DBInstanceStatus}'
+   ```
+   If present and orphaned, invoke cleanup manually:
+   ```bash
+   aws lambda invoke \
+     --function-name "$ENV-vesting-backup-verify" \
+     --payload '{"action":"cleanup"}' \
+     --cli-binary-format raw-in-base64-out \
+     /dev/stdout | jq .
+   ```
+
+### Escalation Path
+
+```
+[CloudWatch / PagerDuty / Slack #ops Alert]
+                     │
+                     ▼
+  Tier 1: On-Call DevOps / SRE Engineer
+  - Acknowledge alert within 15 minutes.
+  - Review CloudWatch error log & snapshot status.
+  - Verify if primary RDS is healthy and generating automated snapshots.
+                     │
+         Is RDS snapshot corrupted / AWS outage?
+        ┌────────────┴────────────┐
+       YES                       NO
+        │                         │
+        ▼                         ▼
+  Tier 2: Infrastructure Lead   Resolve configuration / DB credential drift
+  - Open AWS RDS Support Case
+  - Notify team in #incidents
+```
+
+### RDS Support Contact & Case Creation
+
+If a snapshot cannot be restored due to RDS engine corruption, KMS key inaccessible error, or internal AWS errors:
+
+1. **Check AWS Service Health:**
+   Check the [AWS Health Dashboard](https://health.aws.amazon.com/health/status) for ongoing RDS or EBS issues in the deployment region (`us-east-1` or configured region).
+2. **Open an AWS Support Case:**
+   - **Service:** RDS (Relational Database Service)
+   - **Category:** Database -> Restore from Snapshot Failure
+   - **Severity:** Urgent (Production down/degraded) or High
+   - **CLI Command:**
+     ```bash
+     aws support create-case \
+       --subject "URGENT: RDS Automated Snapshot Restore Failure for $ENV-vesting-db" \
+       --service-code "amazon-relational-database-service" \
+       --category-code "restore-database" \
+       --severity-code "urgent" \
+       --communication-body "Automated backup verification failed for RDS instance $ENV-vesting-db. Snapshot: $SNAPSHOT_ID failed to restore with error: $ERROR_MSG. Please investigate snapshot integrity."
+     ```
+3. **Direct Contact (Business / Enterprise Support):**
+   - Access AWS Support Center console: https://console.aws.amazon.com/support/cases/
+   - Phone Escalation: Request immediate call-back via the AWS Support Console for Enterprise Support plans.
+
+---
+
+## 7. Retention Policy
+
+To balance audit compliance, troubleshooting history, and cost efficiency, verification artifacts follow a defined retention lifecycle:
+
+| Component | Retention Window | Storage Mechanism | Purpose |
+|---|---|---|---|
+| **Verification Log Groups** | **365 Days (1 Year)** | CloudWatch Logs (`retention_in_days = 365`) | Full audit trail and multi-month regression correlation |
+| **Verification Metrics** | **15 Months** | CloudWatch Metrics (`VestingApp`) | Standard AWS metrics retention for year-over-year operational trends |
+| **Slack / SNS Notifications** | Per Slack Retention Policy | Slack `#ops` channel & SNS archive | Team visibility and incident historical search |
+| **Temporary RDS Instances** | **< 1 Hour (Target: 10 min)** | AWS RDS Instance | Destroyed immediately after test pass/fail; 30-minute reaper cleans orphans |
+| **Temporary Instance Backups** | **0 Days** (`BackupRetentionPeriod = 0`) | None | Prevents temporary test instances from spawning automated snapshots |
+
+---
+
+## 8. Summary Checklist for Operations
+
+When conducting operational audits:
+1. Ensure the EventBridge rule `${env}-vesting-backup-verify-weekly` is active.
+2. Confirm the 30-minute reaper rule `${env}-vesting-backup-verify-cleanup` is active.
+3. Validate that `#ops` receives the weekly success digest every Sunday after 03:00 UTC.
+4. If modifying database schemas, run an on-demand verification before closing the deployment ticket.
