@@ -18,6 +18,7 @@ interface SponsorStreamTableProps {
   isLoading?: boolean;
   onPageChange: (page: number) => void;
   onCancelStream?: (streamId: string) => void;
+  onClawbackStream?: (streamId: string) => void;
   onViewDetails?: (streamId: string) => void;
 }
 
@@ -40,6 +41,7 @@ function formatLedgerDate(ledger: number | undefined): string {
 
 function useSponsorColumns(
   onCancelStream?: (streamId: string) => void,
+  onClawbackStream?: (streamId: string) => void,
   onViewDetails?: (streamId: string) => void,
 ): DataTableColumn<VestingStream>[] {
   return useMemo(
@@ -101,11 +103,24 @@ function useSponsorColumns(
             >
               Cancel
             </button>
+            {stream.clawbackEligible === true && (
+              <button
+                type="button"
+                onClick={() => onClawbackStream?.(stream.id)}
+                disabled={
+                  !onClawbackStream ||
+                  (stream.status !== "active" && stream.status !== "pre-cliff")
+                }
+                aria-label={`Compliance Clawback for recipient ${stream.recipient}`}
+              >
+                Compliance Clawback
+              </button>
+            )}
           </div>
         ),
       },
     ],
-    [onCancelStream, onViewDetails],
+    [onCancelStream, onClawbackStream, onViewDetails],
   );
 }
 
@@ -121,9 +136,10 @@ export function SponsorStreamTable({
   isLoading = false,
   onPageChange,
   onCancelStream,
+  onClawbackStream,
   onViewDetails,
 }: SponsorStreamTableProps) {
-  const columns = useSponsorColumns(onCancelStream, onViewDetails);
+  const columns = useSponsorColumns(onCancelStream, onClawbackStream, onViewDetails);
 
   return (
     <DataTable<VestingStream>
