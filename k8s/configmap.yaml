@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vesting-config
+  namespace: vesting-production
+  labels:
+    app.kubernetes.io/name: vesting-config
+    app.kubernetes.io/part-of: vesting-cliff-drip-stream
+    app.kubernetes.io/component: config
+data:
+  NODE_ENV: production
+  STELLAR_NETWORK: mainnet
+  RPC_URL: https://soroban-rpc.stellar.org
+  LOG_LEVEL: info
+  PORT: "8080"

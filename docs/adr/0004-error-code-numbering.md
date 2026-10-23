@@ -25,6 +25,9 @@ All errors in `VestingError` carry explicit `#[repr(u32)]` values starting at 1 
 | 5    | `DepositOverflow`    | Arithmetic overflow computing total deposit  |
 | 6    | `ScheduleAlreadyExists` | Stream already exists for this recipient  |
 | 7    | `NothingToClaim`     | Claimable amount is zero at current ledger   |
+| 8    | `StreamNotExpired`   | `end_ledger` has not yet been reached        |
+| 9    | `DrainDelayNotExpired` | 1-year drain delay after `end_ledger` has not elapsed |
+| 10   | `InvalidRecipient`   | Sponsor and recipient addresses are identical |
 
 New error variants must be appended with the next available code; existing codes must never be renumbered.
 

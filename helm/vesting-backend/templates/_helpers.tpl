@@ -7,6 +7,7 @@ Expand the name of the chart.
 
 {{/*
 Create a default fully qualified app name.
+Truncate at 63 chars because some Kubernetes name fields are limited.
 */}}
 {{- define "vesting-backend.fullname" -}}
 {{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
@@ -29,4 +30,17 @@ Selector labels
 {{- define "vesting-backend.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "vesting-backend.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+ServiceAccount name.
+If serviceAccount.create is true and no override name is given, use fullname.
+If serviceAccount.create is false and a name is given, use that name.
+*/}}
+{{- define "vesting-backend.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+  {{- default (include "vesting-backend.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+  {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
 {{- end }}

@@ -1,0 +1,671 @@
+/* =========================================================
+   Skeleton loading screen styles — Issue #540 CSS Modules
+   Scoped via CSS Modules to prevent global class conflicts.
+   =========================================================
+
+   SHIMMER ANIMATION SPEC
+   ──────────────────────
+   Direction  : left → right (gradient moves from 200% to -200% on the x-axis)
+   Duration   : 1.6 s  (fast enough to read as motion, slow enough to be calm)
+   Easing     : ease-in-out  (ramps in and out to avoid a mechanical strobe feel)
+   Iteration  : infinite
+   Colours    : base #e2e8f0 (--color-neutral-200) → highlight #f1f5f9
+                (--color-neutral-100) → soft-exit #e8edf2 → base again
+   Background-size: 200% 100%  (gives the gradient room to sweep fully through)
+
+   Reduced-motion fallback
+   ───────────────────────
+   Under `prefers-reduced-motion: reduce` the shimmer is replaced by a slow
+   opacity pulse (2 s, 50 % → 100 % → 50 %).  The gradient is removed entirely
+   so the motion is purely alpha — less visually noisy for vestibular disorders.
+
+   Usage guide
+   ───────────
+   • Always compose from `.skeletonRect`, `.skeletonCircle`, or `.skeletonText`.
+   • Containers that own multiple skeletons should carry `aria-busy="true"` and
+     `aria-label="Loading <thing>"`.
+   • Individual skeleton blocks must be `aria-hidden="true"`.
+   • Match skeleton dimensions to the real content dimensions to prevent
+     Cumulative Layout Shift (CLS) when data arrives.
+   • Prefer `shape="circle"` for progress bars and badges (pill shape).
+   • Cap list skeletons at 3–5 rows max to avoid overwhelming the viewport.
+   ========================================================= */
+
+/* Base skeleton block */
+.skeleton {
+  display: block;
+  background: #e2e8f0;
+  background-image: linear-gradient(
+    90deg,
+    #e2e8f0 0%,
+    #f1f5f9 40%,
+    #e8edf2 60%,
+    #e2e8f0 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  border-radius: var(--radius-sm, 0.25rem);
+}
+
+/* Shape variants */
+.skeletonRect {
+  composes: skeleton;
+  border-radius: var(--radius-base, 0.5rem);
+}
+
+.skeletonCircle {
+  composes: skeleton;
+  border-radius: 9999px;
+}
+
+.skeletonText {
+  composes: skeleton;
+  border-radius: 4px;
+  height: 0.875em;
+  margin-bottom: 0.25em;
+}
+
+/* Shimmer keyframe */
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect reduced-motion: fall back to slow opacity pulse */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeletonRect,
+  .skeletonCircle,
+  .skeletonText {
+    animation: skeletonPulse 2s ease-in-out infinite;
+    background-image: none;
+  }
+
+  @keyframes skeletonPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+/* ─── Layout helpers ──────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+/* ─── Stream card skeleton ────────────────────────────────────────────────── */
+
+.streamCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+/* ─── Stream detail skeleton ──────────────────────────────────────────────── */
+
+.streamDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+  min-width: 320px;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.statCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid #f1f5f9;
+  border-radius: 0.5rem;
+  background: #fbfcfd;
+}
+
+/* ─── Transaction history table skeleton ─────────────────────────────────── */
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e3eaee;
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+/* ─── Form skeleton ───────────────────────────────────────────────────────── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+  min-width: 300px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* ─── Sponsor stream list skeleton (#823) ─────────────────────────────────── */
+
+.sponsorStreamList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.sponsorStreamRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.5fr 1rem;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.sponsorStreamRow:last-child {
+  border-bottom: none;
+}
+
+/* ─── Stream explorer skeleton (#823) ────────────────────────────────────── */
+
+.explorerTable {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.explorerHeader {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e3eaee;
+}
+
+.explorerRow {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 1.5fr;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.explorerRow:last-child {
+  border-bottom: none;
+}
+
+/* ─── Notification list skeleton (#823) ──────────────────────────────────── */
+
+.notificationList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.notificationItem {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+.notificationItem:last-child {
+  border-bottom: none;
+}
+
+.notificationBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* ─── Analytics summary skeleton (#823) ──────────────────────────────────── */
+
+.analyticsSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.analyticsCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+}
+
+.analyticsCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.analyticsChart {
+  border: 1px solid #e3eaee;
+  border-radius: 0.5rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+/* ─── DashboardStatsSkeleton ─────────────────────────────────────────────── */
+
+.dashboardStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+}
+
+.dashboardStatCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid #e3eaee;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+/* ─── StreamTableRowSkeleton ─────────────────────────────────────────────── */
+
+.streamTableRow {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1fr 5rem;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  align-items: center;
+}
+
+/* ─── NavLoadingBar ──────────────────────────────────────────────────────── */
+
+.navLoadingBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  background: var(--color-primary-200, #ddd6fe);
+  overflow: hidden;
+  /* Announce to screen readers via role=progressbar on the element */
+}
+
+.navLoadingBarFill {
+  height: 100%;
+  background: var(--color-brand-primary, var(--color-primary-600, #7c3aed));
+  border-radius: 0 9999px 9999px 0;
+  animation: navBarSlide 1.8s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+@keyframes navBarSlide {
+  0%   { width: 0%;   opacity: 1; }
+  60%  { width: 85%;  opacity: 1; }
+  85%  { width: 95%;  opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLoadingBarFill {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
+/* ─── TxProgress stepper ─────────────────────────────────────────────────── */
+
+.txProgress {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  list-style: none;
+  margin: 0;
+}
+
+.txStep {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.75rem;
+  align-items: flex-start;
+  position: relative;
+}
+
+/* Connector line between steps */
+.txStep:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(1rem - 1px);
+  top: 2rem;
+  bottom: -0.25rem;
+  width: 2px;
+  background: var(--color-neutral-200, #e2e8f0);
+}
+
+.txStep[data-done="true"]:not(:last-child)::before {
+  background: var(--color-success-400, #34d399);
+}
+
+.txStep[data-active="true"]:not(:last-child)::before {
+  background: var(--color-primary-300, #c4b5fd);
+}
+
+.txStepIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: 0.9rem;
+  background: var(--color-neutral-100, #f1f5f9);
+  border: 2px solid var(--color-neutral-200, #e2e8f0);
+  color: var(--color-neutral-500, #64748b);
+  transition: background 0.2s, border-color 0.2s;
+  position: relative;
+  z-index: 1;
+}
+
+.txStep[data-done="true"] .txStepIcon {
+  background: var(--color-success-100, #d1fae5);
+  border-color: var(--color-success-500, #10b981);
+  color: var(--color-success-700, #047857);
+}
+
+.txStep[data-active="true"] .txStepIcon {
+  background: var(--color-primary-100, #ede9fe);
+  border-color: var(--color-brand-primary, #7c3aed);
+  color: var(--color-brand-primary, #7c3aed);
+}
+
+.txStep[data-failed="true"] .txStepIcon {
+  background: var(--color-error-100, #fee2e2);
+  border-color: var(--color-error-500, #ef4444);
+  color: var(--color-error-700, #b91c1c);
+}
+
+.txStepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-top: 0.3rem;
+  padding-bottom: 1rem;
+}
+
+.txStepLabel {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-neutral-900, #0f172a);
+  font-family: var(--font-family-base, system-ui, sans-serif);
+}
+
+.txStep[data-done="true"] .txStepLabel {
+  color: var(--color-success-700, #047857);
+}
+
+.txStep[data-active="true"] .txStepLabel {
+  color: var(--color-brand-primary, #7c3aed);
+}
+
+.txStep[data-pending="true"] .txStepLabel {
+  color: var(--color-neutral-400, #94a3b8);
+}
+
+.txStep[data-failed="true"] .txStepLabel {
+  color: var(--color-error-700, #b91c1c);
+}
+
+.txStepDescription {
+  font-size: 0.8rem;
+  color: var(--color-neutral-500, #64748b);
+  font-family: var(--font-family-base, system-ui, sans-serif);
+}
+
+.txStepSpinner {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid var(--color-primary-200, #ddd6fe);
+  border-top-color: var(--color-brand-primary, #7c3aed);
+  border-radius: 50%;
+  animation: txSpin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+}
+
+@keyframes txSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .txStepSpinner {
+    animation: none;
+    border-top-color: var(--color-brand-primary, #7c3aed);
+    opacity: 0.7;
+  }
+}
+
+/* ─── OptimisticStreamCard ────────────────────────────────────────────────── */
+
+.optimisticCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1.5px dashed var(--color-primary-400, #a78bfa);
+  border-radius: 0.75rem;
+  background: var(--color-primary-50, #f5f3ff);
+  opacity: 0.85;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle shimmer sweep over the card to signal "pending confirmation" */
+.optimisticCard::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(167, 139, 250, 0.12) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: optimisticSweep 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes optimisticSweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optimisticCard::after {
+    animation: none;
+    background: none;
+  }
+  .optimisticCard {
+    opacity: 0.75;
+  }
+}
+
+.optimisticBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: var(--font-family-base, system-ui, sans-serif);
+  letter-spacing: 0.02em;
+  color: var(--color-primary-700, #6d28d9);
+  background: var(--color-primary-100, #ede9fe);
+  border: 1px solid var(--color-primary-200, #ddd6fe);
+  width: fit-content;
+}
+
+.optimisticBadgeDot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--color-primary-500, #8b5cf6);
+  animation: optimisticDotPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes optimisticDotPulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optimisticBadgeDot {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.optimisticHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.optimisticTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-neutral-900, #0f172a);
+  font-family: var(--font-family-base, system-ui, sans-serif);
+  margin: 0;
+}
+
+.optimisticMeta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.optimisticMetaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.optimisticMetaLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-neutral-500, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-family-base, system-ui, sans-serif);
+}
+
+.optimisticMetaValue {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-neutral-800, #1e293b);
+  font-family: var(--font-family-mono, monospace);
+}
+
+.optimisticProgressBar {
+  height: 0.4rem;
+  border-radius: 9999px;
+  background: var(--color-primary-100, #ede9fe);
+  overflow: hidden;
+}
+
+.optimisticProgressFill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--color-primary-400, #a78bfa);
+  transition: width 0.3s ease;
+}

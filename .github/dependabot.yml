@@ -1,0 +1,315 @@
+# Dependabot configuration for automated dependency updates
+# Reference: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # ── Cargo (Rust / Soroban) ──────────────────────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "rust"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "soroban-sdk"
+      - dependency-name: "stellar-xdr"
+      - dependency-name: "wasmparser"
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "rust"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "soroban-sdk"
+      - dependency-name: "stellar-xdr"
+
+  # ── npm (web/) ──────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+    versioning-strategy: "increase"
+    groups:
+      npm-patches:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "typescript"
+
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+
+  # ── npm (api/) ──────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/api"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+    versioning-strategy: "increase"
+    groups:
+      npm-patches:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "express"
+      - dependency-name: "typescript"
+
+  - package-ecosystem: "npm"
+    directory: "/api"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "express"
+
+  # ── npm (frontend/) ─────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+    versioning-strategy: "increase"
+    groups:
+      npm-patches:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "typescript"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+
+  # ── npm (backend/) ──────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+    versioning-strategy: "increase"
+    groups:
+      npm-patches:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "express"
+      - dependency-name: "typescript"
+
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+      # Packages requiring manual review due to known breaking changes
+      - dependency-name: "express"
+
+  # ── Docker base images ──────────────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "docker"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "breaking-change"
+    versioning-strategy: "increase"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
+
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    assignees:
+      - "dependencies"
+    reviewers:
+      - "dependencies"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "breaking-change"
+    groups:
+      github-actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"

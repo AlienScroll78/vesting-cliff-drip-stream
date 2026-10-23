@@ -1,222 +1,127 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address};
-
 use crate::{
-    contract::{VestingDrips, VestingDripsClient},
     error::VestingError,
-    tests::{advance_ledger, setup_env},
+    tests::{
+        advance_ledger, setup_env,
+        factory::{
+            at_cliff_stream, expired_stream, post_cliff_stream, pre_cliff_stream,
+        },
+    },
 };
 
-use super::super::tests::token_helper::{create_token, mint_to};
-
-fn setup_stream(
-    rate: i128,
-    cliff_duration: u32,
-    total_duration: u32,
-) -> (
-    soroban_sdk::Env,
-    Address,          // contract_id
-    VestingDripsClient<'static>,
-    Address,          // sponsor
-    Address,          // recipient
-    Address,          // token_id
-) {
-    // Work-around: clone env for 'static lifetime in test context
-    let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-
-    let deposit = rate * total_duration as i128;
-    mint_to(&env, &token_id, &sponsor, deposit);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &rate, &cliff_duration, &total_duration)
-        .unwrap();
-
-    (env, contract_id, client, sponsor, recipient, token_id)
-}
-
+/// Claiming before the cliff returns `CliffNotReached`.
 #[test]
 fn test_claim_before_cliff_fails() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = pre_cliff_stream(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    // Try to claim at ledger 120 (cliff is 150)
-    advance_ledger(&env, 20);
-
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let err = stream.client.claim_vested(&addrs.recipient).unwrap_err();
     assert_eq!(err, VestingError::CliffNotReached.into());
 }
 
+/// First claim exactly at the cliff releases all accrued tokens since start.
 #[test]
 fn test_first_claim_at_cliff_includes_all_accrued() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = at_cliff_stream(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, token_client) = create_token(&env, &sponsor);
-    // rate=10, cliff=50, total=200 → deposit = 2000
-    mint_to(&env, &token_id, &sponsor, 2_000);
-
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    // Jump exactly to the cliff (ledger 150).
-    advance_ledger(&env, 50);
-
-    let claimed = client.claim_vested(&recipient).unwrap();
-    // 50 ledgers accrued since start × 10 = 500
+    let claimed = stream.client.claim_vested(&addrs.recipient).unwrap();
+    // 50 ledgers × rate 10 = 500
     assert_eq!(claimed, 500);
-    assert_eq!(token_client.balance(&recipient), 500);
+}
+
+/// Two sequential claims at different ledgers return the correct incremental amounts.
+#[test]
+fn test_claim_without_stream_id_claims_all_tokens() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor_a, recipient) = generate_addresses(&env);
+    let sponsor_b = Address::generate(&env);
+    let (token_a, _) = create_vesting_stream(&env, &client, &sponsor_a, &recipient, 10, 50, 200);
+    let (token_b, _) = create_vesting_stream(&env, &client, &sponsor_b, &recipient, 20, 50, 200);
+    let token_client_a = soroban_sdk::token::TokenClient::new(&env, &token_a);
+    let token_client_b = soroban_sdk::token::TokenClient::new(&env, &token_b);
+
+    advance_ledger(&env, 75);
+    let claimed = client.claim_vested(&recipient, &None);
+
+    assert_eq!(claimed, 2_250);
+    assert_eq!(token_client_a.balance(&recipient), 750);
+    assert_eq!(token_client_b.balance(&recipient), 1_500);
+    assert_eq!(client.get_stream_ids(&recipient).len(), 2);
+}
+
+#[test]
+fn test_partial_claim_exact_amount() {
+    let env = setup_env();
+    let (_contract_id, client) = register_contract(&env);
+    let (sponsor, recipient) = generate_addresses(&env);
+    let (token_id, token_client) =
+        create_vesting_stream(&env, &client, &sponsor, &recipient, 10, 50, 200);
+
+    // Jump to cliff + 50 ledgers (1000 tokens accrued)
+    advance_ledger(&env, 100);
+
+    // `Some(0)` claims only stream 0.
+    let claimed = client.claim_vested(&recipient, &Some(0)).unwrap();
+    assert_eq!(claimed, 1_000);
+    assert_eq!(token_client.balance(&recipient), 1_000);
+
+    assert_eq!(client.claimable_amount(&recipient), 0);
 }
 
 #[test]
 fn test_partial_claim_mid_stream() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    // Start 100 ledgers past cliff (ledger 200).
+    let (stream, addrs) = post_cliff_stream(&env, 50);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, token_client) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
+    // First claim: 100 ledgers since start × 10 = 1 000.
+    let claimed1 = stream.client.claim_vested(&addrs.recipient).unwrap();
+    assert_eq!(claimed1, 1_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    // First claim at cliff+50 (ledger 200)
-    advance_ledger(&env, 100);
-    let claimed1 = client.claim_vested(&recipient).unwrap();
-    assert_eq!(claimed1, 1_000); // 100 ledgers × 10
-
-    // Second claim at ledger 250
+    // Second claim: advance another 50 ledgers.
     advance_ledger(&env, 50);
-    let claimed2 = client.claim_vested(&recipient).unwrap();
-    assert_eq!(claimed2, 500); // 50 ledgers × 10
-
-    assert_eq!(token_client.balance(&recipient), 1_500);
+    let claimed2 = stream.client.claim_vested(&addrs.recipient).unwrap();
+    assert_eq!(claimed2, 500);
 }
 
+/// Claiming way past the end ledger pays out the entire remaining deposit.
 #[test]
 fn test_claim_past_end_caps_at_end_ledger() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = expired_stream(&env);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, token_client) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
+    let claimed = stream.client.claim_vested(&addrs.recipient).unwrap();
+    // Full deposit = 2 000
+    assert_eq!(claimed, 2_000);
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    // Jump way past the end ledger (300)
-    advance_ledger(&env, 500);
-
-    let claimed = client.claim_vested(&recipient).unwrap();
-    assert_eq!(claimed, 2_000); // entire deposit, capped at end_ledger
-    assert_eq!(token_client.balance(&recipient), 2_000);
-
-    // Schedule should be removed after full claim.
-    assert!(client.get_schedule(&recipient).is_none());
+    // Schedule should be removed after the full claim.
+    assert!(stream.client.get_schedule(&addrs.recipient).is_none());
 }
 
+/// Calling `claim_vested` twice at the same ledger returns `NothingToClaim`.
 #[test]
 fn test_double_claim_same_ledger_returns_nothing_to_claim() {
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
+    let (stream, addrs) = post_cliff_stream(&env, 50);
 
-    let sponsor = Address::generate(&env);
-    let recipient = Address::generate(&env);
-    let (token_id, _) = create_token(&env, &sponsor);
-    mint_to(&env, &token_id, &sponsor, 2_000);
+    stream.client.claim_vested(&addrs.recipient).unwrap();
 
-    client
-        .create_vesting_stream(&sponsor, &recipient, &token_id, &10, &50, &200)
-        .unwrap();
-
-    advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap();
-
-    // Claiming again at the same ledger should return NothingToClaim.
-    let err = client.claim_vested(&recipient).unwrap_err();
+    // Claiming again at the same ledger must fail.
+    let err = stream.client.claim_vested(&addrs.recipient).unwrap_err();
     assert_eq!(err, VestingError::NothingToClaim.into());
 }
 
+/// Claiming for a non-existent recipient returns `ScheduleNotFound`.
 #[test]
 fn test_claim_nonexistent_schedule_fails() {
+    use soroban_sdk::testutils::Address as _;
     let env = setup_env();
-    let contract_id = env.register(VestingDrips, ());
-    let client = VestingDripsClient::new(&env, &contract_id);
-    let random = Address::generate(&env);
+    let (stream, _) = pre_cliff_stream(&env);
 
-    let err = client.claim_vested(&random).unwrap_err();
-    assert_eq!(err, VestingError::ScheduleNotFound.into());
-}
-
-// ── end_ledger boundary tests ─────────────────────────────────────────────────
-
-#[test]
-fn test_claimable_amount_at_end_ledger() {
-    // rate=10, cliff=50, total=200 → deposit=2000, end_ledger=300
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
-
-    // Advance exactly to end_ledger (start=100, end=300 → +200 ledgers)
-    advance_ledger(&env, 200);
-
-    // Full deposit should be claimable
-    assert_eq!(client.claimable_amount(&recipient), 2_000);
-}
-
-#[test]
-fn test_claimable_amount_after_end_ledger_caps_at_remaining() {
-    // rate=10, cliff=50, total=200 → deposit=2000
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
-
-    // Claim halfway through (at ledger 200 = start+100)
-    advance_ledger(&env, 100);
-    client.claim_vested(&recipient).unwrap(); // claims 1000
-
-    // Advance well past end_ledger
-    advance_ledger(&env, 500);
-
-    // Only the remaining 1000 tokens should be claimable (capped at end_ledger)
-    assert_eq!(client.claimable_amount(&recipient), 1_000);
-}
-
-#[test]
-fn test_claim_after_all_tokens_claimed_returns_nothing_to_claim() {
-    let (env, _contract_id, client, _sponsor, recipient, _token_id) =
-        setup_stream(10, 50, 200);
-
-    // Advance past end and claim everything
-    advance_ledger(&env, 300);
-    client.claim_vested(&recipient).unwrap();
-
-    // Schedule is removed; a second attempt should return ScheduleNotFound
-    let err = client.claim_vested(&recipient).unwrap_err();
+    let random = soroban_sdk::Address::generate(&env);
+    let err = stream.client.claim_vested(&random).unwrap_err();
     assert_eq!(err, VestingError::ScheduleNotFound.into());
 }

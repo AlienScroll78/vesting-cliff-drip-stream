@@ -14,7 +14,9 @@
   background: #fff;
   border-radius: 0.75rem;
   padding: 1.5rem;
-  width: min(480px, 90vw);
+  width: min(520px, 90vw);
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   outline: none;
 }
@@ -63,7 +65,15 @@
 
 .ks-table td { padding: 0.6rem 0; }
 
-.ks-keys { width: 40%; white-space: nowrap; }
+.ks-keys { width: 44%; white-space: nowrap; }
+
+/* Chord separator */
+.ks-chord-sep {
+  display: inline-block;
+  color: #9ca3af;
+  margin: 0 0.2rem;
+  font-size: 0.75rem;
+}
 
 kbd {
   display: inline-block;
@@ -75,4 +85,34 @@ kbd {
   border-radius: 0.25rem;
   color: #374151;
   box-shadow: 0 1px 0 #d1d5db;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ks-dialog {
+    background: #1f2937;
+    color: #f9fafb;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  }
+  .ks-header h2 { color: #f9fafb; }
+  .ks-close { color: #9ca3af; }
+  .ks-close:hover { background: #374151; color: #f9fafb; }
+  .ks-table thead th { color: #9ca3af; border-bottom-color: #374151; }
+  .ks-table tbody tr + tr td { border-top-color: #374151; }
+  kbd {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+    box-shadow: 0 1px 0 #4b5563;
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .ks-dialog {
+    padding: 1rem;
+    width: 95vw;
+  }
+  .ks-table { font-size: 0.8rem; }
+  .ks-keys { width: 48%; }
 }

@@ -1,0 +1,65 @@
+.banner {
+  background-color: #fef3c7;
+  border-bottom: 2px solid #f59e0b;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: #78350f;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 600px;
+}
+
+.indicator {
+  display: inline-block;
+  font-size: 0.5rem;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+
+  .indicator {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .banner {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+}

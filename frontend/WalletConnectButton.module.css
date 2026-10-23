@@ -1,0 +1,133 @@
+/* WalletConnectButton CSS Module — Issue #540
+   All class names are locally scoped to this module.
+   Import as: import styles from "./WalletConnectButton.module.css"
+*/
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s), opacity var(--transition-fast, 0.15s);
+}
+
+/* Disconnected — primary CTA */
+.btnPrimary {
+  composes: btn;
+  background: var(--color-primary-600, #7c3aed);
+  color: #fff;
+}
+.btnPrimary:hover {
+  background: var(--color-primary-700, #6d28d9);
+}
+.btnPrimary:focus-visible {
+  outline: 2px solid var(--color-primary-600, #7c3aed);
+  outline-offset: 2px;
+}
+
+/* Connecting state */
+.btnConnecting {
+  composes: btn;
+  background: var(--color-primary-400, #a78bfa);
+  color: #fff;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* Connected state */
+.btnConnected {
+  composes: btn;
+  background: var(--color-neutral-100, #f3f4f6);
+  color: var(--color-neutral-900, #111827);
+  border: 1px solid var(--color-neutral-300, #d1d5db);
+}
+.btnConnected:hover {
+  background: var(--color-neutral-200, #e5e7eb);
+}
+.btnConnected:focus-visible {
+  outline: 2px solid var(--color-primary-600, #7c3aed);
+  outline-offset: 2px;
+}
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wcbSpin 0.7s linear infinite;
+}
+
+@keyframes wcbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Avatar */
+.avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+}
+
+/* Address abbreviation */
+.address {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.875rem;
+}
+
+/* Chevron indicator */
+.chevron {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* Wrapper for connected state (relative positioned for dropdown) */
+.connectedWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dropdown */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  min-width: 12rem;
+  background: var(--color-bg-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.5rem;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.1));
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  z-index: 100;
+}
+
+.dropdownItem {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--color-text-primary, #374151);
+  transition: background var(--transition-fast, 0.15s);
+}
+.dropdownItem:hover {
+  background: var(--color-bg-elevated, #f9fafb);
+}
+.dropdownItem:focus-visible {
+  outline: 2px solid var(--color-primary-600, #7c3aed);
+  outline-offset: -2px;
+}

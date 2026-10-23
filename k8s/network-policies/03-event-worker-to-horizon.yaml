@@ -1,0 +1,56 @@
+# NetworkPolicy: event-worker → Horizon (external HTTPS only)
+#
+# Horizon is the Stellar network gateway (e.g. horizon-testnet.stellar.org or
+# a self-hosted instance outside the cluster).  This policy allows the
+# event-worker to make outbound HTTPS (TCP 443) connections to any external IP
+# while blocking all other egress.
+#
+# For a self-hosted Horizon inside the cluster: replace the ipBlock rule with
+# a podSelector targeting the horizon pods.
+#
+# Label assumptions:
+#   event-worker pods: app.kubernetes.io/name=event-worker
+#
+# SECURITY NOTE: The ipBlock below permits TCP 443 to 0.0.0.0/0 minus the
+# RFC-1918 + loopback ranges.  This is intentionally broad because Stellar
+# Horizon is a public SaaS endpoint.  If you run Horizon in-cluster, tighten
+# this to the horizon pod selector or its specific Service ClusterIP CIDR.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-event-worker-to-horizon-egress
+  namespace: vesting
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    policy-type: allow
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: event-worker
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS to any public IP (Horizon SaaS).
+    # Exclude private/loopback ranges so the event-worker cannot reach other
+    # cluster-internal services via this rule.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8       # RFC-1918 class A
+              - 172.16.0.0/12    # RFC-1918 class B
+              - 192.168.0.0/16   # RFC-1918 class C
+              - 127.0.0.0/8      # loopback
+              - 169.254.0.0/16   # link-local
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS – required so the event-worker can resolve horizon hostnames
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  # No ingress rules needed – the event-worker is a consumer, not a server.
+  # The default-deny-ingress policy already blocks all inbound traffic.

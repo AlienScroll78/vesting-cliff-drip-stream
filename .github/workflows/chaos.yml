@@ -1,0 +1,209 @@
+name: Chaos Tests
+
+# Runs nightly and on demand to validate indexer resilience under Horizon failures.
+# Issue #787 – Chaos testing framework for indexer resilience.
+# Issue #1066 – Indexer downtime & recovery scenarios.
+
+on:
+  schedule:
+    # Nightly at 03:00 UTC (after drift-detection at 02:00).
+    - cron: '0 3 * * *'
+
+  workflow_dispatch:
+    inputs:
+      horizon_upstream:
+        description: 'Horizon upstream address for the toxiproxy (host:port)'
+        required: false
+        default: 'horizon.stellar.org:443'
+
+concurrency:
+  group: chaos-tests-${{ github.ref }}
+  cancel-in-progress: false   # Never cancel a running chaos suite.
+
+env:
+  TOXIPROXY_HOST: localhost
+  TOXIPROXY_PORT: '8474'
+  HORIZON_PROXY_PORT: '8666'
+  REPORT_DIR: docs/chaos
+
+jobs:
+  # ── Chaos test suite ──────────────────────────────────────────────────────────
+  chaos:
+    name: Indexer Chaos Scenarios (10/10)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      toxiproxy:
+        image: ghcr.io/shopify/toxiproxy:2.9.0
+        ports:
+          - '8474:8474'
+          - '8666:8666'
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8474/proxies || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node setup ──────────────────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --legacy-peer-deps
+        working-directory: backend
+
+      # ── Create Horizon proxy in Toxiproxy ───────────────────────────────────
+      - name: Create 'horizon' proxy
+        run: |
+          UPSTREAM="${{ github.event.inputs.horizon_upstream || 'horizon.stellar.org:443' }}"
+          curl -sf -X POST "http://localhost:8474/proxies" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"name\":     \"horizon\",
+              \"listen\":   \"0.0.0.0:8666\",
+              \"upstream\": \"${UPSTREAM}\",
+              \"enabled\":  true
+            }"
+          echo "Proxy created: horizon → ${UPSTREAM}"
+
+      # ── Run the 6 Toxiproxy network-fault scenarios ─────────────────────────
+      - name: Run chaos test suite
+        id: chaos
+        run: |
+          mkdir -p ${{ env.REPORT_DIR }}
+          npx vitest run \
+            --config vitest.resilience.config.ts \
+            tests/resilience/chaos/horizon-chaos.test.ts \
+            --reporter=verbose \
+            2>&1 | tee ${{ env.REPORT_DIR }}/vitest-output.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        working-directory: backend
+        env:
+          TOXIPROXY_HOST: localhost
+          TOXIPROXY_PORT: '8474'
+          HORIZON_PROXY_URL: 'http://localhost:8666'
+        continue-on-error: true
+
+      # ── Run the 4 downtime & recovery scenarios (issue #1066) ───────────────
+      # These mock Horizon + DB directly and need no Toxiproxy.
+      - name: Run downtime/recovery chaos suite
+        id: downtime
+        run: |
+          npx vitest run \
+            --config vitest.resilience.config.ts \
+            tests/resilience/chaos/downtime-recovery-chaos.test.ts \
+            --reporter=verbose \
+            2>&1 | tee ${{ env.REPORT_DIR }}/vitest-downtime-output.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        working-directory: backend
+        continue-on-error: true
+
+      # ── Generate markdown report ────────────────────────────────────────────
+      - name: Generate results report
+        run: |
+          TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          VITEST_OUT="${{ env.REPORT_DIR }}/vitest-output.txt"
+          DOWNTIME_OUT="${{ env.REPORT_DIR }}/vitest-downtime-output.txt"
+          PASS_COUNT=$(grep -c "✓\| PASS" "${VITEST_OUT}" "${DOWNTIME_OUT}" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+          DOWNTIME_CODE="${{ steps.downtime.outputs.exit_code }}"
+          if [[ "${{ steps.chaos.outputs.exit_code }}" == "0" && "${DOWNTIME_CODE}" == "0" ]]; then
+            OVERALL="✅ PASS"
+          else
+            OVERALL="❌ FAIL"
+          fi
+
+          cat > ${{ env.REPORT_DIR }}/latest-results.md << REPORT
+          # Chaos Test Results – ${TIMESTAMP}
+
+          **Status:** ${OVERALL}
+          **Run:** ${{ github.run_number }} (triggered by: ${{ github.event_name }})
+          **Commit:** ${{ github.sha }}
+
+          ## Network-fault scenarios (Toxiproxy, issue #787)
+
+          | # | Scenario | Result |
+          |---|---|---|
+          | 1 | Horizon 429 → backoff and resume | $(grep -q "Scenario 1" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+          | 2 | Malformed JSON → log and skip | $(grep -q "Scenario 2" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+          | 3 | Horizon 503 → retry and resume | $(grep -q "Scenario 3" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+          | 4 | Network timeout → retry | $(grep -q "Scenario 4" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+          | 5 | DB lost → rollback and retry | $(grep -q "Scenario 5" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+          | 6 | Cursor corrupt → reset to checkpoint | $(grep -q "Scenario 6" "${VITEST_OUT}" && echo "✅" || echo "⚠️") |
+
+          ## Downtime & recovery scenarios (mocked Horizon + DB, issue #1066)
+
+          | # | Scenario | Result |
+          |---|---|---|
+          | D1 | Stopped 100 ledgers → restart catches up without gaps | $(grep -q "Scenario 1" "${DOWNTIME_OUT}" && echo "✅" || echo "⚠️") |
+          | D2 | DB connection lost mid-insert → rollback, retry on restart | $(grep -q "Scenario 2" "${DOWNTIME_OUT}" && echo "✅" || echo "⚠️") |
+          | D3 | Horizon 429 → back off and retry | $(grep -q "Scenario 3" "${DOWNTIME_OUT}" && echo "✅" || echo "⚠️") |
+          | D4 | Cursor row missing → default start-ledger fallback | $(grep -q "Scenario 4" "${DOWNTIME_OUT}" && echo "✅" || echo "⚠️") |
+
+          ## Guarantees
+
+          - No duplicate events (cursor not advanced on failure)
+          - No missing events (at-least-once delivery via retry)
+          - Gap-free catch-up after downtime (resume from persisted cursor)
+          - Cursor integrity (corrupted values reset to last checkpoint)
+          - Deterministic re-index (missing cursor row → configured start ledger)
+          - Graceful degradation (malformed JSON logged, not fatal)
+
+          ---
+          *Generated by .github/workflows/chaos.yml — issues #787, #1066*
+          REPORT
+
+          echo "Report written to ${{ env.REPORT_DIR }}/latest-results.md"
+
+      # ── Upload report as artifact ───────────────────────────────────────────
+      - name: Upload chaos report
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-results-${{ github.run_number }}
+          path: ${{ env.REPORT_DIR }}/
+          retention-days: 30
+
+      # ── Open issue on failure ───────────────────────────────────────────────
+      - name: Open GitHub issue on failure
+        if: steps.chaos.outputs.exit_code != '0' && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Chaos tests failed – nightly run ${new Date().toISOString().split('T')[0]}`;
+            const body = [
+              '## Chaos Test Failure',
+              '',
+              `**Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
+              `**Commit:** ${{ github.sha }}`,
+              '',
+              'One or more chaos scenarios failed in the nightly run.',
+              'Check the uploaded artifact for the full vitest output.',
+              '',
+              'Closes #787',
+              'Closes #1066',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              title,
+              body,
+              labels: ['bug', 'testing', 'chaos'],
+            });
+
+      # ── Fail the workflow if tests failed ───────────────────────────────────
+      - name: Fail workflow on test failure
+        if: steps.chaos.outputs.exit_code != '0' || steps.downtime.outputs.exit_code != '0'
+        run: |
+          echo "Chaos tests failed:"
+          echo "  network-fault suite exit code: ${{ steps.chaos.outputs.exit_code }}"
+          echo "  downtime/recovery suite exit code: ${{ steps.downtime.outputs.exit_code }}"
+          exit 1
