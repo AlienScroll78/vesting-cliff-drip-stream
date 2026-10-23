@@ -206,6 +206,7 @@ export function TxStatusModal({
         <ConfettiBurst
           active={!confettiDone}
           onDone={() => setConfettiDone(true)}
+          onDismiss={() => setConfettiDone(true)}
         />
       )}
 

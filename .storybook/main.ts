@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import type { StorybookConfig } from "@storybook/react-vite";
 import path from "path";
-import { fileURLToPath } from "url";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendSrc = path.resolve(dirname, "../frontend/src");

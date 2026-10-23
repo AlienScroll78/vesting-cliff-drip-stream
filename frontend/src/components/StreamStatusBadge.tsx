@@ -326,7 +326,7 @@ export function StreamStatusBadge({
       role="status"
       aria-label={`Stream status: ${label}. ${tooltip}`}
       data-testid={`stream-status-badge-${status}`}
-      className={className}
+      className={`stream-status-badge${className ? ` ${className}` : ""}`}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -347,7 +347,7 @@ export function StreamStatusBadge({
       {pulse ? (
         <PulseRing color={colors.pulseColor} size={pulseSize} />
       ) : (
-        <span aria-hidden="true" style={{ lineHeight: 1, fontSize: "0.85em" }}>
+        <span key={status} className="stream-status-badge__icon" aria-hidden="true" style={{ lineHeight: 1, fontSize: "0.85em" }}>
           {icon}
         </span>
       )}

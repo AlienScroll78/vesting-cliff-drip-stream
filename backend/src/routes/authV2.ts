@@ -7,7 +7,7 @@
  * GET  /.well-known/jwks.json → public keys for RS256 verification
  *
  * JWT payload: { sub: address, role: 'admin'|'user', iat, exp, kid }
- * Access token TTL:  24 h  (AUTH_ACCESS_TOKEN_TTL_H env, default 24)
+ * Access token TTL:  1 h   (AUTH_ACCESS_TOKEN_TTL_H env, capped at 1 h — issue #1003)
  * Refresh token TTL: 30 d  (AUTH_REFRESH_TOKEN_TTL_DAYS env, default 30)
  */
 
@@ -15,7 +15,7 @@
 
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import type { Request, Response } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { getCurrentKey, getPublicKeyByKid, initKeyStore } from "../auth/keyStore.js";
 import { createRedisClient } from "../redisClient.js";
 
@@ -28,7 +28,19 @@ const SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
 const NONCE_PREFIX = "auth_nonce:";
 const REFRESH_PREFIX = "auth_refresh:";
 
-const ACCESS_TTL_H = parseInt(process.env.AUTH_ACCESS_TOKEN_TTL_H ?? "24", 10);
+// Issue #1003: access tokens must be short-lived (≤ 1 h); the 30-day refresh
+// token extends the session instead. Values above 1 h are clamped.
+const MAX_ACCESS_TTL_H = 1;
+const REQUESTED_ACCESS_TTL_H = parseInt(process.env.AUTH_ACCESS_TOKEN_TTL_H ?? "1", 10);
+const ACCESS_TTL_H = Math.min(
+  Number.isNaN(REQUESTED_ACCESS_TTL_H) ? MAX_ACCESS_TTL_H : REQUESTED_ACCESS_TTL_H,
+  MAX_ACCESS_TTL_H
+);
+if (REQUESTED_ACCESS_TTL_H > MAX_ACCESS_TTL_H) {
+  console.warn(
+    `[auth] AUTH_ACCESS_TOKEN_TTL_H=${REQUESTED_ACCESS_TTL_H} exceeds the ${MAX_ACCESS_TTL_H} h cap; clamping (issue #1003)`
+  );
+}
 const REFRESH_TTL_DAYS = parseInt(process.env.AUTH_REFRESH_TOKEN_TTL_DAYS ?? "30", 10);
 const ACCESS_TTL_S = ACCESS_TTL_H * 3600;
 const REFRESH_TTL_S = REFRESH_TTL_DAYS * 86400;
@@ -286,11 +298,15 @@ export async function jwksHandler(_req: Request, res: Response): Promise<void> {
 /**
  * Express middleware: verify RS256 JWT and attach req.user.
  * Does NOT enforce role — use requireRole() for that.
+ *
+ * Error contract (issue #1003):
+ *   missing/invalid token   → 401 { error: "Unauthorized" }
+ *   expired token           → 401 { error: "TokenExpired" }
  */
 export function authMiddleware(
   req: Request & { user?: { address: string; role: string } },
   res: Response,
-  next: Parameters<typeof unauthorized>[0] & { (): void }
+  next: NextFunction
 ): void {
   const header = String(req.headers["authorization"] || "");
   if (!header.startsWith("Bearer ")) {
@@ -307,7 +323,7 @@ export function authMiddleware(
     if (parts.length !== 3) throw new Error("malformed");
     decoded = JSON.parse(Buffer.from(parts[0], "base64url").toString()) as jwt.JwtHeader;
   } catch {
-    res.status(401).json({ error: "malformed token" });
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
@@ -317,7 +333,7 @@ export function authMiddleware(
     : getCurrentKey().publicKey;
 
   if (!pubKey) {
-    res.status(401).json({ error: "unknown key id" });
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
@@ -330,8 +346,12 @@ export function authMiddleware(
       role: String(payload.role ?? "user"),
     };
     next();
-  } catch {
-    res.status(401).json({ error: "invalid or expired token" });
+  } catch (err) {
+    if (err instanceof jwt.TokenExpiredError) {
+      res.status(401).json({ error: "TokenExpired" });
+      return;
+    }
+    res.status(401).json({ error: "Unauthorized" });
   }
 }
 

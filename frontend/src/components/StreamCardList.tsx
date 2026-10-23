@@ -38,6 +38,7 @@ interface StreamCardListProps {
   children: ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  "data-tour"?: string;
 }
 
 export function StreamCardList({
@@ -49,6 +50,7 @@ export function StreamCardList({
   children,
   className,
   style,
+  "data-tour": dataTour,
 }: StreamCardListProps) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -123,6 +125,7 @@ export function StreamCardList({
       onKeyDown={handleKeyDown}
       className={className}
       style={style}
+      data-tour={dataTour}
       // The list itself is not in the tab order; individual options are
       tabIndex={-1}
     >

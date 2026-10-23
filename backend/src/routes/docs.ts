@@ -1,13 +1,16 @@
 /**
- * Serves Swagger UI at GET /api/docs
+ * GET /docs               — Swagger UI (non-production environments only)
+ * GET /docs/openapi.yaml  — raw OpenAPI spec backing the UI
  *
+ * Issue #1006: `api/openapi.yaml` is the source of truth for the REST API.
  * The UI is served inline (no npm dependency on swagger-ui-express) by
  * loading the OpenAPI spec from the filesystem and rendering it via the
- * Swagger UI CDN bundle. This avoids adding a heavy dev dependency to the
- * production Docker image.
+ * Swagger UI CDN bundle. In production (`NODE_ENV === "production"`) both
+ * routes return 404, mirroring the GraphiQL gating in routes/graphql.js.
  *
  * The spec file is resolved relative to the repo root so it works both
- * locally (running from backend/) and in Docker (COPY'd to /app/docs/).
+ * locally (running from backend/) and in container images that copy the
+ * repository to /app.
  */
 
 import { Router, Request, Response } from "express";
@@ -17,11 +20,11 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Resolve spec path: try repo-root docs/api/openapi.yaml, then fall back to
-// a path relative to this file so tests / Docker both work.
+// api/openapi.yaml at the repo root (issue #1006), with a fallback for
+// container layouts where the backend sits at the image root.
 const SPEC_CANDIDATES = [
-  path.resolve(__dirname, "../../docs/api/openapi.yaml"),
-  path.resolve(__dirname, "../../../docs/api/openapi.yaml"),
+  path.resolve(__dirname, "../../../api/openapi.yaml"),
+  path.resolve(__dirname, "../../api/openapi.yaml"),
 ];
 
 function findSpecPath(): string | null {
@@ -31,16 +34,25 @@ function findSpecPath(): string | null {
   return null;
 }
 
+function isProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 const router = Router();
 
 /**
- * GET /api/docs
+ * GET /docs
  * Renders Swagger UI with the bundled OpenAPI spec.
  */
-router.get("/", (_req: Request, res: Response) => {
+router.get("/docs", (_req: Request, res: Response) => {
+  if (isProduction()) {
+    res.status(404).json({ error: "Not Found" });
+    return;
+  }
+
   const specPath = findSpecPath();
   if (!specPath) {
-    res.status(503).send("OpenAPI spec not found. Run `make docs` to generate it.");
+    res.status(503).json({ error: "OpenAPI spec not found: api/openapi.yaml is missing" });
     return;
   }
 
@@ -59,7 +71,7 @@ router.get("/", (_req: Request, res: Response) => {
 <script>
   window.onload = function() {
     const ui = SwaggerUIBundle({
-      url: "/api/docs/openapi.yaml",
+      url: "/docs/openapi.yaml",
       dom_id: "#swagger-ui",
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
       layout: "StandaloneLayout",
@@ -79,13 +91,18 @@ router.get("/", (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/docs/openapi.yaml
+ * GET /docs/openapi.yaml
  * Serves the raw OpenAPI YAML spec so Swagger UI can fetch it.
  */
-router.get("/openapi.yaml", (_req: Request, res: Response) => {
+router.get("/docs/openapi.yaml", (_req: Request, res: Response) => {
+  if (isProduction()) {
+    res.status(404).json({ error: "Not Found" });
+    return;
+  }
+
   const specPath = findSpecPath();
   if (!specPath) {
-    res.status(503).json({ error: "OpenAPI spec not found" });
+    res.status(503).json({ error: "OpenAPI spec not found: api/openapi.yaml is missing" });
     return;
   }
 

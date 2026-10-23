@@ -5,7 +5,11 @@ import React, {
   useState,
   useId,
 } from 'react';
-import { useOnboardingTour } from '../useOnboardingTour';
+import {
+  useOnboardingTour,
+  type StreamState,
+  type TourMode,
+} from '../useOnboardingTour';
 
 /** Padding (px) added around the highlighted element's bounding box. */
 const HIGHLIGHT_PADDING = 8;
@@ -21,6 +25,12 @@ interface TooltipPosition {
   left: number;
 }
 
+interface OnboardingTourProps {
+  enabled?: boolean;
+  streamState?: StreamState;
+  mode?: TourMode;
+}
+
 /**
  * OnboardingTour
  *
@@ -33,9 +43,13 @@ interface TooltipPosition {
  * - Announces step transitions via an aria-live region
  * - Closes on Escape
  */
-export function OnboardingTour() {
+export function OnboardingTour({
+  enabled = true,
+  streamState,
+  mode,
+}: OnboardingTourProps) {
   const { isActive, currentStep, currentStepData, totalSteps, next, prev, skip } =
-    useOnboardingTour();
+    useOnboardingTour({ enabled, streamState, mode });
 
   const [position, setPosition] = useState<TooltipPosition>({ top: 0, left: 0 });
   const [isMobile, setIsMobile] = useState(false);
@@ -81,7 +95,14 @@ export function OnboardingTour() {
     if (!isActive) return;
     updatePosition();
     window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    const observer = new MutationObserver(updatePosition);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      observer.disconnect();
+    };
   }, [isActive, currentStep, updatePosition]);
 
   // Focus the tooltip container when it appears
@@ -91,22 +112,41 @@ export function OnboardingTour() {
     }
   }, [isActive, currentStep]);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!isActive) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') skip();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, skip]);
-
   if (!isActive || !currentStepData) return null;
 
   const isFirst = currentStep === 0;
   const isLast = currentStep === totalSteps - 1;
 
   const highlightStyle = getHighlightStyle(currentStepData.targetSelector);
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      skip();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = tooltipRef.current?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) {
+      event.preventDefault();
+      return;
+    }
+
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (
+      event.shiftKey &&
+      (document.activeElement === first ||
+        document.activeElement === tooltipRef.current)
+    ) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <>
@@ -145,6 +185,7 @@ export function OnboardingTour() {
         aria-labelledby={`tour-title-${currentStep}`}
         aria-describedby={`tour-desc-${currentStep} ${liveRegionId}`}
         tabIndex={-1}
+        onKeyDown={handleKeyDown}
         style={{
           position: isMobile ? 'fixed' : 'absolute',
           top: isMobile ? undefined : position.top,
