@@ -26,6 +26,7 @@ mod test_fees;
 mod test_golden_path;
 mod test_initialize;
 mod test_mutation_score;
+mod test_mutations_extended;
 mod test_properties;
 mod test_rate_too_low;
 mod test_recipient_transfer;
