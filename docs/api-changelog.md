@@ -13,6 +13,31 @@ This document serves as the primary technical reference for integrators, contrac
 - **Variable-rate streams (`create_vesting_stream`)** — Optional `segments` parameter defining piecewise emission schedules (`Vec<RateSegment>`).
 - **`InvalidSegments` error (code 19)** — Returned when rate segments are empty, out of order, or non-positive.
 
+### REST API
+
+#### Added
+
+- **OpenAPI 3.0 specification** at `api/openapi.yaml` — the source of truth for the backend
+  REST API, covering all 14 endpoints (health, readiness, JWKS, docs, analytics, auth v2,
+  vesting schedules, claimable balance, sponsor events, admin contract mutations) with
+  request/response schemas and documented error responses (400, 401, 403, 404, 429, 500,
+  502, 503). Reusable `Stream`, `StreamEvent`, `Balance`, and `Error` component schemas. ([#1006](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/1006))
+- **Versioned API surface** — canonical data-plane endpoints are now also served under
+  `/api/v1/...` (auth, schedules, claimable, admin); the legacy unversioned mounts remain
+  for backwards compatibility. ([#1006](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/1006))
+- **`GET /docs`** — Swagger UI backed by `api/openapi.yaml`, served in non-production
+  environments only (404 in production). ([#1006](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/1006))
+- **CI contract testing** — `api-contract-tests.yml` validates the spec
+  (structural checks + Spectral lint) and runs Schemathesis contract tests against a live
+  backend on every PR. ([#1006](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/1006))
+
+#### Fixed
+
+- Backend server boot: restored the missing `vestingRouter`/`attachWebSocketServer` imports
+  in `backend/src/server.ts`, fixed a `try`/`catch` mismatch in the sponsor analytics
+  handler, and fixed `initKeyStore()` crashing on start-up (`generateKeyPairSync` was
+  returning PEM strings where `KeyObject`s were expected). ([#1006](https://github.com/AlienScroll78/vesting-cliff-drip-stream/issues/1006))
+
 ---
 
 ## [2.2.0] — 2026-09-15
